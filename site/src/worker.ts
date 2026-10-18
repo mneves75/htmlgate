@@ -48,14 +48,14 @@ export default {
 /**
  * Counts a page a browser opened: the page (a missing one only as "404", never the address asked for), the status,
  * the country Cloudflare gives and the referring site's hostname. Only real navigations count: a browser marks them
- * `Sec-Fetch-Dest: document`, and a prefetch or prerender `Sec-Purpose`. A failure here never reaches the visitor.
+ * `Sec-Fetch-Dest: document`, and Chrome marks a prefetch or prerender `Sec-Purpose`. A failure here never reaches the visitor.
  */
 function countView(req: Request, url: URL, res: Response, site: URL, dataset: AnalyticsEngineDataset): void {
   if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return;
   if (!res.headers.get("content-type")?.startsWith("text/html")) return;
   try {
     const page = res.status === 404 ? "404" : url.pathname.slice(0, 96);
-    const country = String((req.cf as { country?: unknown } | undefined)?.country ?? "");
+    const country = String(req.cf?.country ?? "");
     let from = "";
     try {
       from = new URL(req.headers.get("referer") ?? "").hostname.slice(0, 128);

@@ -79,8 +79,8 @@ test("a failing dataset never breaks the page", async () => {
 
 // The counts are what the privacy notice discloses; the notice must keep saying so, in both languages.
 test.each([
-  ["site/public/en/privacy/index.html", "counts each page a browser opens", "no IP address", "3 months"],
-  ["site/public/privacidade/index.html", "conta cada página que um navegador abre", "não guarda endereço IP", "3 meses"],
+  ["site/public/en/privacy/index.html", "records each page a browser opens", "no IP address", "3 months"],
+  ["site/public/privacidade/index.html", "registra cada página que um navegador abre", "não registra endereço IP", "3 meses"],
 ])("%s discloses the page counts", (file, ...phrases) => {
   const html = readFileSync(join(process.cwd(), file), "utf8");
   for (const phrase of phrases) expect(html).toContain(phrase);

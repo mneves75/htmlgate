@@ -2,6 +2,7 @@
 // Worker. The landing's Worker runs here in process, with its static files and the dataset faked, because
 // Analytics Engine data can only be read back from Cloudflare.
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "vitest";
 import worker from "../site/src/worker.ts";
 
@@ -81,7 +82,7 @@ test.each([
   ["site/public/en/privacy/index.html", "counts each page a browser opens", "no IP address", "3 months"],
   ["site/public/privacidade/index.html", "conta cada página que um navegador abre", "não guarda endereço IP", "3 meses"],
 ])("%s discloses the page counts", (file, ...phrases) => {
-  const html = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+  const html = readFileSync(join(process.cwd(), file), "utf8");
   for (const phrase of phrases) expect(html).toContain(phrase);
   expect(html).not.toMatch(/no analytics|ferramentas de análise/);
 });

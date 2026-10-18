@@ -170,8 +170,12 @@ describe("documents agree with the code", () => {
   });
 
   test("both privacy notices were re-dated together", () => {
-    expect(read("site/public/en/privacy/index.html")).toMatch(/Updated October 18, 2026/);
-    expect(read("site/public/privacidade/index.html")).toMatch(/Atualizada em 18 de outubro de 2026/);
+    const months = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+    const en = read("site/public/en/privacy/index.html").match(/Updated (\w+) (\d+), (\d{4})\./);
+    const pt = read("site/public/privacidade/index.html").match(/Atualizada em (\d+) de (\S+) de (\d{4})\./);
+    expect(en && pt).toBeTruthy();
+    const enMonth = new Date(`${en![1]} 1, 2000`).getMonth();
+    expect([pt![1], pt![2], pt![3]]).toEqual([en![2], months[enMonth], en![3]]);
   });
 
   test("the CHANGELOG records both changes", () => {

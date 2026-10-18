@@ -4,7 +4,7 @@ What the review changed: the notices say each visit is recorded with its time (A
 one row per view and sums at query time), not that visits are "counted"; the counting limits are
 stated; 2025–2026 rule changes are checked.
 
-Status: implemented on `feat/page-metrics`, based on `526d657`. Built without an interview, as the
+Status: implemented on `feat/page-metrics-r2`, based on `02902cc` (the 0.1.0 release). Built without an interview, as the
 owner asked; the open decisions are the assumptions below.
 
 ## Assumptions

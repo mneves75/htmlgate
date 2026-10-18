@@ -170,6 +170,7 @@ header; axe on the empty home; wider pt-BR test coverage; pt-BR terms in GLOSSAR
 | 13 | [Portable, fail-closed public release validation](013-release-readiness.md) | Partial; R2 discovery correction and acceptance pending | 12 |
 | 14 | [Restore the landing's social preview image](014-social-preview.md) | Diagnosed; implementation pending | 13 for combined release |
 | 15 | [Package and verify a single-commit 0.1 release](015-single-commit-release.md) | Adversarial design reviewed; implementation pending | 13, 14 for final release |
+| 16 | [Page counts on the landing, with no cookie banner](016-landing-page-counts.md) | Implemented; release 0.1.1 | 15 |
 
 Considered and rejected: caching the Instance stylesheet as a separate file (every Instance response
 is `no-store` by rule, and Cloudflare compresses the inline CSS anyway); a template engine with
@@ -177,9 +178,3 @@ automatic escaping (an abstraction nobody asked for in security-pinned code; tes
 cover escaping); per-visitor language from `Accept-Language` (the owner chose a per-Instance setting);
 a committed screenshot script (agent-browser tests already render every page; revisit if visual
 reviews become routine).
-
-## 0.1.1: page counts on the landing
-
-| Order | Plan | Status | Dependency |
-|---|---|---|---|
-| 16 | [Page counts on the landing, with no cookie banner](016-landing-page-counts.md) | Implemented | 0.1.0 |

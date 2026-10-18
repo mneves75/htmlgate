@@ -177,3 +177,9 @@ automatic escaping (an abstraction nobody asked for in security-pinned code; tes
 cover escaping); per-visitor language from `Accept-Language` (the owner chose a per-Instance setting);
 a committed screenshot script (agent-browser tests already render every page; revisit if visual
 reviews become routine).
+
+## 0.1.1: page counts on the landing
+
+| Order | Plan | Status | Dependency |
+|---|---|---|---|
+| 16 | [Page counts on the landing, with no cookie banner](016-landing-page-counts.md) | Implemented | 0.1.0 |

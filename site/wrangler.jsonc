@@ -19,5 +19,7 @@
     "SITE_ORIGIN": "https://htmlgate.com",
     "APP_URL": "https://app.htmlgate.com/"
   },
+  // Page counts (src/worker.ts countView). Cloudflare creates the dataset on first write and keeps it 3 months.
+  "analytics_engine_datasets": [{ "binding": "PAGE_VIEWS", "dataset": "htmlgate_site_page_views" }],
   "observability": { "enabled": true }
 }

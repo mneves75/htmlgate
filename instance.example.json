@@ -1,0 +1,7 @@
+{
+  "name": "htmlgate",
+  "authorEmail": "you@example.com",
+  "allowlist": ["colleague@example.com"],
+  "language": "en",
+  "expiryDays": 30
+}

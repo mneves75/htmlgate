@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Privacy · htmlgate</title>
+<meta name="description" content="What htmlgate.com records about its visitors, what an htmlgate Instance keeps, and how to ask to see or erase your data.">
+<link rel="canonical" href="https://htmlgate.com/en/privacy/">
+<link rel="alternate" hreflang="pt-BR" href="https://htmlgate.com/privacidade/">
+<link rel="alternate" hreflang="en-US" href="https://htmlgate.com/en/privacy/">
+<link rel="alternate" hreflang="x-default" href="https://htmlgate.com/privacidade/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+<div class="wrap">
+<a class="brand" href="/en/"><svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5.5 20.5V10a6.5 6.5 0 0 1 13 0v10.5"/><path d="M3 20.5h18"/><path d="M12 12.5v4"/></svg><span>htmlgate</span></a>
+<nav aria-label="Main">
+<a class="lang" href="/privacidade/" hreflang="pt-BR" lang="pt-BR">Português</a>
+<a class="signin" href="https://app.htmlgate.com/">Sign in</a>
+</nav>
+</div>
+</header>
+
+<main id="main" class="legal">
+<div class="wrap">
+<div class="intro">
+<h1>Privacy</h1>
+<p class="lead">What htmlgate.com records about its visitors, what an htmlgate Instance keeps, and how to ask to see or erase your data. Updated October 18, 2026.</p>
+</div>
+
+<section id="site" aria-labelledby="site-heading">
+<h2 id="site-heading">This site</h2>
+<div class="prose">
+<p>htmlgate.com sets no cookies, runs no scripts, has no forms and no analytics, and loads nothing from other sites.</p>
+<p>Cloudflare serves these pages. To keep the site running and to look into errors and abuse, it records each visit: the address asked for, the method, the answer and request details such as the IP address and the country. These records are kept for 3 days (7 on Cloudflare's paid plan) and then deleted. Cloudflare also keeps records of its own network, under its privacy policy.</p>
+</div>
+</section>
+
+<section id="instances" aria-labelledby="instances-heading">
+<h2 id="instances-heading">Instances</h2>
+<div class="prose">
+<p>Whoever installs htmlgate runs their own Instance, in their own Cloudflare account, and decides what happens to its data. htmlgate's maintainer receives nothing from those Instances.</p>
+<p>app.htmlgate.com is the maintainer's own Instance. Its Shares open only for the people on its Allowlist, after they sign in, unless the Author makes a Share public: then anyone with its <code>/p/</code> link can open it.</p>
+<p>To show each Share only to those who may open it, and to protect that access, Cloudflare Access records each sign-in (who, when and from where), the Instance keeps the Shares published, the Author's email and the token that published each one, and Cloudflare keeps, for 3 days (7 on the paid plan), only the Instance's unexpected errors, each with details of the request that caused it.</p>
+<p>By default a Share expires 30 days after its latest publish, but whoever publishes it can choose another date, or never. Expiry blocks access immediately. Physical deletion follows in bounded hourly cleanup batches, with retries on later runs; backlog or failures can delay it, with no guaranteed deadline. The Share's record (title, description, tags, dates, the Author's email and the token of its last change) is kept and marked deleted when expiry cleanup processes it; token names are kept too. Deleting a Share only hides it; its content stays until expiry cleanup or Author erasure. Its Author can erase a Share for good, record included, at any time. After that, the database's backups (D1 Time Travel) can still restore earlier states for 7 days (30 on the paid plan), and then they are gone too. Restoring the database cannot recover content already deleted from R2.</p>
+</div>
+</section>
+
+<section id="sharing" aria-labelledby="sharing-heading">
+<h2 id="sharing-heading">Who the data is shared with</h2>
+<div class="prose">
+<p>Cloudflare processes hosting and Access sign-in data on behalf of the maintainer, who is the controller. If you choose an external identity provider to sign in, that provider also processes your login and authentication data under its own privacy policy. Cloudflare is a United States company and processes data across its global network, so your data may be processed outside Brazil. Nothing is sold or used for advertising.</p>
+</div>
+</section>
+
+<section id="rights" aria-labelledby="rights-heading">
+<h2 id="rights-heading">Your rights</h2>
+<div class="prose">
+<p>Under Brazil's General Data Protection Law (Law 13,709/2018, art. 18), you can ask for:</p>
+<ul>
+<li>confirmation that data of yours is here, and access to it;</li>
+<li>correction of incomplete, inaccurate or outdated data;</li>
+<li>anonymisation, blocking or erasure of unnecessary or excessive data;</li>
+<li>portability of your data;</li>
+<li>erasure of your data;</li>
+<li>the list of who it was shared with.</li>
+</ul>
+<p>Write to the address below. You can also complain to Brazil's <a href="https://www.gov.br/anpd/" hreflang="pt-BR">National Data Protection Authority (ANPD)</a>.</p>
+</div>
+</section>
+
+<section id="contact" aria-labelledby="contact-heading">
+<h2 id="contact-heading">Contact</h2>
+<div class="prose">
+<p>The controller of this data is htmlgate's maintainer. For any request about your data, write to <a href="mailto:privacidade@htmlgate.com">privacidade@htmlgate.com</a>.</p>
+</div>
+</section>
+</div>
+</main>
+
+<footer>
+<div class="wrap">
+<p>htmlgate.</p>
+<nav aria-label="Footer">
+<a href="/en/">Home</a>
+<a href="/privacidade/" hreflang="pt-BR" lang="pt-BR">Português</a>
+<a href="https://app.htmlgate.com/">Sign in</a>
+</nav>
+</div>
+</footer>
+</body>
+</html>

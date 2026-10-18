@@ -1,0 +1,11 @@
+.scratch/
+.cloudflare/
+node_modules/
+.wrangler/
+.instance/
+instance.json
+.dev.vars*
+.env*
+# Session handoffs name local paths and account hosts: they stay on the machine that wrote them.
+docs/handoffs/
+packages/cli/dist/

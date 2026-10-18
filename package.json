@@ -1,0 +1,40 @@
+{
+  "name": "htmlgate",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Self-deployed, private-by-default HTML hosting for agents, on your own Cloudflare account.",
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "build:cli": "tsc -p packages/cli",
+    "cli:install": "node scripts/cli-install.mjs",
+    "cli:formula": "node scripts/cli-formula.mjs",
+    "typecheck": "tsc --noEmit && tsc -p packages/cli --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test",
+    "setup": "node scripts/setup.mjs",
+    "token": "node scripts/token.mjs",
+    "mutate": "node scripts/mutate.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "bench": "node scripts/bench.ts",
+    "site:dev": "wrangler dev -c site/wrangler.jsonc",
+    "site:deploy": "node scripts/site-deploy.mjs"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260928.1",
+    "@types/node": "24.19.0",
+    "agent-browser": "0.39.1",
+    "typescript": "7.0.2",
+    "typescript-classic": "npm:typescript@6.0.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.143.1"
+  }
+}

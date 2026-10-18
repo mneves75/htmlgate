@@ -1,0 +1,271 @@
+/* The landing's only stylesheet: the "Departures" world. Airport wayfinding on a white ground, a graphite
+   departures board in the hero, signal yellow only as a fill under near-black ink. Colours switch with the
+   visitor's scheme through light-dark(); the board stays graphite in both. */
+:root {
+  color-scheme: light dark;
+  --ground: light-dark(oklch(100% 0 0), oklch(15.5% .008 255));
+  --sunken: light-dark(oklch(97% .004 255), oklch(19% .01 255));
+  --ink: light-dark(oklch(21% .015 255), oklch(95% .005 255));
+  --muted: light-dark(oklch(46% .015 255), oklch(74% .01 255));
+  --rule: light-dark(oklch(90% .006 255), oklch(30% .01 255));
+  --board: light-dark(oklch(23% .012 255), oklch(21.5% .012 255));
+  --board-edge: light-dark(oklch(23% .012 255), oklch(34% .012 255));
+  --board-ink: oklch(96% .006 255);
+  --board-dim: oklch(76% .01 255);
+  --board-rule: oklch(33% .012 255);
+  --cell: oklch(27.5% .012 255);
+  --hinge: oklch(17% .01 255);
+  --signal: oklch(86% .175 92);
+  --signal-hover: oklch(82% .17 88);
+  --signal-ink: oklch(21% .02 90);
+  --public: oklch(76% .16 55);
+  --accent: var(--signal);
+  --focus: light-dark(oklch(21% .015 255), oklch(86% .175 92));
+  --radius: 4px;
+  --sans: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --wrap: 76rem;
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+  accent-color: var(--signal);
+  caret-color: var(--ink);
+}
+@media (prefers-contrast: more) {
+  :root {
+    --muted: var(--ink);
+    --rule: light-dark(oklch(46% .015 255), oklch(74% .01 255));
+    --board-dim: var(--board-ink);
+    --board-rule: oklch(76% .01 255);
+  }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 5rem; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 400 1.0625rem/1.6 var(--sans); }
+::selection { background: var(--signal); color: var(--signal-ink); }
+a { color: inherit; text-underline-offset: .22em; text-decoration-thickness: 1px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 800; letter-spacing: -.03em; }
+h1 { font-size: clamp(2.25rem, 1.1rem + 4.4vw, 4.5rem); line-height: 1.02; }
+h2 { font-size: clamp(1.875rem, 1.3rem + 2.3vw, 3rem); line-height: 1.06; }
+h3 { font-size: 1.1875rem; line-height: 1.3; font-weight: 750; letter-spacing: -.015em; }
+p { margin: 0; text-wrap: pretty; }
+code, pre { font-family: var(--mono); font-size: .9em; }
+:not(pre) > code { padding: .08em .35em; border-radius: var(--radius); background: color-mix(in oklch, currentColor 9%, transparent); overflow-wrap: anywhere; }
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 var(--gutter); }
+.skip { position: absolute; left: 1rem; top: -4rem; z-index: 9; padding: .6rem .9rem; background: var(--signal); color: var(--signal-ink); border-radius: var(--radius); font-weight: 750; text-decoration: none; }
+/* Focused, the skip link takes its own row above the header, so it never covers the brand link (WCAG 2.5.8). */
+.skip:focus { position: static; display: block; width: fit-content; margin: .5rem var(--gutter); }
+.mark { display: block; width: 1.6rem; height: 1.6rem; flex: none; }
+
+/* Graphite grounds: the header, the hero, the board and the 404 plate. Focus turns yellow there. */
+.top, .hero, .plate { background: var(--board); color: var(--board-ink); --focus: var(--signal); }
+.top ::selection, .hero ::selection { background: var(--signal); color: var(--signal-ink); }
+
+/* Header, joined to the hero band */
+.top { position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--board-rule); }
+.top .wrap { display: flex; align-items: center; gap: .75rem; min-height: 4rem; }
+.brand { display: inline-flex; align-items: center; gap: .5rem; min-height: 2.75rem; color: var(--board-ink); text-decoration: none; font-weight: 800; font-size: 1.125rem; letter-spacing: -.02em; }
+.brand .mark { color: var(--signal); }
+.top nav { margin-left: auto; display: flex; align-items: center; gap: clamp(.5rem, 2vw, 1.5rem); font-size: .9375rem; }
+.top nav a { display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--board-ink); text-decoration: none; }
+.top nav a:hover { text-decoration: underline; }
+.top nav .lang { color: var(--board-dim); }
+.top nav .signin { min-height: 2.5rem; padding: 0 .75rem; border: 1px solid var(--board-dim); border-radius: var(--radius); font-weight: 650; }
+.top nav .signin:hover { text-decoration: none; border-color: var(--board-ink); }
+@media (max-width: 44rem) { .top nav .section-link { display: none; } }
+
+/* Buttons: yellow is the primary action; quiet ones are outlined in their ground's own ink */
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: .6rem; min-height: 3rem; padding: .65rem 1.25rem; border: 2px solid var(--signal); border-radius: var(--radius); background: var(--signal); color: var(--signal-ink); font-weight: 750; font-size: 1rem; line-height: 1.2; text-decoration: none; white-space: nowrap; }
+.button:hover { background: var(--signal-hover); border-color: var(--signal-hover); }
+.button .arrow { width: 1.25rem; height: 1.25rem; flex: none; }
+.button.quiet { background: transparent; color: inherit; border-color: color-mix(in oklch, currentColor 60%, transparent); }
+.button.quiet:hover { border-color: currentColor; }
+@media (prefers-reduced-motion: no-preference) {
+  .button { transition: background-color .12s ease, border-color .12s ease; }
+  .button .arrow { transition: translate .15s ease; }
+  .button:hover .arrow { translate: 3px 0; }
+}
+
+/* Hero: the headline over a full-width departures board */
+.hero { padding: clamp(2.5rem, 6vw, 5rem) 0 clamp(2.75rem, 6vw, 4.5rem); border-bottom: 1px solid var(--board-edge); }
+.hero .wrap { display: grid; gap: 1.5rem; }
+.hero .copy { display: grid; gap: 1.5rem; justify-items: start; max-width: 54rem; }
+.hero h1 { max-width: 17em; }
+/* Past six lines, balance gives up; on a phone keep the last line from being one short word. */
+@media (max-width: 30rem) { .hero h1 { text-wrap: pretty; } }
+.hero .sub { font-size: clamp(1.0625rem, 1rem + .4vw, 1.3125rem); color: var(--board-dim); max-width: 42rem; }
+.hero .fine { font-size: .9375rem; color: var(--board-dim); }
+.cmd { margin-top: clamp(1rem, 3vw, 2.5rem); font-family: var(--mono); font-size: .9375rem; color: var(--board-ink); }
+.cmd .nb { white-space: nowrap; }
+.cmd .prompt { color: var(--board-dim); }
+.cmd code { padding: 0; background: none; font-size: 1em; }
+
+.board { width: 100%; border-collapse: separate; border-spacing: 0; color: var(--board-ink); font-variant-numeric: tabular-nums; }
+.board caption { caption-side: top; text-align: left; padding-bottom: .75rem; color: var(--board-dim); font-size: .9375rem; }
+.board th { padding: .55rem .75rem; text-align: left; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--board-dim); border-top: 2px solid var(--board-dim); border-bottom: 1px solid var(--board-rule); }
+.board td { padding: .9rem .75rem; vertical-align: middle; border-bottom: 1px solid var(--board-rule); }
+.board th:first-child, .board td:first-child { padding-left: 0; }
+.board th:last-child, .board td:last-child { padding-right: 0; }
+.board th:first-child { width: 18%; }
+.board th:nth-child(3) { width: 16%; }
+.board th:nth-child(4) { width: 12%; }
+.board .t { text-align: right; font-family: var(--mono); font-size: .9375rem; }
+.board th.t { font-family: var(--sans); font-size: .75rem; }
+.board .name { display: block; margin-bottom: .25rem; font-weight: 650; color: var(--board-ink); overflow-wrap: anywhere; }
+.board .slug { --ls: .3ch; font-size: .75rem; color: var(--board-dim); }
+.board-note { color: var(--board-dim); font-size: .9375rem; }
+
+/* A split-flap cell: one flap per character (1ch plus the letter-spacing), a hinge line through the middle.
+   The trailing letter-spacing would show a sliver of a next flap, so it is clipped and taken back. */
+.flap {
+  --ls: .4ch; /* letter-spacing; one flap is 1ch plus this, less a .1ch gap */
+  display: inline-block; padding: .15em 0 .15em calc((var(--ls) - .1ch) / 2); margin-right: calc(-1 * (var(--ls) + .1ch) / 2);
+  font-family: var(--mono); font-size: .9375rem; line-height: 1.5; letter-spacing: var(--ls); color: var(--board-ink);
+  background:
+    linear-gradient(transparent calc(50% - .5px), var(--hinge) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)),
+    repeating-linear-gradient(90deg, var(--cell) 0 calc(1ch + var(--ls) - .1ch), transparent 0 calc(1ch + var(--ls)));
+  clip-path: inset(0 calc((var(--ls) + .1ch) / 2) 0 0);
+}
+
+/* Status chips, as on the Instance's own board (src/pages.ts .state): Gated outlined with an arch, Public filled orange with a ring */
+.st { display: inline-flex; align-items: center; gap: .45rem; padding: .12rem .5rem; border: 1px solid currentColor; border-radius: 3px; font-size: .75rem; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; line-height: 1.45; white-space: nowrap; color: var(--board-ink); }
+.st::before { content: ""; flex: none; width: .5rem; height: .6rem; border: 1.5px solid currentColor; border-bottom: 0; border-radius: .3rem .3rem 0 0; }
+.st.public { background: var(--public); border-color: var(--public); color: var(--signal-ink); }
+.st.public::before { height: .5rem; border-bottom: 1.5px solid currentColor; border-radius: 50%; }
+
+@media (max-width: 30rem) {
+  .board .t { display: none; }
+  .board th, .board td { padding: .75rem .4rem; width: auto; }
+  .board th { padding-block: .5rem; letter-spacing: .04em; }
+  .board th:nth-child(3), .board td:nth-child(3) { padding-right: 0; }
+  .flap { --ls: .25ch; font-size: .8125rem; }
+  .board .slug { --ls: .25ch; font-size: .75rem; }
+  .board .name { font-size: .9375rem; }
+  .st { gap: .35rem; padding-inline: .4rem; }
+}
+
+/* The rows flap in once, transform only; nothing remains in getAnimations() after it ends. */
+@media (prefers-reduced-motion: no-preference) {
+  .board tbody td { animation: flap-in .34s cubic-bezier(.2, .75, .3, 1) backwards; transform-origin: 50% 0; }
+  .board tbody tr:nth-child(2) td { animation-delay: .08s; }
+  .board tbody tr:nth-child(3) td { animation-delay: .16s; }
+  .board tbody tr:nth-child(4) td { animation-delay: .24s; }
+  @keyframes flap-in {
+    from { transform: perspective(30em) rotateX(-90deg); }
+    to { transform: perspective(30em) rotateX(0deg); }
+  }
+}
+
+/* Sections: more space above a heading than below it */
+section { padding: clamp(4rem, 9vw, 7rem) 0 clamp(3.5rem, 7vw, 5.5rem); border-top: 1px solid var(--rule); }
+section > .wrap { display: grid; gap: clamp(2rem, 4vw, 3rem); }
+.head { display: grid; gap: .9rem; max-width: 48rem; }
+.head p { color: var(--muted); font-size: 1.125rem; }
+.alt { background: var(--sunken); }
+
+/* Problem: an editorial spread */
+.prose { display: grid; gap: 1.1rem; max-width: 42rem; font-size: 1.125rem; }
+@media (min-width: 60rem) {
+  #problem > .wrap { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); column-gap: clamp(3rem, 6vw, 6rem); align-items: start; }
+}
+
+/* How it works: stops on one route line, vertical on phones, horizontal from 60rem */
+.route { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: stop; }
+.route li { counter-increment: stop; position: relative; display: grid; gap: .5rem; align-content: start; min-width: 0; padding: 0 0 2.5rem 4.25rem; }
+.route li:last-child { padding-bottom: 0; }
+.route li::before {
+  content: counter(stop) / ""; position: absolute; left: 0; top: 0; z-index: 1;
+  display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border: 2px solid var(--ink); border-radius: 50%;
+  background: var(--ink); color: var(--ground); font-weight: 800; font-size: 1.125rem; font-variant-numeric: tabular-nums;
+}
+.route li::after { content: ""; position: absolute; left: calc(1.375rem - 1px); top: 2.75rem; bottom: 0; border-left: 2px solid var(--ink); }
+.route li:last-child::after { display: none; }
+.route p { color: var(--muted); }
+@media (min-width: 60rem) {
+  .route { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 3rem; }
+  .route li { padding: 4.25rem 0 0; }
+  .route li::after { left: 2.75rem; right: -3rem; top: calc(1.375rem - 1px); bottom: auto; border-left: 0; border-top: 2px solid var(--ink); }
+}
+
+/* What you get: a directory sign, two columns of rows between rules */
+.directory { list-style: none; margin: 0; padding: 0; display: grid; column-gap: clamp(2rem, 5vw, 4rem); border-bottom: 1px solid var(--rule); }
+@media (min-width: 52rem) { .directory { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.directory li { padding: 1.4rem 0; border-top: 1px solid var(--rule); min-width: 0; }
+.directory h3 + p { margin-top: .4rem; color: var(--muted); }
+
+/* Costs: one labelled list, htmlgate itself first */
+.spec { display: grid; gap: 2rem; align-items: start; max-width: 56rem; }
+.facts .free dd { color: var(--ink); }
+.facts .free strong { font-size: 1.25rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.facts { margin: 0; display: grid; border-top: 2px solid var(--ink); }
+.facts > div { display: grid; gap: .35rem; padding: 1.1rem 0; border-bottom: 1px solid var(--rule); }
+@media (min-width: 36rem) { .facts > div { grid-template-columns: 11rem minmax(0, 1fr); column-gap: 1.5rem; } }
+.facts dt { font-weight: 750; }
+.facts dd { margin: 0; color: var(--muted); }
+
+/* Not for: led by a no-entry sign */
+.head.nope { display: flex; align-items: center; gap: 1rem; }
+.no-entry { width: 3rem; height: 3rem; flex: none; }
+.list { list-style: none; margin: 0; padding: 0; max-width: 50rem; border-top: 1px solid var(--rule); }
+.list li { position: relative; padding: .95rem 0 .95rem 2rem; border-bottom: 1px solid var(--rule); }
+.list li::before { content: ""; position: absolute; left: .2rem; top: calc(.95rem + .8em); width: .9rem; border-top: 2px solid var(--ink); }
+
+/* Questions */
+.faq { max-width: 52rem; border-top: 1px solid var(--rule); }
+.faq details { border-bottom: 1px solid var(--rule); }
+.faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; min-height: 3rem; padding: 1.05rem 0; font-weight: 700; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: ""; flex: none; width: .6rem; height: .6rem; margin: .4rem .3rem 0 0; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; rotate: 45deg; }
+.faq details[open] summary::after { rotate: 225deg; margin-top: .7rem; }
+.faq details > p { padding: 0 0 1.3rem; max-width: 46rem; color: var(--muted); }
+
+/* Install: one yellow sign, near-black ink, a graphite code block and graphite buttons */
+.install { background: var(--signal); color: var(--signal-ink); border-top: 0; --focus: var(--signal-ink); }
+.install ::selection { background: var(--board); color: var(--board-ink); }
+.install .head p, .install .note { color: var(--signal-ink); }
+.install .note { font-size: .9375rem; }
+.install pre { margin: 0; padding: 1.25rem 1.5rem; border-radius: var(--radius); background: var(--board); color: var(--board-ink); overflow-x: auto; line-height: 1.75; font-size: .875rem; }
+.install pre ::selection { background: var(--signal); color: var(--signal-ink); }
+.install .button { background: var(--board); border-color: var(--board); color: var(--board-ink); }
+.install .button:hover { background: var(--signal-ink); border-color: var(--signal-ink); }
+
+footer { border-top: 1px solid var(--rule); padding: 2rem 0 2.5rem; color: var(--muted); font-size: .9375rem; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: center; justify-content: space-between; }
+footer nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
+footer nav a { display: inline-flex; align-items: center; min-height: 1.75rem; color: var(--ink); }
+
+/* Privacy: one reading column under the header, sections ruled apart */
+.legal { padding: clamp(2.5rem, 6vw, 4.5rem) 0 clamp(3rem, 7vw, 5rem); }
+.legal > .wrap { display: grid; gap: clamp(1.75rem, 4vw, 2.5rem); }
+.legal .intro { display: grid; gap: .9rem; max-width: 42rem; }
+.legal h1 { font-size: clamp(2.25rem, 1.5rem + 3vw, 3.5rem); line-height: 1.04; }
+.legal .lead { color: var(--muted); font-size: 1.125rem; }
+.legal section { padding: clamp(1.5rem, 4vw, 2.25rem) 0 0; display: grid; gap: 1rem; }
+.legal h2 { font-size: clamp(1.375rem, 1.15rem + 1vw, 1.75rem); line-height: 1.15; letter-spacing: -.02em; }
+.legal ul { margin: 0; padding-left: 1.25rem; display: grid; gap: .4rem; }
+
+/* Not found: a gate sign */
+main.lost { min-height: 100dvh; max-width: 36rem; margin: 0 auto; display: grid; align-content: center; justify-items: start; gap: 1.5rem; padding: 2rem var(--gutter); }
+.plate { width: 100%; display: grid; gap: 1.25rem; padding: clamp(1.5rem, 5vw, 2.25rem); border: 1px solid var(--board-edge); border-radius: 6px; }
+.plate .mark { width: 4.5rem; height: 4.5rem; color: var(--signal); }
+.plate h1 { font-size: clamp(1.875rem, 1.3rem + 2.6vw, 2.75rem); line-height: 1.05; }
+.lost > p { font-size: 1.125rem; }
+
+/* Film: two rendered cuts of the same "Departures" world, served from the site itself so the
+   page needs no third party. The poster holds the 16:9 box until someone presses play. */
+.film { display: grid; gap: clamp(1.75rem, 4vw, 2.5rem); }
+.film figure { display: grid; gap: .7rem; }
+.film video { width: 100%; height: auto; border: 1px solid var(--board-edge); border-radius: 6px; background: var(--board); }
+.film figcaption { color: var(--muted); font-size: .9375rem; }
+.film .run { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+@media (forced-colors: active) {
+  .button, .top nav .signin, .plate, .flap { border: 1px solid CanvasText; }
+  .flap { background: none; clip-path: none; margin-right: 0; padding-right: .15ch; }
+  .route li::before { border-color: CanvasText; }
+  .st { border-color: CanvasText; }
+  :focus-visible { outline-color: Highlight; }
+}

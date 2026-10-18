@@ -1,0 +1,23 @@
+// The public landing (htmlgate.com). Deploy it only with `pnpm run site:deploy`, which adds the
+// Custom Domains when asked; this file holds nothing account-specific.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "htmlgate-site",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-29",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    // Every request passes the Worker, so the redirects and headers apply to every file.
+    "run_worker_first": true,
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "vars": {
+    "SITE_ORIGIN": "https://htmlgate.com",
+    "APP_URL": "https://app.htmlgate.com/"
+  },
+  "observability": { "enabled": true }
+}

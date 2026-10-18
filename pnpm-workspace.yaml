@@ -1,0 +1,13 @@
+allowBuilds:
+  agent-browser: true
+  esbuild: true
+  workerd: true
+# A dependency version must be a week old before pnpm installs it: most poisoned releases are pulled within days.
+# For an urgent fix, name the package under minimumReleaseAgeExclude.
+minimumReleaseAge: 10080
+# Urgent browser-gate fix; only this version bypasses the age rule (eligible 2026-10-20T19:56:09.472Z).
+minimumReleaseAgeExclude:
+  - agent-browser@0.39.1
+overrides:
+  # miniflare pins 0.35.4; 0.35.5 fixes a librsvg vulnerability (CVE-2026-96889). Drop this once Wrangler moves past it.
+  miniflare>sharp: 0.35.5

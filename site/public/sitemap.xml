@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://htmlgate.com/</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://htmlgate.com/"/>
+    <xhtml:link rel="alternate" hreflang="en-US" href="https://htmlgate.com/en/"/>
+  </url>
+  <url>
+    <loc>https://htmlgate.com/en/</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://htmlgate.com/"/>
+    <xhtml:link rel="alternate" hreflang="en-US" href="https://htmlgate.com/en/"/>
+  </url>
+  <url>
+    <loc>https://htmlgate.com/privacidade/</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://htmlgate.com/privacidade/"/>
+    <xhtml:link rel="alternate" hreflang="en-US" href="https://htmlgate.com/en/privacy/"/>
+  </url>
+  <url>
+    <loc>https://htmlgate.com/en/privacy/</loc>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://htmlgate.com/privacidade/"/>
+    <xhtml:link rel="alternate" hreflang="en-US" href="https://htmlgate.com/en/privacy/"/>
+  </url>
+</urlset>

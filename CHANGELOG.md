@@ -2,6 +2,18 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-10-19
+
+### Fixed
+
+- The installer's new symlink refusal rejected a correct keg: Homebrew links `bin/htmlgate` onto PATH with a
+  relative symlink by design. The keg's launcher is now the file that is checked, and the PATH link must
+  resolve back to this keg.
+- The mutation control for stale installed bytes pointed at the comparison it replaced; it plants the
+  current one, so a removed artifact check is caught again.
+
+0.1.1 and 0.1.2 stay tagged as checkpoints; their installer refused a correct install.
+
 ## [0.1.2] - 2026-10-19
 
 ### Fixed

@@ -162,9 +162,13 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
     step("checking the installed CLI version");
     const prefix = absolutePath(["--prefix"]);
     const launcher = `#!/bin/sh\nexec "${join(nodePrefix, "bin/node")}" "${join(installedPrefix, "libexec/dist/bin.js")}" "$@"\n`;
-    const launcherPath = join(prefix, "bin/htmlgate");
-    if (lstatSync(launcherPath).isSymbolicLink()) throw new Error("Unsafe installed artifact: bin/htmlgate is a symlink.");
-    if (readFileSync(launcherPath, "utf8") !== launcher) throw new Error("Installed artifact mismatch: htmlgate launcher.");
+    // The keg holds the launcher as a file; Homebrew links it onto PATH with a symlink that must point back at this keg.
+    const kegLauncher = join(installedPrefix, "bin/htmlgate");
+    if (lstatSync(kegLauncher).isSymbolicLink()) throw new Error("Unsafe installed artifact: bin/htmlgate is a symlink.");
+    if (readFileSync(kegLauncher, "utf8") !== launcher) throw new Error("Installed artifact mismatch: htmlgate launcher.");
+    if (realpathSync(join(prefix, "bin/htmlgate")) !== realpathSync(kegLauncher)) {
+      throw new Error("Installed artifact mismatch: bin/htmlgate is not linked to this keg.");
+    }
     const actual = command(join(prefix, "bin/htmlgate"), ["--version"]);
     step(`installed ${actual}; expected ${version}`);
     if (actual !== version) throw new Error(`CLI version mismatch: installed ${actual}; expected ${version}.`);

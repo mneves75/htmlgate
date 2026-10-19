@@ -213,13 +213,17 @@ function execute({ absent = false, tapped = false, installed = false, version = 
   mkdirSync(libexec, { recursive: true });
   for (const name of ["dist", "package.json"]) cpSync(resolve("packages/cli", name), join(libexec, name), { recursive: true });
   for (const name of ["LICENSE", "README.md"]) cpSync(resolve("packages/cli", name), join(installedPrefix, name));
-  mkdirSync(join(prefix, "bin"));
-  const binary = join(prefix, "bin/htmlgate");
   const nodePrefix = dirname(dirname(process.execPath));
   // Homebrew points an installed script's shebang at the node it depends on, so the keg the installer inspects does too.
   const launcherScript = join(libexec, "dist/bin.js");
   writeFileSync(launcherScript, readFileSync(launcherScript, "utf8").replace(/^#!.*$/m, "#!" + join(nodePrefix, "bin/node")));
-  writeFileSync(binary, '#!/bin/sh\nexec "' + join(nodePrefix, "bin/node") + '" "' + libexec + '/dist/bin.js" "$@"\n', { mode: 0o755 });
+  // The keg keeps the launcher as a file; Homebrew links it onto PATH with a relative symlink, as a real install does.
+  const kegLauncher = join(installedPrefix, "bin/htmlgate");
+  mkdirSync(dirname(kegLauncher), { recursive: true });
+  writeFileSync(kegLauncher, '#!/bin/sh\nexec "' + join(nodePrefix, "bin/node") + '" "' + libexec + '/dist/bin.js" "$@"\n', { mode: 0o755 });
+  mkdirSync(join(prefix, "bin"), { recursive: true });
+  const binary = join(prefix, "bin/htmlgate");
+  symlinkSync(join("..", "Cellar", "htmlgate", cli.version + "_1", "bin", "htmlgate"), binary);
   if (staleArtifact) writeFileSync(join(["LICENSE", "README.md"].includes(staleArtifact) ? installedPrefix : libexec, staleArtifact), "stale artifact\n");
   if (tapMismatch) {
     writeFileSync(join(repository, "packages/cli/src/added.ts"), "export const added = 1;\n");

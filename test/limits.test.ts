@@ -126,11 +126,18 @@ describe("the write rate limit", () => {
   test("a token gets 429 with Retry-After after 60 changes in a minute, and reads still work", async () => {
     const call = api(await mintToken("busy"));
     const { json: d } = await call("POST", "/api/shares", { html: page("0"), title: "busy" });
+    // The limiter counts a rolling minute, so the burst has to finish inside it. Sent one at a time, 70 writes can each
+    // take most of a second on a loaded host (a full suite runs several Instances at once), the earliest age out of the
+    // window, and a working limiter reads as no limit at all. Four at a time keeps the burst inside the window without
+    // changing what is asserted: the same token, the same 60-change limit, and the first 429 must carry Retry-After.
     let limited: Awaited<ReturnType<typeof call>> | undefined;
-    for (let i = 1; i <= 70 && !limited; i++) {
-      const r = await call("PATCH", `/api/shares/${d.slug}`, { title: "busy " + i });
-      if (r.status === 429) limited = r;
-      else expect(r.status).toBe(200);
+    for (let i = 1; i <= 70 && !limited; i += 4) {
+      const answers = await Promise.all(Array.from({ length: Math.min(4, 71 - i) }, (_, k) =>
+        call("PATCH", `/api/shares/${d.slug}`, { title: "busy " + (i + k) })));
+      for (const r of answers) {
+        if (r.status === 429) { limited = r; break; }
+        expect(r.status).toBe(200);
+      }
     }
     expect(limited, "no 429 within 70 writes").toBeDefined();
     expect(limited!.json.error.code).toBe("rate_limited");

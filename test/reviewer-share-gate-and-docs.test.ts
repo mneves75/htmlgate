@@ -82,7 +82,7 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     }
   });
 
-  test("every anchor and replacement is the old one with the words renamed, but for eight listed entries; none became a no-op", () => {
+  test("every anchor and replacement is the old one with the words renamed, but for nine listed entries; none became a no-op", () => {
     const differing = base.map((e, i) => [e, before[i]!] as const).filter(([a, b]) => JSON.stringify(a) !== JSON.stringify(b.map(rename)));
     // Words that are not our term: "drops the Share's other tags" (verb) and the /d/ -> /s/ path letter in four entries
     // and one that keeps the "d" prefix as an argument.
@@ -97,6 +97,9 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
       "no rate limit",
       // The landing gained a film section, so its CSP gained `media-src 'self'`.
       "the landing loses its CSP",
+      // The page-view counter hangs off the same `if`, so removing the line left an orphan `else if` and the site
+      // module failed to load; the replacement now keeps the branch and drops only the header.
+      "the landing preview is indexable",
     ].sort((x, y) => after.findIndex((e) => e[0] === x) - after.findIndex((e) => e[0] === y)));
     for (const [a, b] of differing) {
       // The planted violation is the same one: the replacement still differs from the anchor, and the only change from

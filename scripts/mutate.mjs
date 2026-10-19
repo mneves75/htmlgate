@@ -118,7 +118,8 @@ const MUTATIONS = [
   ["text output passes terminal escapes through", "packages/cli/src/bin.ts", 'const printable = (s: string) => s.replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, "");', "const printable = (s: string) => s;", "test/cli-safety.test.ts"],
   ["upsert updates the first of several matches", "packages/cli/src/bin.ts", "if (found.total > 1) {", "if (false) {", "test/cli.test.ts"],
   ["the landing loses its CSP", "site/src/worker.ts", `  "content-security-policy": "default-src 'none'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",\n`, "", "test/site.test.ts"],
-  ["the landing preview is indexable", "site/src/worker.ts", 'if (url.hostname !== site.hostname) res.headers.set("x-robots-tag", "noindex");', "", "test/site.test.ts"],
+  // The view counter hangs off the same if, so the preview branch keeps its shape and only its header is dropped.
+  ["the landing preview is indexable", "site/src/worker.ts", 'if (url.hostname !== site.hostname) res.headers.set("x-robots-tag", "noindex");', 'if (false) res.headers.set("x-robots-tag", "noindex");', "test/site.test.ts"],
   ["the landing loses HSTS", "site/src/worker.ts", '"strict-transport-security": "max-age=31536000; includeSubDomains",', "", "test/site.test.ts"],
   ["a visitor off the Allowlist gets a not-found unlike a Viewer's", "src/index.ts", 'if (!who) return notFound(cfg.language, { home: "viewer" });', 'if (!who) return notFound(cfg.language, { home: "author" });', "test/viewer.test.ts"],
   ["pages allow any inline style", "src/pages.ts", "style-src 'sha256-${await styleHash()}'", "style-src 'unsafe-inline'", "test/viewer.test.ts"],

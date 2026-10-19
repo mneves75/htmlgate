@@ -6,6 +6,8 @@ interface Env {
   SITE_ORIGIN: string;
   /** Where "Sign in" and /app lead: the Instance at app.htmlgate.com. */
   APP_URL: string;
+  /** Page counts in Workers Analytics Engine: one point per page a browser opens, with no cookie and no IP. */
+  PAGE_VIEWS: AnalyticsEngineDataset;
 }
 
 const HEADERS: Record<string, string> = {
@@ -38,9 +40,32 @@ export default {
 
     const res = withHeaders(await env.ASSETS.fetch(req));
     if (url.hostname !== site.hostname) res.headers.set("x-robots-tag", "noindex");
+    else if (req.method === "GET") countView(req, url, res, site, env.PAGE_VIEWS);
     return res;
   },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * Counts a page a browser opened: the page (a missing one only as "404", never the address asked for), the status,
+ * the country Cloudflare gives and the referring site's hostname. Only real navigations count: a browser marks them
+ * `Sec-Fetch-Dest: document`, and Chrome marks a prefetch or prerender `Sec-Purpose`. A failure here never reaches the visitor.
+ */
+function countView(req: Request, url: URL, res: Response, site: URL, dataset: AnalyticsEngineDataset): void {
+  if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return;
+  if (!res.headers.get("content-type")?.startsWith("text/html")) return;
+  try {
+    const page = res.status === 404 ? "404" : url.pathname.slice(0, 96);
+    const country = String(req.cf?.country ?? "");
+    let from = "";
+    try {
+      from = new URL(req.headers.get("referer") ?? "").hostname.slice(0, 128);
+    } catch {}
+    if (from === site.hostname || from === `www.${site.hostname}`) from = "";
+    dataset.writeDataPoint({ indexes: [page], blobs: [page, String(res.status), country, from] });
+  } catch (e) {
+    console.error("page count failed", e);
+  }
+}
 
 function redirect(location: string, status: 301 | 302): Response {
   return withHeaders(new Response(null, { status, headers: { location } }));

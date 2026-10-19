@@ -2,6 +2,15 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-10-18
+
+### Added
+
+- The landing counts each page a browser opens, server-side in Workers Analytics Engine: the page,
+  its status, the country and the referring site's hostname. No cookie, no script, no IP address or
+  browser details, so it needs no cookie banner; both privacy notices say what is counted and that
+  Cloudflare keeps it 3 months. README shows the `cf` query for views per page. Instances are unchanged.
+
 ## [0.1.0] - 2026-10-18
 
 Initial public release. htmlgate is a self-deployed, private-by-default HTML host that each

@@ -179,6 +179,7 @@
 <details><summary>E se um token vazar?</summary><p>Revogue na página de tokens: ele para no pedido seguinte. Depois liste os Shares públicos com <code>htmlgate list --public</code> e veja quem mexeu por último em cada um. Revogar não desfaz o que o token já fez.</p></details>
 <details><summary>Um Share consegue roubar dados de quem abre?</summary><p>Ele roda isolado, sem acesso aos cookies e à sessão de quem abre. Ele ainda pode mandar pra outro site o que ele mesmo contém. O isolamento protege quem abre, e o conteúdo do Share é responsabilidade de quem publica.</p></details>
 <details><summary>O que é o "Entrar" lá em cima?</summary><p>É a instância de quem escreveu o htmlgate, em app.htmlgate.com. Só entra quem foi convidado. A sua fica na sua conta, no endereço que você escolher.</p></details>
+<details><summary>O htmlgate.com sabe o que as pessoas leem?</summary><p>Conta uma visita por página deste site, com a hora, o país e o site de onde a pessoa veio: sem cookie, sem script e sem guardar o IP. Serve para saber o que vale escrever melhor, e fica três meses. A sua Instância não conta nada — o que os seus Shares recebem não passa por aqui.</p></details>
 
 </div>
 </div>
@@ -208,7 +209,7 @@ htmlgate login https://sua-instancia.example.com</code></pre>
 
 <footer>
 <div class="wrap">
-<p>htmlgate.</p>
+<p>htmlgate. <span class="version">0.1.1</span></p>
 <nav aria-label="Rodapé">
 <a href="/privacidade/">Privacidade</a>
 <a href="/en/" hreflang="en-US" lang="en-US">English</a>

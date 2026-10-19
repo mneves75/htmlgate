@@ -5,6 +5,7 @@
 // timetable's column rhythm. Colours are OKLCH tokens that switch with the visitor's scheme through
 // light-dark(); every text pair was checked for WCAG AA contrast on each of those surfaces.
 import type { Language } from "./config";
+import { VERSION } from "./version";
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -401,6 +402,10 @@ details.confirm summary::-webkit-details-marker { display: none; }
 details.confirm[open] summary { background: var(--danger); color: var(--danger-ink); }
 details.confirm .ask { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 2; width: min(18rem, 80vw); padding: .9rem 1rem; display: grid; gap: .65rem; font-size: .875rem; background: var(--ground); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 14px 30px -12px oklch(0% 0 0 / .35); }
 p.empty { color: var(--muted); }
+/* The release an Operator is running: a footer under the Instance's pages, a chip in the viewer's bar. */
+.foot { padding: .9rem clamp(1rem, 4vw, 2rem) 1.5rem; }
+p.ver, .bar .ver { margin: 0; color: var(--muted); font-family: var(--mono); font-size: .75rem; }
+.bar .ver { color: var(--board-dim); }
 
 /* Viewer: a thin graphite frame over the Share, so the Share never passes for the Instance */
 body.viewer { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
@@ -461,6 +466,9 @@ const MARK = `<svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentC
 /** The wayfinding arrow on the main action. */
 const ARROW = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12h15"/><path d="m13 6 6 6-6 6"/></svg>`;
 
+/** The release an Operator is running. Every page of the Instance's own UI carries it. */
+const VER = `htmlgate ${VERSION}`;
+
 async function layout(lang: Language, title: string, body: string, opts: { bodyClass?: string; frames?: boolean; sandbox?: boolean } = {}): Promise<PageResult> {
   const html = `<!doctype html>
 <html lang="${lang}">
@@ -473,7 +481,8 @@ async function layout(lang: Language, title: string, body: string, opts: { bodyC
 <style>${CSS}</style>
 </head>
 <body${opts.bodyClass ? ` class="${opts.bodyClass}"` : ""}>
-${body}
+${body}${opts.bodyClass === "viewer" || opts.sandbox ? "" : `
+<footer class="foot">${VER}</footer>`}
 </body>
 </html>`;
   const csp = [
@@ -540,6 +549,7 @@ export function notFoundPage(lang: Language, opts: { signInPath?: string; home?:
 <h1>${t.notFound}</h1>
 <p>${t.notFoundLead}</p>
 ${signInPath ? `<a class="button" href="${escapeHtml(signInPath)}">${t.signInRetry}${ARROW}</a>` : ""}${home ? `<a class="button" href="/">${home === "author" ? t.backToShares : t.goHome}${ARROW}</a>` : ""}
+<p class="ver">${VER}</p>
 </div>
 </main>`, { sandbox: true });
 }
@@ -717,6 +727,7 @@ ${d.expires_at === null ? "" : timeTag(d.expires_at, t.expiresAt)}
 <nav aria-label="${t.versions}"><ul>${items}</ul></nav>
 </details>
 <a class="open" href="${raw}" target="_blank" rel="noopener">${t.openTab}</a>
+<span class="ver">v${VERSION}</span>
 ${erase ? `<details class="confirm">
 <summary>${t.erase}</summary>
 <div class="ask">

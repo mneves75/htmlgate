@@ -236,6 +236,8 @@ footer { border-top: 1px solid var(--rule); padding: 2rem 0 2.5rem; color: var(-
 footer .wrap { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: center; justify-content: space-between; }
 footer nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
 footer nav a { display: inline-flex; align-items: center; min-height: 1.75rem; color: var(--ink); }
+/* The release that is deployed: the same number in the footer of every page. */
+footer .version { margin-left: .4rem; font-family: var(--mono); font-size: .8125rem; letter-spacing: .01em; }
 
 /* Privacy: one reading column under the header, sections ruled apart */
 .legal { padding: clamp(2.5rem, 6vw, 4.5rem) 0 clamp(3rem, 7vw, 5rem); }

@@ -145,13 +145,13 @@ globalThis.fetch = async (url, init = {}) => {
 
 interface Request { path: string; method: string; authenticated: boolean; redirect?: string; scheme?: string; open?: string; at: number }
 // The tools pace themselves under the zone rate rule (docs/operator.md); the controls turn that off unless they test it.
-async function execute(tool: "bench" | "smoke", scenario = "pass", url = "https://instance.example", paced = false) {
+async function execute(tool: "bench" | "smoke", scenario = "pass", url = "https://instance.example", paced = false, budget = "50") {
   const args = tool === "bench" ? ["scripts/bench.ts", "--live", url, "--runs", "1"] : ["scripts/smoke.mjs", url];
   const child = spawn(process.execPath, ["--import", preload, ...args], {
     ...(scenario.startsWith("hang-") ? { timeout: 25_000 } : {}),
     // Pin the budget: these controls assert on the verdict's wording and outcome, so they must measure the same
     // number on the 18-core dev machine (50 ms) and on CI's 3-core runner (150 ms).
-    env: { ...process.env, HTMLGATE_TOKEN: "hg_disposable-control", RELEASE_CONTROL: scenario, HTMLGATE_BENCH_BUDGET_MS: "50", ...(paced ? {} : { HTMLGATE_LIVE_GAP_MS: "0" }) },
+    env: { ...process.env, HTMLGATE_TOKEN: "hg_disposable-control", RELEASE_CONTROL: scenario, HTMLGATE_BENCH_BUDGET_MS: budget, ...(paced ? {} : { HTMLGATE_LIVE_GAP_MS: "0" }) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let out = "";
@@ -201,6 +201,16 @@ test("benchmark warms each page up past a browser's slow first sandboxed loads",
   const result = await execute("bench", "cold-sandbox");
   expect(result.code, result.out + result.err).toBe(0);
   expect(result.out).toContain("Every page loads under 50 ms");
+});
+
+test("an invalid budget override falls back instead of passing without measuring", async () => {
+  // NaN made every `p95 >= NaN` false, so a typo silently disabled the page budget.
+  for (const budget of ["abc", "0", "-5"]) {
+    const result = await execute("bench", "slow-page", "https://instance.example", false, budget);
+    expect(result.code, `${budget}: ${result.out}${result.err}`).not.toBe(0);
+    expect(result.out).toMatch(/raw \(public\).*OVER/);
+    expect(result.out).toContain("budget 50 ms p95");
+  }
 });
 
 test("benchmark still fails a page that is slow on every load", async () => {

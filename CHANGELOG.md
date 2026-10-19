@@ -2,6 +2,19 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-10-19
+
+### Fixed
+
+- `pnpm run cli:install` refused a correct Homebrew install: the formula's compiler rewrites the
+  installed `dist/bin.js` shebang to the Homebrew node it depends on, and the artifact check compared
+  it byte for byte against a plain build. The check now accepts exactly that one rewritten line and
+  nothing after it, and still refuses a symlinked `libexec` or `bin/htmlgate`.
+- The page-budget override test now pins an invalid `HTMLGATE_BENCH_BUDGET_MS`, so a value that is not
+  a positive number cannot silently disable the budget again.
+- The CI step is named for the budget it enforces (50 ms locally, 150 ms on the runner), so a release
+  record cannot read a 150 ms run as a 50 ms result.
+
 ## [0.1.1] - 2026-10-18
 
 ### Added

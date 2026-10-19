@@ -216,6 +216,9 @@ function execute({ absent = false, tapped = false, installed = false, version = 
   mkdirSync(join(prefix, "bin"));
   const binary = join(prefix, "bin/htmlgate");
   const nodePrefix = dirname(dirname(process.execPath));
+  // Homebrew points an installed script's shebang at the node it depends on, so the keg the installer inspects does too.
+  const launcherScript = join(libexec, "dist/bin.js");
+  writeFileSync(launcherScript, readFileSync(launcherScript, "utf8").replace(/^#!.*$/m, "#!" + join(nodePrefix, "bin/node")));
   writeFileSync(binary, '#!/bin/sh\nexec "' + join(nodePrefix, "bin/node") + '" "' + libexec + '/dist/bin.js" "$@"\n', { mode: 0o755 });
   if (staleArtifact) writeFileSync(join(["LICENSE", "README.md"].includes(staleArtifact) ? installedPrefix : libexec, staleArtifact), "stale artifact\n");
   if (tapMismatch) {

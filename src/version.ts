@@ -3,4 +3,4 @@
  * `test/version.test.ts` keeps it equal to `package.json` and to the version on every landing page, so a release
  * that forgets one of them fails the check gate instead of drifting.
  */
-export const VERSION = "0.1.1";
+export const VERSION = "0.1.2";

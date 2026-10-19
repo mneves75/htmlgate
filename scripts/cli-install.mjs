@@ -16,6 +16,17 @@ export function releaseTag(version) {
   return `v${match[1]}${match[2] === undefined ? "" : `-beta${match[2]}`}`;
 }
 
+/**
+ * Homebrew points a script's shebang at the node it depends on, so the installed launcher's first line differs from the
+ * build and nothing after it may. Returns true only for exactly that difference.
+ */
+export function rewroteShebang(installed, built, nodePath) {
+  const lines = (bytes) => bytes.toString("utf8").split("\n");
+  const [installedFirst, ...installedRest] = lines(installed);
+  const [, ...builtRest] = lines(built);
+  return installedFirst === `#!${nodePath}` && installedRest.join("\n") === builtRest.join("\n");
+}
+
 export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, log = console.log, error = console.error } = {}) {
   const step = (s) => log(`- ${s}`);
   // Install, upgrade and tap can otherwise trigger Homebrew's global automatic update.
@@ -107,17 +118,22 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
       throw new Error(`Homebrew receipt mismatch: expected linked ${FORMULA} ${expectedVersion}.`);
     }
     const installedPrefix = realpathSync(absolutePath(["--prefix", FORMULA]));
+    const nodePrefix = absolutePath(["--prefix", "node"]);
     const build = temporaryBuild();
     try {
       tar(["-xf", join(repository, "Formula/sources", verified.archive), "-C", build]);
       command(process.execPath, [join(ROOT, "node_modules/typescript/bin/tsc"), "-p", build,
         "--typeRoots", join(ROOT, "node_modules/@types")]);
-      const fileList = (directory, prefix = "") => readdirSync(directory).sort().flatMap((name) => {
-        const relative = prefix + name;
-        const stat = lstatSync(join(directory, name));
-        if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw new Error(`Unsafe installed artifact: ${relative}`);
-        return stat.isDirectory() ? fileList(join(directory, name), relative + "/") : [relative];
-      });
+      const fileList = (directory, prefix = "") => {
+        // The directory itself is checked too: lstatting only its children would follow a symlinked libexec.
+        if (lstatSync(directory).isSymbolicLink()) throw new Error(`Unsafe installed artifact: ${prefix || "."}`);
+        return readdirSync(directory).sort().flatMap((name) => {
+          const relative = prefix + name;
+          const stat = lstatSync(join(directory, name));
+          if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw new Error(`Unsafe installed artifact: ${relative}`);
+          return stat.isDirectory() ? fileList(join(directory, name), relative + "/") : [relative];
+        });
+      };
       // Homebrew hoists the metafiles out of libexec into the keg root after the formula's install step, so libexec
       // holds the built JavaScript and the manifest; the licence and README are checked at the keg root, where
       // Homebrew puts them and where a reader finds them.
@@ -128,7 +144,13 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
         throw new Error(`Installed artifact file set mismatch: ${JSON.stringify(actualFiles)}.`);
       }
       for (const name of libexecFiles) {
-        if (!readFileSync(join(libexec, name)).equals(readFileSync(join(build, name)))) throw new Error(`Installed artifact mismatch: ${name}`);
+        const installed = readFileSync(join(libexec, name));
+        const built = readFileSync(join(build, name));
+        if (installed.equals(built)) continue;
+        // Homebrew rewrites a script's shebang to the absolute Homebrew node the formula depends on, so the launcher's
+        // first line legitimately differs and nothing after it may.
+        if (name === "dist/bin.js" && rewroteShebang(installed, built, join(nodePrefix, "bin/node"))) continue;
+        throw new Error(`Installed artifact mismatch: ${name}`);
       }
       for (const name of ["LICENSE", "README.md"]) {
         if (!readFileSync(join(installedPrefix, name)).equals(readFileSync(join(build, name)))) throw new Error(`Installed metafile mismatch: ${name}`);
@@ -139,9 +161,10 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
 
     step("checking the installed CLI version");
     const prefix = absolutePath(["--prefix"]);
-    const nodePrefix = absolutePath(["--prefix", "node"]);
     const launcher = `#!/bin/sh\nexec "${join(nodePrefix, "bin/node")}" "${join(installedPrefix, "libexec/dist/bin.js")}" "$@"\n`;
-    if (readFileSync(join(prefix, "bin/htmlgate"), "utf8") !== launcher) throw new Error("Installed artifact mismatch: htmlgate launcher.");
+    const launcherPath = join(prefix, "bin/htmlgate");
+    if (lstatSync(launcherPath).isSymbolicLink()) throw new Error("Unsafe installed artifact: bin/htmlgate is a symlink.");
+    if (readFileSync(launcherPath, "utf8") !== launcher) throw new Error("Installed artifact mismatch: htmlgate launcher.");
     const actual = command(join(prefix, "bin/htmlgate"), ["--version"]);
     step(`installed ${actual}; expected ${version}`);
     if (actual !== version) throw new Error(`CLI version mismatch: installed ${actual}; expected ${version}.`);

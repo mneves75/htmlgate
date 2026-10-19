@@ -66,7 +66,7 @@ jobs:
           git diff --exit-code
           git diff --check
           pnpm run build:cli
-      - name: Every local page under 50 ms at p95
+      - name: Every local page within its p95 budget (50 ms locally, 150 ms on this runner)
         run: pnpm run bench 2>&1 | tee .scratch/ci-evidence/bench.log
       - name: Keep explicit synthetic validation evidence
         if: ${{ !cancelled() }}

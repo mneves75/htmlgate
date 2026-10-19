@@ -2,6 +2,21 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.10] - 2026-10-19
+
+### Fixed
+
+- On a phone the report kept both counts, but left the all-time figure unlabelled under the 30-day one. It now shows
+  its own "Total" label, the way the token list reveals its labels on narrow screens, and the breakpoint is a container
+  query like the board's.
+- The browser assertion that guards the report measured the whole cell, whose screen-reader label holds "30 days" — so
+  it passed on a cell with no number at all. It now measures the number element itself and requires a visible digit, and
+  a Share with no opening yet is measured too.
+- `pnpm run cli:formula` prunes the source archives the formula no longer references, so `Formula/sources/` holds the
+  one archive the tap installs from.
+
+0.1.9 was tagged but never deployed.
+
 ## [0.1.9] - 2026-10-19
 
 ### Fixed

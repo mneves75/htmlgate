@@ -389,7 +389,7 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 /* Metrics: one row per Share, a name then two numbers and the way in. The numbers are always a number, so a Share
    nobody opened yet reads as 0 rather than as an empty cell; the count columns line up with their headings. */
 .actions-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
-.metrics { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+.metrics { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; container-type: inline-size; }
 .metrics-head, .metrics-row { display: grid; grid-template-columns: minmax(0, 1fr) 5rem 5rem 6.5rem; gap: .75rem; align-items: center; padding: .6rem .9rem; }
 .metrics-head { background: var(--board); color: var(--board-dim); font-size: .75rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .metrics-head .m-views, .metrics-head .m-total { text-align: right; }
@@ -403,9 +403,19 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 .metrics-row .zero { color: var(--muted); font-weight: 500; }
 .metrics-row .button.quiet { min-height: 2rem; padding: .2rem .6rem; font-size: .8125rem; }
 .metrics-row .button svg { width: .9rem; height: .9rem; }
-@media (max-width: 40rem) {
-  .metrics-head, .metrics-row { grid-template-columns: minmax(0, 1fr) 3.5rem auto; gap: .6rem; padding: .6rem .7rem; }
-  .metrics-head .m-total, .metrics-row .m-total { display: none; }
+@container (max-width: 40rem) {
+  /* A phone keeps both counts: the all-time figure moves under the 30-day one rather than leaving the table for
+     sighted and screen-reader readers alike. */
+  .metrics-head { grid-template-columns: minmax(0, 1fr) 4rem auto; }
+  .metrics-head .m-total { visibility: hidden; }
+  .metrics-row { grid-template-columns: minmax(0, 1fr) 4rem auto; grid-template-areas: "page views open" "page total open"; }
+  .metrics-row .m-page { grid-area: page; } .metrics-row .m-views { grid-area: views; }
+  .metrics-row .m-total { grid-area: total; font-size: .8125rem; }
+  /* Stacked under the 30-day count, the all-time figure needs its own label: the token list reveals its labels the
+     same way on narrow screens. */
+  .metrics-row .m-total .lbl { position: static; width: auto; height: auto; overflow: visible; clip-path: none; font-size: .75rem; }
+  .metrics-row .m-open { grid-area: open; }
+  .metrics-row { gap: 0 .6rem; padding: .6rem .7rem; }
 }
 .pass { background: var(--board); color: var(--board-ink); border: 1px solid var(--board-edge); border-radius: 6px; padding: 1.2rem 1.35rem; display: grid; gap: .65rem; border-top: 6px solid var(--signal); }
 .pass .hint { color: var(--board-dim); }
@@ -603,7 +613,8 @@ export interface ShareViews {
 
 /**
  * How often each of the Instance's Shares was opened: one row per Share with the last 30 days and the all-time count,
- * and a button that opens that Share. Shares with no views yet say so instead of showing a zero.
+ * and a button that opens that Share. Both counts are always a number, a zero in a quieter tone, so the column never
+ * reads as broken; on a phone the all-time count moves under the 30-day one instead of disappearing.
  */
 export function metricsPage(v: Visitor, shares: HomeList["shares"], views: Map<string, ShareViews>): Promise<PageResult> {
   const t = STRINGS[v.lang];

@@ -95,20 +95,29 @@ describe("accessibility of every page, in light and dark", () => {
       const card = document.querySelector(".metrics").getBoundingClientRect();
       const cell = document.querySelector(".metrics-row .m-views");
       const box = cell.getBoundingClientRect();
+      // The number itself, not the cell: the lbl span holds "30 days", whose digits would satisfy a looser check.
+      const number = cell.querySelector(":scope > span:not(.lbl)");
+      const total = document.querySelector(".metrics-row .m-total");
       return {
         flaps: document.querySelectorAll(".metrics-row .flap").length,
-        text: cell.textContent.trim(),
+        number: number ? number.textContent.trim() : "",
+        numberVisible: number ? number.getBoundingClientRect().width > 0 : false,
+        totalVisible: total ? total.getBoundingClientRect().width > 0 : false,
         width: Math.round(box.width),
         inside: box.right <= card.right + 1 && box.left >= card.left - 1,
         rows: document.querySelectorAll(".metrics-row").length,
       };
     })())`));
-    const layout = (typeof printed === "string" ? JSON.parse(printed) : printed) as { flaps: number; text: string; width: number; inside: boolean; rows: number };
+    const layout = (typeof printed === "string" ? JSON.parse(printed) : printed) as {
+      flaps: number; number: string; numberVisible: boolean; totalVisible: boolean; width: number; inside: boolean; rows: number;
+    };
     expect(layout.flaps, "no board flaps on the report").toBe(0);
     expect(layout.rows).toBeGreaterThan(0);
     expect(layout.width).toBeGreaterThan(0);
     expect(layout.inside, "the count stays inside the card").toBe(true);
-    expect(layout.text).toMatch(/\d/);
+    expect(layout.number, "the count cell holds the number itself").toMatch(/^\d+$/);
+    expect(layout.numberVisible, "the number is rendered, not hidden").toBe(true);
+    expect(layout.totalVisible, "the all-time count is rendered too").toBe(true);
     for (const [label, path] of [["home", "/"], ["tokens", "/tokens"], ["metrics", "/metrics"], ["viewer", `/s/${d.slug}`]]) {
       await abIn(AUDIT, "open", `${base}${path}`);
       await settle(AUDIT);

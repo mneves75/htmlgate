@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildArchive, digest, formulaMetadata } from "./cli-archive.mjs";
@@ -24,8 +24,14 @@ export function pinFormula({ root = ROOT, log = console.log, error = console.err
     const formula = join(root, "Formula/htmlgate.rb");
     const source = readFileSync(formula, "utf8");
     const pinned = rewriteFormula(source, version, sha256);
-    mkdirSync(join(root, "Formula/sources"), { recursive: true });
-    writeFileSync(join(root, "Formula/sources", `${sha256}.tar`), archive);
+    const sources = join(root, "Formula/sources");
+    mkdirSync(sources, { recursive: true });
+    writeFileSync(join(sources, `${sha256}.tar`), archive);
+    // The tap carries one source archive: the one this formula references. A superseded archive is dead weight a reader
+    // may mistake for the live input, and an older tag still installs from its own tree, not from this directory.
+    for (const name of readdirSync(sources)) {
+      if (name.endsWith(".tar") && name !== `${sha256}.tar`) rmSync(join(sources, name));
+    }
     if (pinned !== source) writeFileSync(formula, pinned);
     log(`Formula source ${sha256}.tar, version ${version}_1; ${pinned === source ? "unchanged" : "updated"}.`);
     return 0;

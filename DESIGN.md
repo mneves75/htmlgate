@@ -391,6 +391,9 @@ A thin graphite strip, wrapping to two lines on phones, with the title clamped t
 ### Release line
 The version an Operator is running, in mono at 0.75rem: a footer under every Instance page, and a chip in the viewer bar's meta so it never overlays the Share. The landing carries the same number in its footer, in mono at 0.8125rem next to the wordmark. One line, muted, never an action.
 
+### Metrics report
+`/metrics` is a data table on the light ground, not a board: the Share's title with its slug under it in mono at 0.75rem and muted (never the board's dark flap cells, which need the graphite surface to be legible), then 30 days and all time right-aligned under their headings in tabular figures, then the way in. A zero is a real number in a quieter tone, so the column never reads as broken; phones drop the all-time column and keep the 30-day count beside the button.
+
 ### Revoke confirm
 An outlined red summary. Open, it fills red and drops a ground-colored popover naming who stops working, with the red button inside.
 

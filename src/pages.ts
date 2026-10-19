@@ -69,7 +69,6 @@ const en = {
   metricsViews: "30 days",
   metricsTotal: "All time",
   metricsOpen: "Open",
-  metricsNotCounted: "Not counted yet",
   tokensTitle: "Tokens",
   tokensLead: "A token lets a Publisher create, change, delete and make public every Share on this Instance. Give each Publisher its own, and revoke one you no longer trust.",
   errors: {
@@ -174,7 +173,6 @@ const ptBR: typeof en = {
   metricsViews: "30 dias",
   metricsTotal: "Total",
   metricsOpen: "Abrir",
-  metricsNotCounted: "Ainda sem contagem",
   tokensTitle: "Tokens",
   tokensLead: "Um token deixa um publicador criar, mudar, apagar e tornar público qualquer Share desta Instância. Dê um token para cada publicador e revogue o que não for mais de confiança.",
   errors: {
@@ -388,20 +386,26 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 .button.quiet { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--field); }
 .button.quiet:hover { background: var(--sunken); }
 
-/* Metrics: one row per counted page; the count and the button on the right, the date hidden on phones */
+/* Metrics: one row per Share, a name then two numbers and the way in. The numbers are always a number, so a Share
+   nobody opened yet reads as 0 rather than as an empty cell; the count columns line up with their headings. */
 .actions-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .metrics { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
-.metrics-head, .metrics-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem 6.5rem; gap: .75rem; align-items: center; padding: .55rem .9rem; }
-.metrics-head { background: var(--board); color: var(--board-dim); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
-.metrics-row { border-top: 1px solid var(--rule); font-size: .9375rem; }
-.metrics-row .m-views { font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
-.metrics-row .m-total { color: var(--muted); font-size: .8125rem; text-align: right; font-variant-numeric: tabular-nums; }
-.metrics-row .m-page .flap { display: block; margin-top: .15rem; color: var(--muted); font-size: .75rem; }
+.metrics-head, .metrics-row { display: grid; grid-template-columns: minmax(0, 1fr) 5rem 5rem 6.5rem; gap: .75rem; align-items: center; padding: .6rem .9rem; }
+.metrics-head { background: var(--board); color: var(--board-dim); font-size: .75rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.metrics-head .m-views, .metrics-head .m-total { text-align: right; }
+.metrics-row { border-top: 1px solid var(--rule); }
+.metrics-row .m-page { display: grid; gap: .1rem; min-width: 0; }
+.metrics-row .m-title { display: inline-block; min-height: 1.5rem; font-weight: 650; overflow-wrap: anywhere; }
+.metrics-row .m-slug { font-family: var(--mono); font-size: .75rem; color: var(--muted); overflow-wrap: anywhere; }
+.metrics-row .m-views, .metrics-row .m-total { text-align: right; font-variant-numeric: tabular-nums; font-size: 1.0625rem; font-weight: 650; }
+.metrics-row .m-total { color: var(--muted); }
+/* A Share with no opening yet: the zero is there, quieter, so the column never looks broken. */
+.metrics-row .zero { color: var(--muted); font-weight: 500; }
 .metrics-row .button.quiet { min-height: 2rem; padding: .2rem .6rem; font-size: .8125rem; }
 .metrics-row .button svg { width: .9rem; height: .9rem; }
 @media (max-width: 40rem) {
-  .metrics-head, .metrics-row { grid-template-columns: minmax(0, 1fr) 4.5rem auto; gap: .6rem; padding: .5rem .7rem; }
-  .metrics-head span:nth-child(3), .metrics-row .m-total { display: none; }
+  .metrics-head, .metrics-row { grid-template-columns: minmax(0, 1fr) 3.5rem auto; gap: .6rem; padding: .6rem .7rem; }
+  .metrics-head .m-total, .metrics-row .m-total { display: none; }
 }
 .pass { background: var(--board); color: var(--board-ink); border: 1px solid var(--board-edge); border-radius: 6px; padding: 1.2rem 1.35rem; display: grid; gap: .65rem; border-top: 6px solid var(--signal); }
 .pass .hint { color: var(--board-dim); }
@@ -605,10 +609,12 @@ export function metricsPage(v: Visitor, shares: HomeList["shares"], views: Map<s
   const t = STRINGS[v.lang];
   const rows = shares.map((d) => {
     const seen = views.get(d.slug);
+    const count = (value: number, label: string) =>
+      `<span class="lbl">${label} </span><span${value === 0 ? ' class="zero"' : ""}>${value}</span>`;
     return `<li class="metrics-row">
-<span class="m-page"><a href="/s/${d.slug}"><span class="m-title">${escapeHtml(d.title)}</span></a><span class="flap">${d.slug}</span></span>
-<span class="m-views">${seen ? `<span class="lbl">${t.metricsViews} </span>${seen.recent}` : `<span class="lbl">${t.metricsNotCounted}</span>`}</span>
-<span class="m-total">${seen ? `<span class="lbl">${t.metricsTotal} </span>${seen.total}` : ""}</span>
+<span class="m-page"><a href="/s/${d.slug}"><span class="m-title">${escapeHtml(d.title)}</span></a><span class="m-slug">${d.slug}</span></span>
+<span class="m-views">${count(seen?.recent ?? 0, t.metricsViews)}</span>
+<span class="m-total">${count(seen?.total ?? 0, t.metricsTotal)}</span>
 <span class="m-open"><a class="button quiet" href="/s/${d.slug}">${t.metricsOpen}${ARROW}</a></span>
 </li>`;
   }).join("\n");
@@ -621,7 +627,7 @@ ${header(v, "metrics")}
 </div>
 ${rows
     ? `<div class="metrics">
-<div class="metrics-head" aria-hidden="true"><span>${t.metricsShare}</span><span>${t.metricsViews}</span><span>${t.metricsTotal}</span><span></span></div>
+<div class="metrics-head" aria-hidden="true"><span>${t.metricsShare}</span><span class="m-views">${t.metricsViews}</span><span class="m-total">${t.metricsTotal}</span><span></span></div>
 <ol class="rows">
 ${rows}
 </ol>

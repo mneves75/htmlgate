@@ -38,10 +38,15 @@ describe("views per Share", () => {
     const slug = await publish(call, "Counted share");
 
     expect((await navigate(`/s/${slug}`)).status).toBe(200);
-    const row = await eventually(() => metricsRow("Counted share"), (r) => r.includes("30 days"));
-    expect(row, "the Share's row on /metrics").toContain("30 days");
-    expect(row).toContain("All time");
+    const row = await eventually(() => metricsRow("Counted share"), (r) => !r.includes('class="zero"'));
+    // The number is visible text, not only the screen reader's label: it sits outside `.lbl`, and a zero is marked so
+    // the column reads as "nothing yet" instead of an empty cell.
+    expect(row, "the 30-day count").toMatch(/<span class="lbl">30 days <\/span><span(?: class="zero")?>1<\/span>/);
+    expect(row, "the all-time count").toMatch(/<span class="lbl">All time <\/span><span(?: class="zero")?>1<\/span>/);
     expect(row).toContain(`href="/s/${slug}"`);
+    // The slug is quiet mono text, never the board's dark flap cells on a light ground.
+    expect(row).toContain(`<span class="m-slug">${slug}</span>`);
+    expect(row).not.toContain('class="flap"');
 
     const home = await (await navigate("/")).text();
     expect(home).toContain(`<span class="c-views">`);
@@ -55,9 +60,10 @@ describe("views per Share", () => {
     await navigate(`/s/${slug}/raw`);
     await fetch(`${base}/s/${slug}`, await asPerson(AUTHOR, { headers: { "sec-fetch-dest": "document", "sec-purpose": "prefetch" } }));
     await navigate(`/s/ZZZZZZZZZZZZ`);
-    // Nothing above counted, so the row still shows its zero state rather than a number.
+    // Nothing above counted, so both columns show a visible, quieter zero rather than an empty cell.
     const row = await metricsRow("Never opened");
-    expect(row).not.toContain("30 days");
+    expect(row).toContain('<span class="lbl">30 days </span><span class="zero">0</span>');
+    expect(row).toContain('<span class="lbl">All time </span><span class="zero">0</span>');
   });
 
   test("a Public Share's page counts too, and its row is the same", async () => {
@@ -65,15 +71,15 @@ describe("views per Share", () => {
     const slug = await publish(call, "Public counted");
     await call("POST", `/api/shares/${slug}/visibility`, { public: true });
     expect((await navigate(`/p/${slug}`)).status).toBe(200);
-    const row = await eventually(() => metricsRow("Public counted"), (r) => r.includes("30 days"));
-    expect(row).toContain("30 days");
+    const row = await eventually(() => metricsRow("Public counted"), (r) => !r.includes('class="zero"'));
+    expect(row).toContain('<span class="lbl">30 days </span><span>1</span>');
   });
 
   test("erasing a Share erases its counts", async () => {
     const call = api(await mintToken("views-erase"));
     const slug = await publish(call, "Erased share");
     await navigate(`/s/${slug}`);
-    await eventually(() => metricsRow("Erased share"), (r) => r.includes("30 days"));
+    await eventually(() => metricsRow("Erased share"), (r) => !r.includes('class="zero"'));
     const erasing = await fetch(`${base}/erase`, {
       ...(await asPerson(AUTHOR, { headers: { "content-type": "application/x-www-form-urlencoded", origin: base } })),
       method: "POST",

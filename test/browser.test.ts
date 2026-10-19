@@ -86,6 +86,29 @@ describe("accessibility of every page, in light and dark", () => {
     // One navigation to the Share, so the metrics table has a row to audit rather than its empty state.
     await abIn(AUDIT, "open", `${base}/s/${d.slug}`);
     await settle(AUDIT);
+    // The report's numbers have to be readable in a real browser: visible text, inside the card, and no dark flap
+    // cells on the light ground (the first version of this page passed its HTML test and still showed empty cells).
+    await abIn(AUDIT, "open", `${base}/metrics`);
+    await settle(AUDIT);
+    // `eval` answers with the printed value, so a JSON string comes back quoted once more.
+    const printed: unknown = JSON.parse(await abIn(AUDIT, "eval", `JSON.stringify((() => {
+      const card = document.querySelector(".metrics").getBoundingClientRect();
+      const cell = document.querySelector(".metrics-row .m-views");
+      const box = cell.getBoundingClientRect();
+      return {
+        flaps: document.querySelectorAll(".metrics-row .flap").length,
+        text: cell.textContent.trim(),
+        width: Math.round(box.width),
+        inside: box.right <= card.right + 1 && box.left >= card.left - 1,
+        rows: document.querySelectorAll(".metrics-row").length,
+      };
+    })())`));
+    const layout = (typeof printed === "string" ? JSON.parse(printed) : printed) as { flaps: number; text: string; width: number; inside: boolean; rows: number };
+    expect(layout.flaps, "no board flaps on the report").toBe(0);
+    expect(layout.rows).toBeGreaterThan(0);
+    expect(layout.width).toBeGreaterThan(0);
+    expect(layout.inside, "the count stays inside the card").toBe(true);
+    expect(layout.text).toMatch(/\d/);
     for (const [label, path] of [["home", "/"], ["tokens", "/tokens"], ["metrics", "/metrics"], ["viewer", `/s/${d.slug}`]]) {
       await abIn(AUDIT, "open", `${base}${path}`);
       await settle(AUDIT);

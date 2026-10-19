@@ -2,6 +2,18 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.9] - 2026-10-19
+
+### Fixed
+
+- `/metrics` rendered its counts in a column that looked empty: the numbers were there but the "no opening yet" text
+  sat inside the screen-reader-only label, and the Share's slug used the board's dark flap cells, which tile the whole
+  column on the light ground and leave the glyphs unreadable. The row is now a plain table row: the title with its
+  slug in muted mono, and both counts always visible as numbers, a zero in a quieter tone. The all-time column drops
+  on phones.
+- A browser test now measures the report in a real browser (no flap cells, the count inside the card, a digit in the
+  cell), so a layout that looks empty cannot pass again; the metrics test asserts the number sits outside the label.
+
 ## [0.1.8] - 2026-10-19
 
 ### Changed

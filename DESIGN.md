@@ -388,6 +388,9 @@ Each character sits on its own flap: a repeating cell-colored block one characte
 ### Share viewer bar
 A thin graphite strip, wrapping to two lines on phones, with the title clamped to two lines. The Versions menu is a `<details>` with a mono summary ("v3 of 7") and a graphite list; the current Version is yellow. The older-Version notice is a full-width yellow band directly under it.
 
+### Release line
+The version an Operator is running, in mono at 0.75rem: a footer under every Instance page, and a chip in the viewer bar's meta so it never overlays the Share. The landing carries the same number in its footer, in mono at 0.8125rem next to the wordmark. One line, muted, never an action.
+
 ### Revoke confirm
 An outlined red summary. Open, it fills red and drops a ground-colored popover naming who stops working, with the red button inside.
 

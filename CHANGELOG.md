@@ -6,10 +6,24 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ### Added
 
+- Every page shows the release it runs: the Instance's pages carry it in a footer (the viewer's bar,
+  so it never covers the Share) and every landing page carries the same number, privacy notices and
+  404 included. `test/version.test.ts` keeps them equal to `package.json`.
+- The landing's FAQ answers what its page counts record, in both languages.
 - The landing counts each page a browser opens, server-side in Workers Analytics Engine: the page,
   its status, the country and the referring site's hostname. No cookie, no script, no IP address or
   browser details, so it needs no cookie banner; both privacy notices say what is counted and that
   Cloudflare keeps it 3 months. README shows the `cf` query for views per page. Instances are unchanged.
+
+### Fixed
+
+- `pnpm run cli:install` reads one formula's receipt instead of every installed formula (which
+  overflowed the buffer) and checks the licence and README where Homebrew puts them, in the keg
+  root, instead of a libexec layout Homebrew never produces.
+- CI measures page loads against the 3-core runner's allowance (150 ms) rather than the 18-core dev
+  machine's 50 ms, which no commit could meet on `macos-15`.
+- Two tests no longer depend on host load: the write-limit burst finishes inside its own minute, and
+  a cut endless body is an assertion rather than a runtime error.
 
 ## [0.1.0] - 2026-10-18
 

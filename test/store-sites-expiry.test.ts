@@ -121,6 +121,10 @@ describe("expiry", () => {
     const live = slug();
     await store.createShare(page(live, now));
     const liveBody = one<{ body_key: string }>("SELECT body_key FROM versions WHERE slug = ?", live).body_key;
+    // Every Share carries counts; the purge must take the expired ones' and leave the live Share's.
+    for (const s of [...expired, live]) {
+      sqlite.prepare("INSERT INTO share_views (slug, day, views) VALUES (?, '2026-01-01', 3)").run(s);
+    }
     const expiredBodies = 53 * 2;
     expect(objects.size).toBe(expiredBodies + 1);
 
@@ -139,6 +143,10 @@ describe("expiry", () => {
     expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM trash").n).toBe(0);
     expect([...objects.keys()]).toEqual([liveBody]);
     expect(await store.share(AUTHOR, live)).not.toBeNull();
+    // The purged Shares keep no counts: `due` selects Shares that still have Versions, so the delete has to run before
+    // the Versions go.
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM share_views WHERE slug != ?", live).n).toBe(0);
+    expect(one<{ n: number }>("SELECT views AS n FROM share_views WHERE slug = ?", live).n).toBe(3);
   });
 
   test("a failed bucket delete keeps the ledger rows for a later try", async () => {

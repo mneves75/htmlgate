@@ -127,15 +127,16 @@ What htmlgate defends against, and what it does not. Security reviews and tests 
 - **Not defended:** an attacker on the network path during a browser's first visit to a plain `http://` link, before the browser has seen `Strict-Transport-Security`. Only HSTS preloading, the domain owner's choice, closes that first visit.
 - **Known gap:** an upload that finishes after its hour-long reservation expires can temporarily exceed the storage cap until cleanup. If its Worker stops before re-ledgering it, that body can remain untracked (see [docs/operator.md](docs/operator.md#storage)).
 
-## The landing page
-
-### Views per Share
+## Views per Share
 
 An Instance counts how often each of its Shares is opened, on the server, from the request the browser already sends:
 no cookie, no script, no visitor identity. The count is one row per Share and UTC day (`share_views`). A count says
 how often, never by whom, so the Instance keeps no analytics of people. The Author sees it on the home's board (the
-last 30 days on each row) and on `/metrics`, which lists every Share with its 30-day and all-time counts and a button
-to open it. Erasing a Share erases its counts in the same transaction.
+last 30 days on each row) and on `/metrics`, which lists your 500 most recently updated Shares with their 30-day and
+all-time counts and a button to open each one. Erasing a Share erases its counts in the same transaction, and the hourly
+cleanup erases an expired Share's counts with its bodies.
+
+## The landing page
 
 `site/` is the public page at htmlgate.com: plain HTML and one stylesheet behind a small Worker that sets the headers and redirects. It is not part of an Instance, and an Operator never deploys it.
 

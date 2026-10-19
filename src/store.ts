@@ -142,16 +142,20 @@ export class Store {
 
   /**
    * Purges up to 50 expired Shares that still have Versions, in one transaction: their bodies are queued for deletion,
-   * the Shares marked deleted, and their Versions deleted last, so every statement selects the same Shares and a purged
-   * Share is never selected again. `now` is bound, not read per statement. Returns how many Shares it purged.
+   * the Shares marked deleted, and their counts and Versions deleted last, so every statement selects the same Shares
+   * and a purged Share is never selected again. `now` is bound, not read per statement. Returns how many Shares it
+   * purged.
    */
   async expire(now: number): Promise<number> {
     const due = "SELECT slug FROM shares WHERE expires_at <= ? AND slug IN (SELECT slug FROM versions) ORDER BY expires_at, slug LIMIT ?";
     const results = await this.db.batch([
       this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ? FROM versions WHERE slug IN (${due})`).bind(now, now, CLEANUP_BATCH),
       this.db.prepare(`UPDATE shares SET deleted_at = COALESCE(deleted_at, expires_at) WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
-      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
+      // The counts and the Versions go together, and the counts first: `due` selects Shares that still have Versions, so
+      // a statement after `DELETE FROM versions` would match nothing for the batch just purged - and take the next
+      // batch's rows instead.
       this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
+      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
     ]);
     return results[1]?.meta.changes ?? 0;
   }
@@ -199,10 +203,16 @@ export class Store {
 
   // Views: one row per Share and UTC day, incremented when a browser opens the Share's page.
 
-  /** Counts one opening of a Share's page. The caller sends it in the background, so a slow write never delays a page. */
+  /**
+   * Counts one opening of a Share's page. The caller sends it in the background, so a slow write never delays a page; the
+   * write itself checks that the Share is still live, because an Author may erase it between the page and this statement,
+   * and an erased Share must keep no row nothing would ever delete.
+   */
   async countView(slug: string, day: string): Promise<void> {
     await this.db
-      .prepare("INSERT INTO share_views (slug, day, views) VALUES (?, ?, 1) ON CONFLICT (slug, day) DO UPDATE SET views = views + 1")
+      .prepare(`INSERT INTO share_views (slug, day, views) SELECT ?1, ?2, 1
+        WHERE EXISTS (SELECT 1 FROM shares WHERE slug = ?1 AND ${live()})
+        ON CONFLICT (slug, day) DO UPDATE SET views = views + 1`)
       .bind(slug, day)
       .run();
   }

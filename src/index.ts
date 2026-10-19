@@ -18,6 +18,8 @@ async function html(status: number, page: PageResult | Promise<PageResult>): Pro
 const notFound = (lang: Language, opts: { signInPath?: string; home?: "author" | "viewer" } = {}) => html(404, notFoundPage(lang, opts));
 
 const VIEW = /^\/(s|p)\/([A-Za-z0-9]{12})(\/raw)?$/;
+/** How many Shares the report lists: every one an Instance is likely to hold, and its own row count, not a page. */
+const METRICS_SHARES = 500;
 /** A UTC day, `YYYY-MM-DD`, offset from now: the window a report covers. */
 const dayFrom = (ms: number, offsetDays: number) => new Date(ms + offsetDays * 86_400_000).toISOString().slice(0, 10);
 // A site's files (plan 009): a Public Share's by slug and Version; a Gated Share's by ticket. Both sit outside Access.
@@ -40,8 +42,8 @@ export default {
   },
 
   /**
-   * Hourly (wrangler.jsonc triggers): purge expired Shares, then delete due bodies. At most 3 purge batches (3 D1
-   * queries each) and 10 trash rounds (2 each): 29 queries, under Workers Free's 50 per invocation. What is left
+   * Hourly (wrangler.jsonc triggers): purge expired Shares, then delete due bodies. At most 3 purge batches (4 D1
+   * queries each) and 10 trash rounds (2 each): 32 queries, under Workers Free's 50 per invocation. What is left
    * waits for the next hour. Each step runs whatever the other did, and a failure is logged by name before the run
    * fails: an Instance logs errors only, so an unlogged failure would show up first as a full storage cap.
    */
@@ -156,7 +158,7 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
     // The Author only, like the token page: how often each of this Instance's Shares was opened.
     if (!isAuthor) return lost();
     if (req.method !== "GET") return lost();
-    return html(200, metricsPage(visitor, (await store.recentShares(cfg.author, HOME_SHARES)).shares, await store.viewsBySlug(dayFrom(Date.now(), -30))));
+    return html(200, metricsPage(visitor, (await store.recentShares(cfg.author, METRICS_SHARES)).shares, await store.viewsBySlug(dayFrom(Date.now(), -30))));
   }
 
   if (path === "/tokens" || path.startsWith("/tokens/")) {

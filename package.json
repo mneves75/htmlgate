@@ -1,6 +1,6 @@
 {
   "name": "htmlgate",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "license": "MIT",
   "description": "Self-deployed, private-by-default HTML hosting for agents, on your own Cloudflare account.",

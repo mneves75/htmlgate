@@ -243,6 +243,8 @@ const MUTATIONS = [
   // The metrics report: the Author-only page and the shape of what a sync may store.
   ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.',"test/metrics.test.ts"],
   ["raw bytes count as a view","src/index.ts",'  if (raw || res.status !== 200) return res;','  if (res.status !== 200) return res;',"test/metrics.test.ts"],
+  ["a prefetch counts as a view","src/index.ts",'  if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return res;','  if (req.headers.get("sec-fetch-dest") !== "document") return res;',"test/metrics.test.ts"],
+  ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
 ];
 
 const onlyAt = process.argv.indexOf("--only");

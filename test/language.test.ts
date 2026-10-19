@@ -54,6 +54,7 @@ describe("a pt-BR Instance", () => {
       ["home of the Author", await get("/", AUTHOR), "Seus Shares"],
       ["home of a Viewer", await get("/", VIEWER), "Você entrou"],
       ["tokens", await get("/tokens", AUTHOR), "Criar token"],
+      ["metrics", await get("/metrics", AUTHOR), "Métricas"],
       ["viewer", await get(`/s/${d.slug}`, VIEWER), "Abrir em nova aba"],
       ["viewer's expiry date", await get(`/s/${d.slug}`, VIEWER), "Expira em "],
       ["not found", await get("/p/ZZZZZZZZZZZZ"), "Não encontrado"],

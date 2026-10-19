@@ -2,17 +2,32 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.7] - 2026-10-19
+
+### Fixed
+
+- The hourly cleanup left an expired Share's counts behind: the delete of `share_views` ran after the delete of
+  its Versions, and `due` selects Shares that still have Versions, so the batch just purged matched nothing and
+  the next batch lost its rows instead. The counts now go first, in the same batch, and a test asserts that a
+  purged Share keeps none and a live one keeps its own.
+- A view written between a page read and an Author's erasure no longer creates a row nothing would delete: the
+  insert only lands while the Share is live.
+- `/metrics` lists your 500 most recently updated Shares, which is what the docs now say, and the hourly
+  cleanup's query budget comment counts the fourth statement (32 of Workers Free's 50).
+
+0.1.6 was tagged but never deployed.
+
 ## [0.1.6] - 2026-10-19
 
 ### Changed
 
 - The metrics report is about this Instance's Shares, not the landing's pages: the home's board carries each
-  Share's views over the last 30 days, and `/metrics` lists every Share with its 30-day and all-time counts and
-  a button that opens it. The landing-page snapshot from 0.1.5, its sync command and its API are gone.
+  Share's views over the last 30 days, and `/metrics` lists your 500 most recently updated Shares with their
+  30-day and all-time counts and a button that opens each. The landing-page snapshot from 0.1.5, its sync command and its API are gone.
 - Views are counted on the server, from the request a browser already sends, as one row per Share and UTC day
   (`share_views`): no cookie, no script, no visitor, address or identifier. Raw bytes, a prefetch and a page
   that does not exist are not views. Erasing a Share drops its count in the same transaction; the hourly
-  cleanup drops them with an expired Share's bodies. `docs/privacy.md` lists the new table, and the landing's
+  cleanup erases them with an expired Share's bodies. `docs/privacy.md` lists the new table, and the landing's
   FAQ now says what an Instance counts and what it does not.
 
 ## [0.1.5] - 2026-10-19

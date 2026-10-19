@@ -23,7 +23,7 @@ Agent-first HTML hosting that you run in your own Cloudflare account. A Publishe
 | `/p/<slug>` and `/p/<slug>/raw` | anyone | Public Shares only |
 | `/p/<slug>/<version>/<path>` | anyone | a Public site's files |
 | `/api/*` | Publishers, with a token | the Publisher API |
-| `/` and `/tokens` | signed in; the Shares list and tokens for the Author only | home (the Author's Shares), token management |
+| `/`, `/tokens` and `/metrics` | signed in; the Shares list, tokens and view counts for the Author only | home (the Author's Shares), token management, views per Share |
 
 ## Requirements
 

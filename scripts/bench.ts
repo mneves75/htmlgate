@@ -190,11 +190,12 @@ async function instancePages(): Promise<number> {
     const gated = await publish(base, token, false);
     const open = await publish(base, token, true);
     const site = await publishSite(base, token);
-    // The Author's home lists up to 50 Shares: measure it full.
+    // The Author's home lists up to 50 Shares: measure it full, and let the metrics report count them.
     for (let i = 0; i < 48; i++) await publish(base, token, false);
     return await measure(base, [
       ["home", "/", 200],
       ["tokens", "/tokens", 200],
+      ["metrics", "/metrics", 200],
       ["viewer (gated, with its frame)", `/s/${gated}`, 200],
       ["raw (gated)", `/s/${gated}/raw`, 200],
       ["viewer (public, with its frame)", `/p/${open}`, 200],

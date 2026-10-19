@@ -2,6 +2,18 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.8] - 2026-10-19
+
+### Changed
+
+- `/metrics` is in the page budget: the bench measures it with the 50 Shares it already seeds, so the report's
+  render cost is gated like every other page.
+- A test and a mutation control now cover the count's live guard: a view that arrives after an erasure, or for a
+  Share whose date has passed, stores nothing.
+- The README's routes table lists `/metrics` with the other Author-only pages.
+
+0.1.7 was tagged but never deployed (its checks were the same tree plus these).
+
 ## [0.1.7] - 2026-10-19
 
 ### Fixed

@@ -65,11 +65,12 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.',"test/metrics.test.ts"],
     ["raw bytes count as a view","src/index.ts",'  if (raw || res.status !== 200) return res;','  if (res.status !== 200) return res;',"test/metrics.test.ts"],
     ["a prefetch counts as a view","src/index.ts",'  if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return res;','  if (req.headers.get("sec-fetch-dest") !== "document") return res;',"test/metrics.test.ts"],
+    ["a count outlives the Share it belongs to","src/store.ts",'        WHERE EXISTS (SELECT 1 FROM shares WHERE slug = ?1 AND ${live()})','        WHERE 1',"test/store-sites-expiry.test.ts"],
     ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
   ];
   const base = after.slice(0, before.length);
 
-  test("226 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
+  test("227 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
     expect(before).toHaveLength(182);
     expect(createHash("sha256").update(history).digest("hex")).toBe("659fa0b319ae9a82381cabfc7c993557f8231ebd0f2853e0300e51375aa9732e");
     expect(after).toHaveLength(before.length + added.length);

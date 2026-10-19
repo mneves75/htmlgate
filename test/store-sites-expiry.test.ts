@@ -149,6 +149,25 @@ describe("expiry", () => {
     expect(one<{ n: number }>("SELECT views AS n FROM share_views WHERE slug = ?", live).n).toBe(3);
   });
 
+  test("a count lands while the Share is live, and never for one that is gone or expired", async () => {
+    const { store, sqlite, one } = setup();
+    const now = Date.now();
+    const live = slug();
+    await store.createShare(page(live, now));
+    await store.countView(live, "2026-01-01");
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM share_views WHERE slug = ?", live).n).toBe(1);
+    // A view racing an erasure: the page was read, the Author erased the Share, then the count arrives.
+    await store.eraseShare(AUTHOR, live);
+    await store.countView(live, "2026-01-01");
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM share_views WHERE slug = ?", live).n).toBe(0);
+    // And a Share whose date has passed counts nothing, so no row outlives the cleanup that will never see it.
+    const old = slug();
+    await store.createShare(page(old, now));
+    sqlite.prepare("UPDATE shares SET expires_at = ? WHERE slug = ?").run(now - 1000, old);
+    await store.countView(old, "2026-01-01");
+    expect(one<{ n: number }>("SELECT COUNT(*) AS n FROM share_views WHERE slug = ?", old).n).toBe(0);
+  });
+
   test("a failed bucket delete keeps the ledger rows for a later try", async () => {
     const { store, sqlite, hooks, one } = setup();
     const a = slug();

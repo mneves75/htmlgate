@@ -92,32 +92,47 @@ describe("request bodies", () => {
   test("a body that never ends is refused once it passes the cap, without waiting for its end", async () => {
     const token = await mintToken("endless");
     const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
-    let sent = 0;
-    let answered = false;
-    // Endless as far as the Worker can tell, but it stops once the answer is in (or at 200 MiB), so it never
-    // keeps this test process busy after the test.
-    const body = new ReadableStream<Uint8Array>({
-      pull(c) {
-        if (answered || sent >= 200 * 1024 * 1024) return c.close();
-        sent += chunk.length;
-        c.enqueue(chunk);
-      },
-    });
-    const started = Date.now();
-    const r = await fetch(`${inject("base")}/api/shares`, {
-      // connection: close keeps the cut socket out of fetch's pool, where a later request would hit EPIPE.
-      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", connection: "close" }, body, duplex: "half",
-    } as RequestInit);
-    answered = true;
+    // One attempt: an endless body as far as the Worker can tell, stopping once the answer is in (or at 200 MiB) so it
+    // never keeps this process busy after the test. A refused socket surfaces as a TypeError rather than an answer, so
+    // the attempt reports that instead of throwing: it is the local dev proxy's cut, not a test verdict.
+    const attempt = async () => {
+      let sent = 0;
+      let answered = false;
+      const body = new ReadableStream<Uint8Array>({
+        pull(c) {
+          if (answered || sent >= 200 * 1024 * 1024) return c.close();
+          sent += chunk.length;
+          c.enqueue(chunk);
+        },
+      });
+      const started = Date.now();
+      try {
+        const r = await fetch(`${inject("base")}/api/shares`, {
+          // connection: close keeps the cut socket out of fetch's pool, where a later request would hit EPIPE.
+          method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", connection: "close" }, body, duplex: "half",
+        } as RequestInit);
+        return { r, sent, elapsed: Date.now() - started };
+      } catch (e) {
+        if (e instanceof TypeError) return { terminated: e.message, sent, elapsed: Date.now() - started };
+        throw e;
+      } finally {
+        answered = true;
+      }
+    };
+    let outcome = await attempt();
     // The Worker answers 413 without reading on. Wrangler's local dev proxy (not present in production) sometimes
-    // reports that early answer as a 500 "Network connection lost" instead; nothing else is accepted.
+    // reports that early answer as a 500 "Network connection lost", or terminates the request outright. Nothing else
+    // is accepted, and a termination twice is a failed assertion, not a broken test.
+    if ("terminated" in outcome) outcome = await attempt();
+    expect("terminated" in outcome ? outcome.terminated : undefined, "the request terminated without an answer twice").toBeUndefined();
+    const { r, sent, elapsed } = outcome as { r: Response; sent: number; elapsed: number };
     const answer = await r.text();
     if (r.status === 500) expect(answer).toMatch(/^Error: Network connection lost\./);
     else {
       expect(r.status).toBe(413);
       expect(JSON.parse(answer).error.code).toBe("html_too_large");
     }
-    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(elapsed).toBeLessThan(15_000);
     expect(sent).toBeLessThan(200 * 1024 * 1024);
   });
 });

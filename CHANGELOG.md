@@ -2,6 +2,16 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.5] - 2026-10-19
+
+### Added
+
+- `/metrics` on the Instance, for the Author only: the counted pages of a site as a table, one row per
+  page with its views, when it was last opened, and a button that opens that page; a "Métricas" button
+  in the top bar and on the home. `pnpm run metrics:sync` reads the counts from Workers Analytics Engine
+  with the Operator's `cf` login and stores the snapshot through the API — a Worker writes Analytics
+  Engine and cannot read it, so no Cloudflare credential reaches the Worker.
+
 ## [0.1.4] - 2026-10-19
 
 ### Fixed

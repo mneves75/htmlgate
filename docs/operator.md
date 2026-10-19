@@ -75,6 +75,7 @@ The token command refuses an Instance whose config does not exist yet: run setup
 | Create a token | The token page at `/tokens`, or `pnpm run token create <name>`. It is shown once. |
 | List or revoke tokens | The token page, `pnpm run token list` / `revoke <id>`, or any Publisher with `htmlgate tokens list` / `revoke <id>`. |
 | Update to a new version | Read the CHANGELOG entry, then `git pull`, `pnpm install`, `pnpm run build:cli` (or `pnpm run cli:install` for a Homebrew install), `pnpm run setup`. Migrations keep your Shares. The CLI and the Instance change together: an older CLI may get not-found answers from a newer Instance. After every production deploy, run `pnpm run cli:install` on the owner's machine and report the version it printed. |
+| See a landing's page counts | `HTMLGATE_TOKEN=hg_... pnpm run metrics:sync --config instance.json`, then `/metrics` on the Instance (Author only) shows one row per page with a button to open it. The counts live in Workers Analytics Engine, which a Worker writes and cannot read, so the sync reads them with your `cf` login; nothing but the snapshot reaches the Instance. |
 | See what a leaked token did | `htmlgate list --public`, and `changed_by` on each Share. |
 | Change how long Shares live | Edit `expiryDays`, run `pnpm run setup`. A Share picks up the new default at its next publish. |
 | End every open ticket | `pnpm run setup --rotate-ticket-key`. Viewers reload a Gated site's page to get a new one. |

@@ -15,10 +15,12 @@ export interface FakeStatement {
 }
 
 /** `seed`, when given, runs just before the migration named `before`, as data an older Instance already holds. */
-export function fakeEnv(opts: { before?: string; seed?: (sqlite: DatabaseSync) => void } = {}) {
+export function fakeEnv(opts: { before?: string; through?: string; seed?: (sqlite: DatabaseSync) => void } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   const dir = join(process.cwd(), "migrations");
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    // `through` pins a review to one migration: later ones add their own objects and must not enter its comparison.
+    if (opts.through && f > opts.through) continue;
     if (f === opts.before) opts.seed?.(sqlite);
     sqlite.exec(readFileSync(join(dir, f), "utf8"));
   }

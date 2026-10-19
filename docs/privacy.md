@@ -13,6 +13,7 @@ htmlgate sends nothing to anyone but Cloudflare. It has no analytics, no trackin
 | `versions` | Each kept Version's size, time, the id of the token that published it, its body's key in R2, and for a site the path and size of each file. | Until the Version leaves the 20-Version window, or the hourly cleanup processes its expired Share. A soft-deleted Share keeps its rows until that cleanup or Author erasure. |
 | `trash` | Bodies waiting to be deleted from R2, with their size. | Until the body is deleted. |
 | `versions_d1_legacy` | Bodies from before bodies moved to R2; empty on a fresh Instance. | Until the Operator drops the table ([operator.md](operator.md#storage)). |
+| `metrics_snapshot` | Only when the Operator runs `pnpm run metrics:sync`: the page paths of one site and their view counts, with the time each was last opened and when the counts were read. No visitor, no address, no identifier. | Until the next sync replaces it, or the Instance is removed. |
 
 The database lives where it was created. Setup lets Cloudflare choose, or you create it near your people first ([operator.md](operator.md#speed)).
 

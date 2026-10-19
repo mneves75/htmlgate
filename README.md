@@ -131,7 +131,19 @@ What htmlgate defends against, and what it does not. Security reviews and tests 
 
 `site/` is the public page at htmlgate.com: plain HTML and one stylesheet behind a small Worker that sets the headers and redirects. It is not part of an Instance, and an Operator never deploys it.
 
-The Worker also counts each page a browser opens, in the Workers Analytics Engine dataset `htmlgate_site_page_views`: the page (`blob1`, a missing one as `404`), the status (`blob2`), the country (`blob3`) and the referring site's hostname (`blob4`). It sets no cookie, runs no script and stores no IP address or browser details, so the landing needs no cookie banner; the privacy notice says so. Each view is one row with its time; Cloudflare keeps them 3 months. Views per page over the last 30 days:
+The Worker also counts each page a browser opens, in the Workers Analytics Engine dataset `htmlgate_site_page_views`: the page (`blob1`, a missing one as `404`), the status (`blob2`), the country (`blob3`) and the referring site's hostname (`blob4`). It sets no cookie, runs no script and stores no IP address or browser details, so the landing needs no cookie banner; the privacy notice says so. Each view is one row with its time; Cloudflare keeps them 3 months.
+
+A Worker writes Analytics Engine and cannot read it, so `pnpm run metrics:sync` reads the counts with your own `cf`
+login and stores the snapshot on your Instance. Its `/metrics` page (the Author only, behind the same Access gate)
+then shows the report as a table: one row per page, its views, when it was last opened, and a button that opens that
+page. Nothing else is stored on the Instance, and no Cloudflare credential ever reaches the Worker.
+
+```sh
+HTMLGATE_TOKEN=hg_... pnpm run metrics:sync --config instance.json
+pnpm run metrics:sync --url https://app.example.com --origin https://htmlgate.com --days 30
+```
+
+Read the same numbers by hand:
 
 ```sh
 cf analytics_engine sql query --body "SELECT blob1 AS page, SUM(_sample_interval) AS views FROM htmlgate_site_page_views WHERE timestamp > NOW() - INTERVAL '30' DAY GROUP BY page ORDER BY views DESC"

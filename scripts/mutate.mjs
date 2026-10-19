@@ -26,7 +26,8 @@ const MUTATIONS = [
   ["a Gated Share's viewer page is served on /p/", "src/store.ts", '${publicOnly ? "AND d.public = 1" : ""} ORDER BY', '${publicOnly ? "" : ""} ORDER BY', "test/viewer.test.ts"],
   ["a token can mint tokens", "src/api.ts", 'if (b === undefined && method === "GET") {', 'if (b === undefined && method === "POST") { return json(201, { token: "hg_" }); }\n      if (b === undefined && method === "GET") {', "test/api.test.ts"],
   ["revoked tokens keep working", "src/store.ts", "WHERE digest = ? AND revoked_at IS NULL", "WHERE digest = ?", "test/api.test.ts"],
-  ["a Viewer reaches the token page", "src/index.ts", "if (!isAuthor) return lost();", "", "test/viewer.test.ts"],
+  // Two routes now refuse a Viewer, so the anchor keeps the POST check that only the token route has.
+  ["a Viewer reaches the token page", "src/index.ts", 'if (!isAuthor) return lost();\n    if (req.method === "GET" && path === "/tokens") return html(200, tokensPage(visitor, await store.listTokens(cfg.author)));', 'if (req.method === "GET" && path === "/tokens") return html(200, tokensPage(visitor, await store.listTokens(cfg.author)));', "test/viewer.test.ts"],
   ["a Viewer's home lists Shares", "src/index.ts", "isAuthor ? await store.recentShares(cfg.author, HOME_SHARES) : null", "await store.recentShares(cfg.author, HOME_SHARES)", "test/home.test.ts"],
   ["the home lists deleted Shares", "src/store.ts", " AND ${live(\"d.\")} ORDER BY d.updated_at DESC", " ORDER BY d.updated_at DESC", "test/home.test.ts"],
   ["the home lists another Author's Shares", "src/store.ts", "WHERE d.author = ?1 AND ", "WHERE ", "test/home.test.ts"],
@@ -239,6 +240,9 @@ const MUTATIONS = [
   ["Homebrew accepts a release tag with different candidate inputs","scripts/cli-install.mjs","      command(\"git\", [\"-C\", repository, \"diff\", \"--exit-code\", `${tag}^{commit}`, \"--\",\n        \"Formula/htmlgate.rb\", `Formula/sources/${verified.archive}`, ...CLI_INPUTS.map((name) => `packages/cli/${name}`)]);","","test/cli-brew.test.ts"],
   ["Homebrew accepts duplicate formula metadata","scripts/cli-archive.mjs","if (lines.length !== 1 || declarations !== expected) throw new Error(","if (false) throw new Error(","test/cli-brew.test.ts"],
   ["setup accepts a project inside another Git checkout","scripts/setup.mjs","if (realpathSync(root) !== realpathSync(ROOT)) {","if (false) {","test/reviewer-launch-audit-docs.test.ts"],
+  // The metrics report: the Author-only page and the shape of what a sync may store.
+  ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: the counts are for whoever runs the Instance.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: the counts are for whoever runs the Instance.',"test/metrics.test.ts"],
+  ["the metrics API stores a page that is not a path","src/api.ts",'if (typeof page !== "string" || page.length > 96 || !(page === "404" || /^\\/[A-Za-z0-9._~!$&\'()*+,;=:@%/-]*$/.test(page))) {','if (false) {',"test/metrics.test.ts"],
 ];
 
 const onlyAt = process.argv.indexOf("--only");

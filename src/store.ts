@@ -196,6 +196,22 @@ export class Store {
     return r.meta.changes > 0;
   }
 
+  // Metrics: the snapshot `pnpm run metrics:sync` recorded, replaced whole on every sync.
+
+  async putMetrics(origin: string, generatedAt: number, payload: string): Promise<void> {
+    await this.db
+      .prepare("INSERT INTO metrics_snapshot (id, origin, generated_at, payload) VALUES (1, ?, ?, ?) " +
+        "ON CONFLICT(id) DO UPDATE SET origin = excluded.origin, generated_at = excluded.generated_at, payload = excluded.payload")
+      .bind(origin, generatedAt, payload)
+      .run();
+  }
+
+  async metricsSnapshot(): Promise<{ origin: string; generated_at: number; payload: string } | null> {
+    return await this.db
+      .prepare("SELECT origin, generated_at, payload FROM metrics_snapshot WHERE id = 1")
+      .first<{ origin: string; generated_at: number; payload: string }>();
+  }
+
   // Shares
 
   async share(author: string, slug: string): Promise<ShareRow | null> {

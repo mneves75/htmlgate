@@ -13,6 +13,7 @@ function upgraded() {
   const snap = {} as Snap;
   const env = fakeEnv({
     before: "0005_shares.sql",
+    through: "0005_shares.sql",
     seed: (db) => {
       db.exec(`INSERT INTO tokens (id, author, name, digest, created_at) VALUES ('tok', '${AUTHOR}', 'laptop', 'digest', 1)`);
       const share = db.prepare(`INSERT INTO drops (slug, author, title, description, tags, public, latest_version, created_at, updated_at,
@@ -109,7 +110,8 @@ describe("migration 0005 on an Instance at 0004", () => {
 
   test("a fresh database has the same final schema as an upgraded one", () => {
     const { env } = upgraded();
-    const fresh = fakeEnv();
+    // Pinned to 0005 like the upgrade side: later migrations add their own tables to both.
+    const fresh = fakeEnv({ through: "0005_shares.sql" });
     const dump = (e: { sqlite: { prepare: (s: string) => { all: () => unknown[] } } }) =>
       (e.sqlite.prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_autoindex%' ORDER BY type, name").all() as { type: string; name: string; sql: string }[]);
     const a = dump(env as never);

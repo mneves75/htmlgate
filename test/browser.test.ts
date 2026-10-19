@@ -83,7 +83,13 @@ describe("accessibility of every page, in light and dark", () => {
     expect(await violations(), "tokens with a new token").toEqual([]);
     const { json: d } = await call("POST", "/api/shares", { html: "<!doctype html><title>t</title><h1>Hello</h1>", title: "A Share with a fairly long title for the bar" });
     await call("PUT", `/api/shares/${d.slug}`, { html: "<!doctype html><title>t</title><h1>Two</h1>" });
-    for (const [label, path] of [["home", "/"], ["tokens", "/tokens"], ["viewer", `/s/${d.slug}`]]) {
+    // A stored snapshot, so the metrics table is what gets audited rather than its empty state.
+    await call("PUT", "/api/metrics", { origin: "https://htmlgate.com", generated_at: Date.now(), pages: [
+      { page: "/", views: 5, last_seen: Date.now() },
+      { page: "/en/", views: 1, last_seen: Date.now() },
+      { page: "404", views: 2, last_seen: Date.now() },
+    ] });
+    for (const [label, path] of [["home", "/"], ["tokens", "/tokens"], ["metrics", "/metrics"], ["viewer", `/s/${d.slug}`]]) {
       await abIn(AUDIT, "open", `${base}${path}`);
       await settle(AUDIT);
       expect(await violations(), label).toEqual([]);
@@ -101,7 +107,7 @@ describe("accessibility of every page, in light and dark", () => {
     expect(await violations(), "not found").toEqual([]);
     // At phone width: the Author's board, the tokens list and the viewer, which all change layout there.
     await abIn(AUDIT, "set", "viewport", "390", "844");
-    for (const [label, path] of [["home", "/"], ["tokens", "/tokens"], ["viewer", `/s/${d.slug}?v=1`]]) {
+    for (const [label, path] of [["home", "/"], ["tokens", "/tokens"], ["metrics", "/metrics"], ["viewer", `/s/${d.slug}?v=1`]]) {
       await abIn(AUDIT, "open", `${base}${path}`);
       await settle(AUDIT);
       expect(await violations(), `${label} at 390 px`).toEqual([]);

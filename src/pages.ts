@@ -60,6 +60,16 @@ const en = {
   requestsListed: "Every request is listed at",
   viewerTitle: "You're signed in",
   viewerLead: "Open a Share with the link its Author sent you. This Instance keeps no list of Shares, so there is nothing to browse here.",
+  metrics: "Metrics",
+  metricsTitle: "Metrics",
+  metricsLead: "How often each page of the site below was opened, as the last sync read the counts. Counting happens on the server: no cookie, no script and no stored IP address.",
+  metricsEmpty: "Nothing synced yet",
+  metricsEmptyLead: "Run `pnpm run metrics:sync` with this Instance's token to read the counts from Workers Analytics Engine. Until then there is nothing to show here.",
+  metricsSynced: (when: string) => "Read " + when,
+  metricsPage: "Page",
+  metricsViews: "Views",
+  metricsLastSeen: "Last seen",
+  metricsOpen: "Open",
   tokensTitle: "Tokens",
   tokensLead: "A token lets a Publisher create, change, delete and make public every Share on this Instance. Give each Publisher its own, and revoke one you no longer trust.",
   errors: {
@@ -155,6 +165,16 @@ const ptBR: typeof en = {
   requestsListed: "Todos os pedidos estão listados em",
   viewerTitle: "Você entrou",
   viewerLead: "Abra um Share pelo link que o autor mandou. Esta Instância não mostra uma lista de Shares, então não há nada para navegar aqui.",
+  metrics: "Métricas",
+  metricsTitle: "Métricas",
+  metricsLead: "Quantas vezes cada página do site abaixo foi aberta, como a última sincronização leu as contagens. A contagem é no servidor: sem cookie, sem script e sem guardar o IP.",
+  metricsEmpty: "Nada sincronizado ainda",
+  metricsEmptyLead: "Rode `pnpm run metrics:sync` com o token desta Instância para ler as contagens do Workers Analytics Engine. Até lá não há o que mostrar aqui.",
+  metricsSynced: (when: string) => "Lido em " + when,
+  metricsPage: "Página",
+  metricsViews: "Visitas",
+  metricsLastSeen: "Última",
+  metricsOpen: "Abrir",
   tokensTitle: "Tokens",
   tokensLead: "Um token deixa um publicador criar, mudar, apagar e tornar público qualquer Share desta Instância. Dê um token para cada publicador e revogue o que não for mais de confiança.",
   errors: {
@@ -366,6 +386,21 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 .notice .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .75rem; }
 .button.quiet { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--field); }
 .button.quiet:hover { background: var(--sunken); }
+
+/* Metrics: one row per counted page; the count and the button on the right, the date hidden on phones */
+.actions-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.metrics { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
+.metrics-head, .metrics-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 11rem 6.5rem; gap: .75rem; align-items: center; padding: .55rem .9rem; }
+.metrics-head { background: var(--board); color: var(--board-dim); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
+.metrics-row { border-top: 1px solid var(--rule); font-size: .9375rem; }
+.metrics-row .m-views { font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
+.metrics-row .m-when { color: var(--muted); font-size: .8125rem; }
+.metrics-row .button.quiet { min-height: 2rem; padding: .2rem .6rem; font-size: .8125rem; }
+.metrics-row .button svg { width: .9rem; height: .9rem; }
+@media (max-width: 40rem) {
+  .metrics-head, .metrics-row { grid-template-columns: minmax(0, 1fr) 4rem auto; gap: .6rem; padding: .5rem .7rem; }
+  .metrics-head span:nth-child(3), .metrics-row .m-when { display: none; }
+}
 .pass { background: var(--board); color: var(--board-ink); border: 1px solid var(--board-edge); border-radius: 6px; padding: 1.2rem 1.35rem; display: grid; gap: .65rem; border-top: 6px solid var(--signal); }
 .pass .hint { color: var(--board-dim); }
 .pass :not(pre) > code { background: var(--cell); }
@@ -513,13 +548,13 @@ export interface HomeList {
   shares: { slug: string; title: string; public: number; latest_version: number; updated_at: number; changed_by_name: string | null }[];
 }
 
-function header(v: Visitor, current: "home" | "tokens"): string {
+function header(v: Visitor, current: "home" | "tokens" | "metrics"): string {
   const t = STRINGS[v.lang];
   const here = (page: typeof current) => (page === current ? ' aria-current="page"' : "");
   return `<header class="top">
 <a class="brand" href="/">${MARK}<span>htmlgate</span></a>
 <span class="host">${escapeHtml(new URL(v.origin).host)}</span>
-${v.isAuthor ? `<nav aria-label="${t.instance}">\n<a href="/"${here("home")}>${t.shares}</a>\n<a href="/tokens"${here("tokens")}>${t.tokens}</a>\n</nav>` : ""}
+${v.isAuthor ? `<nav aria-label="${t.instance}">\n<a href="/"${here("home")}>${t.shares}</a>\n<a href="/tokens"${here("tokens")}>${t.tokens}</a>\n<a href="/metrics"${here("metrics")}>${t.metrics}</a>\n</nav>` : ""}
 <span class="who" title="${t.signedIn}">${escapeHtml(v.email)}</span>
 </header>`;
 }
@@ -552,6 +587,54 @@ ${signInPath ? `<a class="button" href="${escapeHtml(signInPath)}">${t.signInRet
 <p class="ver">${VER}</p>
 </div>
 </main>`, { sandbox: true });
+}
+
+/** One counted page of the site the sync read. */
+export interface MetricsRow {
+  page: string;
+  views: number;
+  last_seen: number;
+}
+
+/**
+ * The site's counted pages, as the last `pnpm run metrics:sync` recorded them: one row per page with its views, when
+ * it was last opened, and a button that opens that page. The numbers are read by the sync command, not here: a Worker
+ * writes Workers Analytics Engine and cannot read it.
+ */
+export function metricsPage(v: Visitor, snapshot: { origin: string; generated_at: number; rows: MetricsRow[] } | null): Promise<PageResult> {
+  const t = STRINGS[v.lang];
+  const rows = snapshot?.rows.map((r) => {
+    // "404" is the counter's bucket for a page that does not exist, so there is nothing to open for it.
+    const name = escapeHtml(r.page);
+    const label = r.page === "404" ? name : `<a href="${escapeHtml(snapshot.origin + r.page)}" rel="noopener">${name}</a>`;
+    const open = r.page === "404" ? "" : `<a class="button quiet" href="${escapeHtml(snapshot.origin + r.page)}" rel="noopener">${t.metricsOpen}${ARROW}</a>`;
+    return `<li class="metrics-row">
+<span class="m-page">${label}</span>
+<span class="m-views"><span class="lbl">${t.metricsViews} </span>${r.views}</span>
+<span class="m-when"><span class="lbl">${t.metricsLastSeen} </span>${timeTag(r.last_seen)}</span>
+<span class="m-open">${open}</span>
+</li>`;
+  }).join("\n") ?? "";
+  return layout(v.lang, `${t.metricsTitle} · htmlgate`, `${skip(v.lang)}
+${header(v, "metrics")}
+<main id="main" class="page">
+<div>
+<h1>${t.metricsTitle}</h1>
+<p class="lead">${t.metricsLead}</p>
+</div>
+${snapshot
+    ? `<p class="hint">${t.metricsSynced(timeTag(snapshot.generated_at))} · <span class="host-inline">${escapeHtml(snapshot.origin)}</span></p>
+<div class="metrics">
+<div class="metrics-head" aria-hidden="true"><span>${t.metricsPage}</span><span>${t.metricsViews}</span><span>${t.metricsLastSeen}</span><span></span></div>
+<ol class="rows">
+${rows}
+</ol>
+</div>`
+    : `<section class="panel quiet"><div class="empty">
+<h2>${t.metricsEmpty}</h2>
+<p>${t.metricsEmptyLead}</p>
+</div></section>`}
+</main>`);
 }
 
 /**
@@ -605,7 +688,7 @@ ${header(v, "home")}
 <h1>${t.homeTitle}</h1>
 <p class="lead">${t.counts(list.total, list.publicTotal)}</p>
 </div>
-<a class="button" href="/tokens">${t.newToken}${ARROW}</a>
+<div class="actions-row"><a class="button quiet" href="/metrics">${t.metrics}</a><a class="button" href="/tokens">${t.newToken}${ARROW}</a></div>
 </div>
 ${note === undefined ? "" : "erased" in note
     ? `<div class="notice" role="status"><p>${t.erased(escapeHtml(note.erased))}</p></div>\n`

@@ -5,7 +5,7 @@ import { handleApi } from "./api";
 import { readConfig, type Config, type Env, type Language } from "./config";
 import { contentTypeFor, fail, readCapped, redirect, stream, text } from "./http";
 import { POSITIVE, SLUG, newToken, randomHex, sha256Hex } from "./ids";
-import { SHARE_SANDBOX, HOME_SHARES, homePage, notFoundPage, tokensPage, viewerPage, type HomeNote, type PageResult, type Visitor } from "./pages";
+import { SHARE_SANDBOX, HOME_SHARES, homePage, metricsPage, notFoundPage, tokensPage, viewerPage, type HomeNote, type PageResult, type Visitor } from "./pages";
 import { CLEANUP_BATCH, Store } from "./store";
 import { importTicketKey, openTicket, sealTicket, TICKET_TTL_MS } from "./ticket";
 import { siteRequestPath } from "./zip";
@@ -146,6 +146,14 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
     return redirect(`/?erased=${slug}`);
   }
 
+  if (path === "/metrics") {
+    // The Author only, like the token page: the counts are for whoever runs the Instance.
+    if (!isAuthor) return lost();
+    if (req.method !== "GET") return lost();
+    const saved = await store.metricsSnapshot();
+    return html(200, metricsPage(visitor, saved === null ? null : { origin: saved.origin, generated_at: saved.generated_at, rows: metricsRows(saved.payload) }));
+  }
+
   if (path === "/tokens" || path.startsWith("/tokens/")) {
     if (!isAuthor) return lost();
     if (req.method === "GET" && path === "/tokens") return html(200, tokensPage(visitor, await store.listTokens(cfg.author)));
@@ -173,6 +181,22 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   }
 
   return lost();
+}
+
+/**
+ * The rows a sync stored. The API validated them on the way in; a payload this Instance cannot read is shown as
+ * nothing rather than as a broken table, and the next sync replaces it.
+ */
+function metricsRows(payload: string): { page: string; views: number; last_seen: number }[] {
+  try {
+    const rows: unknown = JSON.parse(payload);
+    if (!Array.isArray(rows)) return [];
+    return rows.filter((r): r is { page: string; views: number; last_seen: number } =>
+      typeof r === "object" && r !== null && "page" in r && typeof r.page === "string" &&
+      "views" in r && typeof r.views === "number" && "last_seen" in r && typeof r.last_seen === "number");
+  } catch {
+    return [];
+  }
 }
 
 // What the Author may paste to name a Share: its slug, or its link on either path (the raw link too).

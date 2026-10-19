@@ -62,10 +62,12 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
   ["Homebrew accepts a release tag with different candidate inputs","scripts/cli-install.mjs","      command(\"git\", [\"-C\", repository, \"diff\", \"--exit-code\", `${tag}^{commit}`, \"--\",\n        \"Formula/htmlgate.rb\", `Formula/sources/${verified.archive}`, ...CLI_INPUTS.map((name) => `packages/cli/${name}`)]);","","test/cli-brew.test.ts"],
   ["Homebrew accepts duplicate formula metadata","scripts/cli-archive.mjs","if (lines.length !== 1 || declarations !== expected) throw new Error(","if (false) throw new Error(","test/cli-brew.test.ts"],
   ["setup accepts a project inside another Git checkout","scripts/setup.mjs","if (realpathSync(root) !== realpathSync(ROOT)) {","if (false) {","test/reviewer-launch-audit-docs.test.ts"],
+    ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: the counts are for whoever runs the Instance.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: the counts are for whoever runs the Instance.',"test/metrics.test.ts"],
+    ["the metrics API stores a page that is not a path","src/api.ts",'if (typeof page !== "string" || page.length > 96 || !(page === "404" || /^\\/[A-Za-z0-9._~!$&\'()*+,;=:@%/-]*$/.test(page))) {','if (false) {',"test/metrics.test.ts"],
   ];
   const base = after.slice(0, before.length);
 
-  test("222 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
+  test("224 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
     expect(before).toHaveLength(182);
     expect(createHash("sha256").update(history).digest("hex")).toBe("659fa0b319ae9a82381cabfc7c993557f8231ebd0f2853e0300e51375aa9732e");
     expect(after).toHaveLength(before.length + added.length);
@@ -97,6 +99,8 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
       "no rate limit",
       // The landing gained a film section, so its CSP gained `media-src 'self'`.
       "the landing loses its CSP",
+      // A second route now refuses a Viewer, so this anchor keeps the GET line that only the token route has.
+      "a Viewer reaches the token page",
       // The page-view counter hangs off the same `if`, so removing the line left an orphan `else if` and the site
       // module failed to load; the replacement now keeps the branch and drops only the header.
       "the landing preview is indexable",
@@ -115,6 +119,14 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
         // Still the same violation: the whole header line is removed; the anchor only gained the video source.
         expect(a[3]).toBe("");
         expect(a[2]).toBe(rename(b[2]).replace("img-src 'self'; ", "img-src 'self'; media-src 'self'; "));
+        continue;
+      }
+      if (a[0] === "a Viewer reaches the token page") {
+        // Still the same violation: the author check is removed whole. The anchor now also carries the GET line, because
+        // the metrics route refuses a Viewer with the same statement and an anchor must match once.
+        const get = 'if (req.method === "GET" && path === "/tokens") return html(200, tokensPage(visitor, await store.listTokens(cfg.author)));';
+        expect(a[2], a[0]).toBe(rename(b[2]) + "\n    " + get);
+        expect(a[3], a[0]).toBe(get);
         continue;
       }
       expect(a[2].replaceAll('"s"', '"d"').replaceAll("/s/", "/d/").replaceAll("(s|p)", "(d|p)").replace("drops", "shares"), a[0]).toBe(rename(b[2]).replaceAll("shares the Share's", "shares the Share's"));

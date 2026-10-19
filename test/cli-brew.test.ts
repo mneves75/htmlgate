@@ -202,7 +202,7 @@ const key = ([bin, args]: Call) => [bin, ...args].join(" ");
 function execute({ absent = false, tapped = false, installed = false, version = cli.version, failure = "",
   dirty = "", relation = "behind", mergedHead = "remote", paths = "", noPath = false, pathStatus = 0,
   receipt = cli.version + "_1", linked = cli.version + "_1", staleArtifact = "", staleTag = false,
-  tapMismatch = false, tampered = false, formulaSource = "", readFailure = false } = {}) {
+  tapMismatch = false, tampered = false, formulaSource = "", readFailure = false, wrongShebang = false } = {}) {
   const dir = candidate();
   const repository = join(dir, "tap");
   mkdirSync(repository);
@@ -220,6 +220,9 @@ function execute({ absent = false, tapped = false, installed = false, version = 
   // The keg keeps the launcher as a file; Homebrew links it onto PATH with a relative symlink, as a real install does.
   const kegLauncher = join(installedPrefix, "bin/htmlgate");
   mkdirSync(dirname(kegLauncher), { recursive: true });
+  if (wrongShebang) {
+    writeFileSync(launcherScript, readFileSync(launcherScript, "utf8").replace(/^#!.*$/m, "#!" + join(nodePrefix, "bin", "not-node")));
+  }
   writeFileSync(kegLauncher, '#!/bin/sh\nexec "' + join(nodePrefix, "bin/node") + '" "' + libexec + '/dist/bin.js" "$@"\n', { mode: 0o755 });
   mkdirSync(join(prefix, "bin"), { recursive: true });
   const binary = join(prefix, "bin/htmlgate");
@@ -342,6 +345,9 @@ describe("the CLI Homebrew installer", () => {
   });
   test.each(["LICENSE", "README.md"])("a stale keg-root metafile %s fails despite a matching product version", (staleArtifact) => {
     const r = execute({ staleArtifact }); expect(r.code).toBe(1); expect(r.err).toContain(staleArtifact); expect(r.err).toMatch(/metafile/i);
+  });
+  test("a launcher whose shebang points at another interpreter is refused", () => {
+    const r = execute({ wrongShebang: true }); expect(r.code).toBe(1); expect(r.err).toMatch(/artifact mismatch/i);
   });
   test("a version mismatch stops before PATH", () => {
     const r = execute({ version: "0.1.0-beta.12" }); expect(r.code).toBe(1); expect(r.err).toMatch(/version mismatch/i);

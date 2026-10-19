@@ -12,7 +12,7 @@ Homebrew is the install path on macOS. Do not install both the Homebrew and npm 
 The htmlgate repository is its own tap. The formula builds from a deterministic CLI-root source archive committed under
 `Formula/sources/`, named by its SHA-256. Homebrew verifies the top-level `sha256` before
 compilation; the tap-local download needs no GitHub credentials. Formula `revision 1`
-distinguishes the rebuilt `0.1.0_1` installation from the older `0.1.0`.
+distinguishes the rebuilt `<version>_1` installation from any older installation of the same version.
 
 ```sh
 brew tap mneves75/htmlgate https://github.com/mneves75/htmlgate.git
@@ -23,7 +23,7 @@ brew upgrade mneves75/htmlgate/htmlgate
 From the repository root, `pnpm run cli:install` installs or upgrades the CLI, refreshes only this tap,
 fetches its tags, requires a clean tap at `origin/main`, and checks the formula, source archive
 and approved CLI inputs against this checkout and the readable release tag before installing. It fails if the tap has edits or local commits, cannot
-fast-forward, or lacks the release tag. It then checks the linked `0.1.0_1` receipt, compares the installed JavaScript, package and
+fast-forward, or lacks the release tag. It then checks the linked `<version>_1` receipt, compares the installed JavaScript, package and
 documentation bytes with a build from the verified archive, runs version/help checks, and checks the first
 `htmlgate` on PATH, which must be exactly `<brew --prefix>/bin/htmlgate`, even if another binary
 reports the same version. Remove a shadowing npm binary with `npm uninstall -g @htmlgate/cli`;

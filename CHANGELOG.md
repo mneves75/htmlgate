@@ -2,6 +2,18 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] - 2026-10-19
+
+### Fixed
+
+- The invalid-budget-override control no longer depends on the host: CI falls back to 150 ms, so the
+  control clears `CI` in its child and pins the 50 ms budget it asserts.
+- The shebang comparison is byte-exact on the body after the first line, instead of a UTF-8 round trip.
+- A control now refuses a launcher whose shebang points at another interpreter, which is the rejection
+  side of the Homebrew rewrite.
+- `Formula/sources/` keeps only the archive the formula references; the superseded ones are gone.
+- The installer examples in both READMEs describe the version pattern instead of a fixed old version.
+
 ## [0.1.3] - 2026-10-19
 
 ### Fixed

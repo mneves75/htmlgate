@@ -21,10 +21,13 @@ export function releaseTag(version) {
  * build and nothing after it may. Returns true only for exactly that difference.
  */
 export function rewroteShebang(installed, built, nodePath) {
-  const lines = (bytes) => bytes.toString("utf8").split("\n");
-  const [installedFirst, ...installedRest] = lines(installed);
-  const [, ...builtRest] = lines(built);
-  return installedFirst === `#!${nodePath}` && installedRest.join("\n") === builtRest.join("\n");
+  const cut = (bytes) => {
+    const at = bytes.indexOf(0x0a);
+    return at === -1 ? [bytes, Buffer.alloc(0)] : [bytes.subarray(0, at), bytes.subarray(at + 1)];
+  };
+  const [installedFirst, installedRest] = cut(installed);
+  const [, builtRest] = cut(built);
+  return installedFirst.toString("utf8") === `#!${nodePath}` && installedRest.equals(builtRest);
 }
 
 export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, log = console.log, error = console.error } = {}) {

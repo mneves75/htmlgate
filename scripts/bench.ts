@@ -27,7 +27,10 @@ const DEV_BUDGET_MS = 50;
 // measures against a runner-class allowance: it still catches a real regression, and local and --live runs keep the
 // dev-machine target. HTMLGATE_BENCH_BUDGET_MS overrides either.
 const CI_BUDGET_MS = 150;
-const BUDGET_MS = Number(process.env.HTMLGATE_BENCH_BUDGET_MS ?? (process.env.CI === "1" ? CI_BUDGET_MS : DEV_BUDGET_MS));
+// An override is a person typing a number, so it is validated: without this, a typo becomes NaN, every `p95 >= NaN`
+// comparison is false, and the page budget passes without measuring anything.
+const override = Number(process.env.HTMLGATE_BENCH_BUDGET_MS ?? "");
+const BUDGET_MS = Number.isFinite(override) && override > 0 ? override : process.env.CI === "1" ? CI_BUDGET_MS : DEV_BUDGET_MS;
 const WARMUP = 10;
 const MAX_LOAD = 9;
 let peakLoad = 0;

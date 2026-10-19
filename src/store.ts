@@ -151,6 +151,7 @@ export class Store {
       this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ? FROM versions WHERE slug IN (${due})`).bind(now, now, CLEANUP_BATCH),
       this.db.prepare(`UPDATE shares SET deleted_at = COALESCE(deleted_at, expires_at) WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
       this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
+      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
     ]);
     return results[1]?.meta.changes ?? 0;
   }
@@ -196,20 +197,23 @@ export class Store {
     return r.meta.changes > 0;
   }
 
-  // Metrics: the snapshot `pnpm run metrics:sync` recorded, replaced whole on every sync.
+  // Views: one row per Share and UTC day, incremented when a browser opens the Share's page.
 
-  async putMetrics(origin: string, generatedAt: number, payload: string): Promise<void> {
+  /** Counts one opening of a Share's page. The caller sends it in the background, so a slow write never delays a page. */
+  async countView(slug: string, day: string): Promise<void> {
     await this.db
-      .prepare("INSERT INTO metrics_snapshot (id, origin, generated_at, payload) VALUES (1, ?, ?, ?) " +
-        "ON CONFLICT(id) DO UPDATE SET origin = excluded.origin, generated_at = excluded.generated_at, payload = excluded.payload")
-      .bind(origin, generatedAt, payload)
+      .prepare("INSERT INTO share_views (slug, day, views) VALUES (?, ?, 1) ON CONFLICT (slug, day) DO UPDATE SET views = views + 1")
+      .bind(slug, day)
       .run();
   }
 
-  async metricsSnapshot(): Promise<{ origin: string; generated_at: number; payload: string } | null> {
-    return await this.db
-      .prepare("SELECT origin, generated_at, payload FROM metrics_snapshot WHERE id = 1")
-      .first<{ origin: string; generated_at: number; payload: string }>();
+  /** Views per Share: all time, and since `sinceDay` (a UTC day, `YYYY-MM-DD`). Shares with no views are absent. */
+  async viewsBySlug(sinceDay: string): Promise<Map<string, { total: number; recent: number }>> {
+    const r = await this.db
+      .prepare("SELECT slug, SUM(views) AS total, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS recent FROM share_views GROUP BY slug")
+      .bind(sinceDay)
+      .all<{ slug: string; total: number; recent: number }>();
+    return new Map(r.results.map((row) => [row.slug, { total: row.total, recent: row.recent }]));
   }
 
   // Shares
@@ -314,6 +318,7 @@ export class Store {
         ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at`).bind(slug, author),
       this.db.prepare(`DELETE FROM versions WHERE slug IN (${own})`).bind(slug, author),
       ...(legacy ? [this.db.prepare(`DELETE FROM versions_d1_legacy WHERE slug IN (${own})`).bind(slug, author)] : []),
+      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${own})`).bind(slug, author),
       this.db.prepare("DELETE FROM shares WHERE slug = ? AND author = ?").bind(slug, author),
     ]);
     return results.at(-1)!.meta.changes > 0;

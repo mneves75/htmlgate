@@ -179,7 +179,7 @@
 <details><summary>What if a token leaks?</summary><p>Revoke it on the token page: it stops on its next request. Then list public Shares with <code>htmlgate list --public</code> and check who last changed each one. Revoking does not undo what the token already did.</p></details>
 <details><summary>Can a Share steal data from the people who open it?</summary><p>It runs isolated, with no access to the Viewer's cookies or session. It can still send what it contains to another site. The isolation protects the Viewer; what goes inside a Share is the publisher's call.</p></details>
 <details><summary>What is "Sign in" up top?</summary><p>It is the Instance of the person who wrote htmlgate, at app.htmlgate.com. Only invited people get in. Yours lives in your own account, at the address you choose.</p></details>
-<details><summary>Does htmlgate.com know what people read?</summary><p>It counts one view per page of this site, with the time, the country and the site the visitor came from: no cookie, no script, and no IP address kept. It says what is worth writing better, and it lasts three months. Your Instance counts nothing - what your Shares receive never passes through here.</p></details>
+<details><summary>Does htmlgate.com know what people read?</summary><p>This site counts one view per page, with the time, the country and the site the visitor came from: no cookie, no script, no IP address, kept three months. Your Instance counts something else, and only it: how often each of your Shares was opened, per day, for you to see in the dashboard. No cookie, no script, and no identifying who opened it.</p></details>
 
 </div>
 </div>
@@ -209,7 +209,7 @@ htmlgate login https://your-instance.example.com</code></pre>
 
 <footer>
 <div class="wrap">
-<p>htmlgate. <span class="version">0.1.5</span></p>
+<p>htmlgate. <span class="version">0.1.6</span></p>
 <nav aria-label="Footer">
 <a href="/en/privacy/">Privacy</a>
 <a href="/" hreflang="pt-BR" lang="pt-BR">Português</a>

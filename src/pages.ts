@@ -62,14 +62,14 @@ const en = {
   viewerLead: "Open a Share with the link its Author sent you. This Instance keeps no list of Shares, so there is nothing to browse here.",
   metrics: "Metrics",
   metricsTitle: "Metrics",
-  metricsLead: "How often each page of the site below was opened, as the last sync read the counts. Counting happens on the server: no cookie, no script and no stored IP address.",
-  metricsEmpty: "Nothing synced yet",
-  metricsEmptyLead: "Run `pnpm run metrics:sync` with this Instance's token to read the counts from Workers Analytics Engine. Until then there is nothing to show here.",
-  metricsSynced: (when: string) => "Read " + when,
-  metricsPage: "Page",
-  metricsViews: "Views",
-  metricsLastSeen: "Last seen",
+  metricsLead: "How often each of this Instance's Shares was opened. The count happens on the server, from the request the browser already sends: no cookie, no script, and no visitor, address or identifier, so it says how often, never by whom.",
+  metricsEmpty: "No Shares yet",
+  metricsEmptyLead: "Publish a Share and its count starts here: one row per Share and day, with no visitor, address or identifier.",
+  metricsShare: "Share",
+  metricsViews: "30 days",
+  metricsTotal: "All time",
   metricsOpen: "Open",
+  metricsNotCounted: "Not counted yet",
   tokensTitle: "Tokens",
   tokensLead: "A token lets a Publisher create, change, delete and make public every Share on this Instance. Give each Publisher its own, and revoke one you no longer trust.",
   errors: {
@@ -167,14 +167,14 @@ const ptBR: typeof en = {
   viewerLead: "Abra um Share pelo link que o autor mandou. Esta Instância não mostra uma lista de Shares, então não há nada para navegar aqui.",
   metrics: "Métricas",
   metricsTitle: "Métricas",
-  metricsLead: "Quantas vezes cada página do site abaixo foi aberta, como a última sincronização leu as contagens. A contagem é no servidor: sem cookie, sem script e sem guardar o IP.",
-  metricsEmpty: "Nada sincronizado ainda",
-  metricsEmptyLead: "Rode `pnpm run metrics:sync` com o token desta Instância para ler as contagens do Workers Analytics Engine. Até lá não há o que mostrar aqui.",
-  metricsSynced: (when: string) => "Lido em " + when,
-  metricsPage: "Página",
-  metricsViews: "Visitas",
-  metricsLastSeen: "Última",
+  metricsLead: "Quantas vezes cada Share desta Instância foi aberto. A contagem é no servidor, a partir do pedido que o navegador já manda: sem cookie, sem script e sem visitante, endereço ou identificador, então ela diz quantas vezes, nunca por quem.",
+  metricsEmpty: "Nenhum Share ainda",
+  metricsEmptyLead: "Publique um Share e a contagem começa aqui: uma linha por Share e por dia, sem visitante, endereço ou identificador.",
+  metricsShare: "Share",
+  metricsViews: "30 dias",
+  metricsTotal: "Total",
   metricsOpen: "Abrir",
+  metricsNotCounted: "Ainda sem contagem",
   tokensTitle: "Tokens",
   tokensLead: "Um token deixa um publicador criar, mudar, apagar e tornar público qualquer Share desta Instância. Dê um token para cada publicador e revogue o que não for mais de confiança.",
   errors: {
@@ -354,7 +354,7 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 
 /* The Shares board */
 .board { background: var(--board); color: var(--board-ink); border: 1px solid var(--board-edge); border-radius: 6px; container-type: inline-size; }
-.board-head, .row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 4.5rem 10.5rem minmax(0, 8rem); gap: 0 1.1rem; align-items: center; padding: .75rem 1.2rem; }
+.board-head, .row { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 4.5rem 4.5rem 10.5rem minmax(0, 8rem); gap: 0 1.1rem; align-items: center; padding: .75rem 1.2rem; }
 .board-head { font-size: .75rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--board-dim); border-bottom: 1px solid var(--board-rule); }
 .rows { list-style: none; margin: 0; padding: 0; }
 .row + .row { border-top: 1px solid var(--board-rule); }
@@ -365,6 +365,7 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 .c-ver .flap, .c-when .flap { font-size: .9375rem; color: var(--board-ink); }
 .c-when time { display: inline-grid; gap: .1rem; justify-items: start; }
 .c-when .date { font-size: .75rem; }
+.c-views { color: var(--board-ink); font-size: .9375rem; font-variant-numeric: tabular-nums; font-weight: 600; }
 .c-when, .c-by { color: var(--board-dim); font-size: .875rem; min-width: 0; overflow-wrap: anywhere; }
 .board .empty { padding: 1.4rem 1.35rem 1.6rem; display: grid; gap: .55rem; }
 .board .empty > p { color: var(--board-dim); max-width: 60ch; }
@@ -373,8 +374,8 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 .board :not(pre) > code { background: var(--cell); }
 @container (max-width: 40rem) {
   .board-head { display: none; }
-  .row { grid-template-columns: auto auto; grid-template-areas: "state ver" "share share" "when when" "by by"; justify-content: space-between; gap: .45rem .75rem; padding: .9rem 1rem; }
-  .c-state { grid-area: state; } .c-ver { grid-area: ver; justify-self: end; } .c-share { grid-area: share; } .c-when { grid-area: when; } .c-by { grid-area: by; }
+  .row { grid-template-columns: auto auto; grid-template-areas: "state ver" "share share" "views views" "when when" "by by"; justify-content: space-between; gap: .45rem .75rem; padding: .9rem 1rem; }
+  .c-state { grid-area: state; } .c-ver { grid-area: ver; justify-self: end; } .c-share { grid-area: share; } .c-views { grid-area: views; } .c-when { grid-area: when; } .c-by { grid-area: by; }
   .row .lbl { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
 }
 
@@ -390,16 +391,17 @@ pre { margin: .45rem 0 0; padding: .65rem .9rem; background: var(--board); color
 /* Metrics: one row per counted page; the count and the button on the right, the date hidden on phones */
 .actions-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .metrics { border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
-.metrics-head, .metrics-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 11rem 6.5rem; gap: .75rem; align-items: center; padding: .55rem .9rem; }
+.metrics-head, .metrics-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem 6.5rem; gap: .75rem; align-items: center; padding: .55rem .9rem; }
 .metrics-head { background: var(--board); color: var(--board-dim); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
 .metrics-row { border-top: 1px solid var(--rule); font-size: .9375rem; }
 .metrics-row .m-views { font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; }
-.metrics-row .m-when { color: var(--muted); font-size: .8125rem; }
+.metrics-row .m-total { color: var(--muted); font-size: .8125rem; text-align: right; font-variant-numeric: tabular-nums; }
+.metrics-row .m-page .flap { display: block; margin-top: .15rem; color: var(--muted); font-size: .75rem; }
 .metrics-row .button.quiet { min-height: 2rem; padding: .2rem .6rem; font-size: .8125rem; }
 .metrics-row .button svg { width: .9rem; height: .9rem; }
 @media (max-width: 40rem) {
-  .metrics-head, .metrics-row { grid-template-columns: minmax(0, 1fr) 4rem auto; gap: .6rem; padding: .5rem .7rem; }
-  .metrics-head span:nth-child(3), .metrics-row .m-when { display: none; }
+  .metrics-head, .metrics-row { grid-template-columns: minmax(0, 1fr) 4.5rem auto; gap: .6rem; padding: .5rem .7rem; }
+  .metrics-head span:nth-child(3), .metrics-row .m-total { display: none; }
 }
 .pass { background: var(--board); color: var(--board-ink); border: 1px solid var(--board-edge); border-radius: 6px; padding: 1.2rem 1.35rem; display: grid; gap: .65rem; border-top: 6px solid var(--signal); }
 .pass .hint { color: var(--board-dim); }
@@ -589,32 +591,27 @@ ${signInPath ? `<a class="button" href="${escapeHtml(signInPath)}">${t.signInRet
 </main>`, { sandbox: true });
 }
 
-/** One counted page of the site the sync read. */
-export interface MetricsRow {
-  page: string;
-  views: number;
-  last_seen: number;
+/** One Share's counts: the last 30 days, and all time. */
+export interface ShareViews {
+  total: number;
+  recent: number;
 }
 
 /**
- * The site's counted pages, as the last `pnpm run metrics:sync` recorded them: one row per page with its views, when
- * it was last opened, and a button that opens that page. The numbers are read by the sync command, not here: a Worker
- * writes Workers Analytics Engine and cannot read it.
+ * How often each of the Instance's Shares was opened: one row per Share with the last 30 days and the all-time count,
+ * and a button that opens that Share. Shares with no views yet say so instead of showing a zero.
  */
-export function metricsPage(v: Visitor, snapshot: { origin: string; generated_at: number; rows: MetricsRow[] } | null): Promise<PageResult> {
+export function metricsPage(v: Visitor, shares: HomeList["shares"], views: Map<string, ShareViews>): Promise<PageResult> {
   const t = STRINGS[v.lang];
-  const rows = snapshot?.rows.map((r) => {
-    // "404" is the counter's bucket for a page that does not exist, so there is nothing to open for it.
-    const name = escapeHtml(r.page);
-    const label = r.page === "404" ? name : `<a href="${escapeHtml(snapshot.origin + r.page)}" rel="noopener">${name}</a>`;
-    const open = r.page === "404" ? "" : `<a class="button quiet" href="${escapeHtml(snapshot.origin + r.page)}" rel="noopener">${t.metricsOpen}${ARROW}</a>`;
+  const rows = shares.map((d) => {
+    const seen = views.get(d.slug);
     return `<li class="metrics-row">
-<span class="m-page">${label}</span>
-<span class="m-views"><span class="lbl">${t.metricsViews} </span>${r.views}</span>
-<span class="m-when"><span class="lbl">${t.metricsLastSeen} </span>${timeTag(r.last_seen)}</span>
-<span class="m-open">${open}</span>
+<span class="m-page"><a href="/s/${d.slug}"><span class="m-title">${escapeHtml(d.title)}</span></a><span class="flap">${d.slug}</span></span>
+<span class="m-views">${seen ? `<span class="lbl">${t.metricsViews} </span>${seen.recent}` : `<span class="lbl">${t.metricsNotCounted}</span>`}</span>
+<span class="m-total">${seen ? `<span class="lbl">${t.metricsTotal} </span>${seen.total}` : ""}</span>
+<span class="m-open"><a class="button quiet" href="/s/${d.slug}">${t.metricsOpen}${ARROW}</a></span>
 </li>`;
-  }).join("\n") ?? "";
+  }).join("\n");
   return layout(v.lang, `${t.metricsTitle} · htmlgate`, `${skip(v.lang)}
 ${header(v, "metrics")}
 <main id="main" class="page">
@@ -622,10 +619,9 @@ ${header(v, "metrics")}
 <h1>${t.metricsTitle}</h1>
 <p class="lead">${t.metricsLead}</p>
 </div>
-${snapshot
-    ? `<p class="hint">${t.metricsSynced(timeTag(snapshot.generated_at))} · <span class="host-inline">${escapeHtml(snapshot.origin)}</span></p>
-<div class="metrics">
-<div class="metrics-head" aria-hidden="true"><span>${t.metricsPage}</span><span>${t.metricsViews}</span><span>${t.metricsLastSeen}</span><span></span></div>
+${rows
+    ? `<div class="metrics">
+<div class="metrics-head" aria-hidden="true"><span>${t.metricsShare}</span><span>${t.metricsViews}</span><span>${t.metricsTotal}</span><span></span></div>
 <ol class="rows">
 ${rows}
 </ol>
@@ -641,7 +637,7 @@ ${rows}
  * The home page. `list` is given for the Author only, and its presence picks the layout: a Viewer's home
  * lists nothing, so a list reaching a Viewer would show (and the tests would see it) rather than hide.
  */
-export function homePage(v: Visitor, list: HomeList | null, note?: HomeNote): Promise<PageResult> {
+export function homePage(v: Visitor, list: HomeList | null, note?: HomeNote, views?: Map<string, ShareViews>): Promise<PageResult> {
   const t = STRINGS[v.lang];
   if (!list) {
     return layout(v.lang, "htmlgate", `${skip(v.lang)}
@@ -657,12 +653,13 @@ ${header(v, "home")}
 <span class="c-state">${state(v.lang, d.public === 1)}</span>
 <span class="c-share"><a href="/s/${d.slug}">${escapeHtml(d.title)}</a><span class="flap">${d.slug}</span></span>
 <span class="c-ver"><span class="lbl">${t.version} </span><span class="flap">v${d.latest_version}</span></span>
+<span class="c-views"><span class="lbl">${t.metricsViews} </span>${views?.get(d.slug)?.recent ?? 0}</span>
 <span class="c-when"><span class="lbl">${t.updated} </span>${boardTime(d.updated_at)}</span>
 <span class="c-by">${d.changed_by_name === null ? "" : `<span class="lbl">${t.by} </span>${escapeHtml(d.changed_by_name)}`}</span>
 </li>`).join("\n");
   const board = rows
     ? `<div class="board">
-<div class="board-head" aria-hidden="true"><span>${t.status}</span><span>${t.share}</span><span>${t.version}</span><span>${t.updated}</span><span>${t.by}</span></div>
+<div class="board-head" aria-hidden="true"><span>${t.status}</span><span>${t.share}</span><span>${t.version}</span><span>${t.metricsViews}</span><span>${t.updated}</span><span>${t.by}</span></div>
 <ol class="rows" aria-label="${t.boardLabel}">
 ${rows}
 </ol>

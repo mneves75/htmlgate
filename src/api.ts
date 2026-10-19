@@ -93,10 +93,6 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
     if (b !== undefined && TOKEN_ID.test(b) && c === undefined && method === "DELETE") {
       return (await store.revokeToken(cfg.author, b, Date.now())) ? noContent() : fail(404, "not_found", "No live token has that id.");
     }
-  } else if (a === "metrics") {
-    // The page counts live in Workers Analytics Engine, which a Worker writes and cannot read: `metrics:sync` reads
-    // them with the Operator's own Cloudflare login and replaces this snapshot. Writing it needs the Author's token.
-    if (b === undefined && method === "PUT") return await putMetrics(req, store);
   }
   return fail(404, "not_found", "No such request. See /api/onboard.");
 }
@@ -366,38 +362,6 @@ async function visibility(req: Request, store: Store, cfg: Config, token: TokenR
   await mustShare(store, cfg, slug);
   await store.setPublic(cfg.author, slug, body.public, token.id, Date.now());
   return shareJson(await mustShare(store, cfg, slug), url);
-}
-
-/** What one sync records: the site the counts belong to, when it was read, and one row per page. */
-async function putMetrics(req: Request, store: Store): Promise<Response> {
-  const body = await readBody(req, true);
-  const { origin, generated_at: generatedAt, pages } = body;
-  if (typeof origin !== "string" || origin.length > 200) throw new HttpError(400, "invalid_arg", "origin must be the site's http(s) URL.");
-  let parsed: URL;
-  try {
-    parsed = new URL(origin);
-  } catch {
-    throw new HttpError(400, "invalid_arg", "origin must be the site's http(s) URL.");
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new HttpError(400, "invalid_arg", "origin must be the site's http(s) URL.");
-  if (typeof generatedAt !== "number" || !Number.isSafeInteger(generatedAt) || generatedAt <= 0) {
-    throw new HttpError(400, "invalid_arg", "generated_at must be the time the counts were read, in milliseconds.");
-  }
-  if (!Array.isArray(pages) || pages.length > 500) throw new HttpError(400, "invalid_arg", "pages must be an array of at most 500 rows.");
-  const rows: { page: string; views: number; last_seen: number }[] = [];
-  for (const row of pages) {
-    if (typeof row !== "object" || row === null || Array.isArray(row)) throw new HttpError(400, "invalid_arg", "Every page row needs page, views and last_seen.");
-    const { page, views, last_seen: lastSeen } = row as Record<string, unknown>;
-    // A page is a path on that site, or the counter's own "404" bucket; never a URL, query or control character.
-    if (typeof page !== "string" || page.length > 96 || !(page === "404" || /^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/.test(page))) {
-      throw new HttpError(400, "invalid_arg", "Each page must be a path on the site, or 404.");
-    }
-    if (typeof views !== "number" || !Number.isSafeInteger(views) || views < 0) throw new HttpError(400, "invalid_arg", "Each row needs a whole, non-negative views count.");
-    if (typeof lastSeen !== "number" || !Number.isSafeInteger(lastSeen) || lastSeen < 0) throw new HttpError(400, "invalid_arg", "Each row needs last_seen in milliseconds.");
-    rows.push({ page, views, last_seen: lastSeen });
-  }
-  await store.putMetrics(parsed.origin, generatedAt, JSON.stringify(rows));
-  return json(200, { origin: parsed.origin, generated_at: generatedAt, pages: rows.length });
 }
 
 async function list(store: Store, cfg: Config, url: URL) {

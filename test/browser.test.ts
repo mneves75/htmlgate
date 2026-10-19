@@ -83,12 +83,9 @@ describe("accessibility of every page, in light and dark", () => {
     expect(await violations(), "tokens with a new token").toEqual([]);
     const { json: d } = await call("POST", "/api/shares", { html: "<!doctype html><title>t</title><h1>Hello</h1>", title: "A Share with a fairly long title for the bar" });
     await call("PUT", `/api/shares/${d.slug}`, { html: "<!doctype html><title>t</title><h1>Two</h1>" });
-    // A stored snapshot, so the metrics table is what gets audited rather than its empty state.
-    await call("PUT", "/api/metrics", { origin: "https://htmlgate.com", generated_at: Date.now(), pages: [
-      { page: "/", views: 5, last_seen: Date.now() },
-      { page: "/en/", views: 1, last_seen: Date.now() },
-      { page: "404", views: 2, last_seen: Date.now() },
-    ] });
+    // One navigation to the Share, so the metrics table has a row to audit rather than its empty state.
+    await abIn(AUDIT, "open", `${base}/s/${d.slug}`);
+    await settle(AUDIT);
     for (const [label, path] of [["home", "/"], ["tokens", "/tokens"], ["metrics", "/metrics"], ["viewer", `/s/${d.slug}`]]) {
       await abIn(AUDIT, "open", `${base}${path}`);
       await settle(AUDIT);

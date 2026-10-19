@@ -241,8 +241,8 @@ const MUTATIONS = [
   ["Homebrew accepts duplicate formula metadata","scripts/cli-archive.mjs","if (lines.length !== 1 || declarations !== expected) throw new Error(","if (false) throw new Error(","test/cli-brew.test.ts"],
   ["setup accepts a project inside another Git checkout","scripts/setup.mjs","if (realpathSync(root) !== realpathSync(ROOT)) {","if (false) {","test/reviewer-launch-audit-docs.test.ts"],
   // The metrics report: the Author-only page and the shape of what a sync may store.
-  ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: the counts are for whoever runs the Instance.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: the counts are for whoever runs the Instance.',"test/metrics.test.ts"],
-  ["the metrics API stores a page that is not a path","src/api.ts",'if (typeof page !== "string" || page.length > 96 || !(page === "404" || /^\\/[A-Za-z0-9._~!$&\'()*+,;=:@%/-]*$/.test(page))) {','if (false) {',"test/metrics.test.ts"],
+  ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.',"test/metrics.test.ts"],
+  ["raw bytes count as a view","src/index.ts",'  if (raw || res.status !== 200) return res;','  if (res.status !== 200) return res;',"test/metrics.test.ts"],
 ];
 
 const onlyAt = process.argv.indexOf("--only");

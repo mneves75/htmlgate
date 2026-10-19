@@ -75,7 +75,7 @@ The token command refuses an Instance whose config does not exist yet: run setup
 | Create a token | The token page at `/tokens`, or `pnpm run token create <name>`. It is shown once. |
 | List or revoke tokens | The token page, `pnpm run token list` / `revoke <id>`, or any Publisher with `htmlgate tokens list` / `revoke <id>`. |
 | Update to a new version | Read the CHANGELOG entry, then `git pull`, `pnpm install`, `pnpm run build:cli` (or `pnpm run cli:install` for a Homebrew install), `pnpm run setup`. Migrations keep your Shares. The CLI and the Instance change together: an older CLI may get not-found answers from a newer Instance. After every production deploy, run `pnpm run cli:install` on the owner's machine and report the version it printed. |
-| See a landing's page counts | `HTMLGATE_TOKEN=hg_... pnpm run metrics:sync --config instance.json`, then `/metrics` on the Instance (Author only) shows one row per page with a button to open it. The counts live in Workers Analytics Engine, which a Worker writes and cannot read, so the sync reads them with your `cf` login; nothing but the snapshot reaches the Instance. |
+| See how often your Shares are opened | `/metrics` on the Instance (Author only) lists each Share with its views over the last 30 days and all time, and a button to open it; the home's board shows the 30-day count on each row. The Instance counts page navigations server-side, one row per Share and UTC day, with no cookie and no visitor identity, so a count says how often, never by whom. The landing's own page counts are a separate thing, in Workers Analytics Engine (`cf analytics_engine sql query`, README). |
 | See what a leaked token did | `htmlgate list --public`, and `changed_by` on each Share. |
 | Change how long Shares live | Edit `expiryDays`, run `pnpm run setup`. A Share picks up the new default at its next publish. |
 | End every open ticket | `pnpm run setup --rotate-ticket-key`. Viewers reload a Gated site's page to get a new one. |
@@ -124,6 +124,7 @@ pnpm exec wrangler d1 delete <name>-db
 - `access`: the team's certs endpoint did not answer, or not with keys, so no sign-in could be verified. While it lasts, every gated page answers not-found, the Author's included. The line holds an error code and message, never the token. A token that fails its own checks is not logged, whoever sent it.
 - `trash` or `erase cleanup`: deleting bodies from the bucket failed after a change or an erase. The answer already went out; the hourly cleanup retries.
 - `missing body`: a Version's row points at a body the bucket does not have. The reader got a 404.
+- `view count`: counting a view of a Share's page failed. The reader got the page anyway; the next view tries again.
 
 **Uptime.** Point an external monitor at these, which need no sign-in:
 

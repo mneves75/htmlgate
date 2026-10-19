@@ -13,7 +13,6 @@ function upgraded() {
   const snap = {} as Snap;
   const env = fakeEnv({
     before: "0005_shares.sql",
-    through: "0005_shares.sql",
     seed: (db) => {
       db.exec(`INSERT INTO tokens (id, author, name, digest, created_at) VALUES ('tok', '${AUTHOR}', 'laptop', 'digest', 1)`);
       const share = db.prepare(`INSERT INTO drops (slug, author, title, description, tags, public, latest_version, created_at, updated_at,
@@ -67,9 +66,12 @@ describe("migration 0005 on an Instance at 0004", () => {
 
   test("the schema differs from 0004 only by the renames: nothing is left under the old name, nothing else is added or lost", () => {
     const { env, snap } = upgraded();
+    // Migrations after 0005 add their own tables (share_views): this review compares what 0005 changed, so both sides
+    // leave those out. A new migration adds its name here, deliberately.
+    const LATER = new Set(["share_views"]);
     const names = (env.sqlite.prepare("SELECT type, name FROM sqlite_master ORDER BY type, name").all() as { type: string; name: string }[])
-      .filter((r) => !r.name.startsWith("sqlite_autoindex"));
-    const before = (snap.schema as { type: string; name: string }[]).filter((r) => !r.name.startsWith("sqlite_autoindex")).map((r) => ({ type: r.type, name: r.name.replace(/^drops/, "shares") }));
+      .filter((r) => !r.name.startsWith("sqlite_autoindex") && !LATER.has(r.name));
+    const before = (snap.schema as { type: string; name: string }[]).filter((r) => !r.name.startsWith("sqlite_autoindex") && !LATER.has(r.name)).map((r) => ({ type: r.type, name: r.name.replace(/^drops/, "shares") }));
     expect(names).toEqual(before.sort((a, b) => (a.type + a.name < b.type + b.name ? -1 : 1)));
     const sqls = (env.sqlite.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL").all() as { sql: string }[]).map((r) => r.sql).join("\n");
     expect(sqls).not.toMatch(/drops/i);
@@ -110,8 +112,7 @@ describe("migration 0005 on an Instance at 0004", () => {
 
   test("a fresh database has the same final schema as an upgraded one", () => {
     const { env } = upgraded();
-    // Pinned to 0005 like the upgrade side: later migrations add their own tables to both.
-    const fresh = fakeEnv({ through: "0005_shares.sql" });
+    const fresh = fakeEnv();
     const dump = (e: { sqlite: { prepare: (s: string) => { all: () => unknown[] } } }) =>
       (e.sqlite.prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_autoindex%' ORDER BY type, name").all() as { type: string; name: string; sql: string }[]);
     const a = dump(env as never);

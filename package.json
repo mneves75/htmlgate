@@ -1,6 +1,6 @@
 {
   "name": "htmlgate",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "license": "MIT",
   "description": "Self-deployed, private-by-default HTML hosting for agents, on your own Cloudflare account.",
@@ -23,8 +23,7 @@
     "smoke": "node scripts/smoke.mjs",
     "bench": "node scripts/bench.ts",
     "site:dev": "wrangler dev -c site/wrangler.jsonc",
-    "site:deploy": "node scripts/site-deploy.mjs",
-    "metrics:sync": "node scripts/metrics-sync.mjs"
+    "site:deploy": "node scripts/site-deploy.mjs"
   },
   "dependencies": {
     "jose": "6.2.12"

@@ -62,8 +62,8 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
   ["Homebrew accepts a release tag with different candidate inputs","scripts/cli-install.mjs","      command(\"git\", [\"-C\", repository, \"diff\", \"--exit-code\", `${tag}^{commit}`, \"--\",\n        \"Formula/htmlgate.rb\", `Formula/sources/${verified.archive}`, ...CLI_INPUTS.map((name) => `packages/cli/${name}`)]);","","test/cli-brew.test.ts"],
   ["Homebrew accepts duplicate formula metadata","scripts/cli-archive.mjs","if (lines.length !== 1 || declarations !== expected) throw new Error(","if (false) throw new Error(","test/cli-brew.test.ts"],
   ["setup accepts a project inside another Git checkout","scripts/setup.mjs","if (realpathSync(root) !== realpathSync(ROOT)) {","if (false) {","test/reviewer-launch-audit-docs.test.ts"],
-    ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: the counts are for whoever runs the Instance.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: the counts are for whoever runs the Instance.',"test/metrics.test.ts"],
-    ["the metrics API stores a page that is not a path","src/api.ts",'if (typeof page !== "string" || page.length > 96 || !(page === "404" || /^\\/[A-Za-z0-9._~!$&\'()*+,;=:@%/-]*$/.test(page))) {','if (false) {',"test/metrics.test.ts"],
+    ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.',"test/metrics.test.ts"],
+    ["raw bytes count as a view","src/index.ts",'  if (raw || res.status !== 200) return res;','  if (res.status !== 200) return res;',"test/metrics.test.ts"],
   ];
   const base = after.slice(0, before.length);
 

@@ -18,6 +18,8 @@ async function html(status: number, page: PageResult | Promise<PageResult>): Pro
 const notFound = (lang: Language, opts: { signInPath?: string; home?: "author" | "viewer" } = {}) => html(404, notFoundPage(lang, opts));
 
 const VIEW = /^\/(s|p)\/([A-Za-z0-9]{12})(\/raw)?$/;
+/** A UTC day, `YYYY-MM-DD`, offset from now: the window a report covers. */
+const dayFrom = (ms: number, offsetDays: number) => new Date(ms + offsetDays * 86_400_000).toISOString().slice(0, 10);
 // A site's files (plan 009): a Public Share's by slug and Version; a Gated Share's by ticket. Both sit outside Access.
 const PUBLIC_FILE = /^\/p\/([A-Za-z0-9]{12})\/([1-9][0-9]{0,8})\/(.*)$/;
 const TICKET_FILE = /^\/f\/([A-Za-z0-9_-]{40,1024})\/(.*)$/;
@@ -94,7 +96,8 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   if (view && view[1] === "p") {
     // Public paths sit outside the Access gate, so they serve Public Shares only, to anyone.
     if (req.method !== "GET") return notFound(cfg.language, { signInPath: `/s/${view[2]}` });
-    return (await serveShare(env, cfg, url, "p", view[2]!, !!view[3], null)) ?? notFound(cfg.language, { signInPath: `/s/${view[2]}` });
+    const res = await serveShare(env, cfg, url, "p", view[2]!, !!view[3], null);
+    return res === null ? notFound(cfg.language, { signInPath: `/s/${view[2]}` }) : counted(req, env, ctx, view[2]!, !!view[3], res);
   }
   const pub = PUBLIC_FILE.exec(path);
   if (pub) {
@@ -120,10 +123,13 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
     const erased = url.searchParams.get("erased");
     // The note only for a Share that is gone: a link cannot make the home say a live Share was erased.
     const note = isAuthor && erased !== null && SLUG.test(erased) && !(await store.eraseTarget(cfg.author, erased)) ? { erased } : undefined;
-    return html(200, homePage(visitor, isAuthor ? await store.recentShares(cfg.author, HOME_SHARES) : null, note));
+    return html(200, homePage(visitor, isAuthor ? await store.recentShares(cfg.author, HOME_SHARES) : null, note, isAuthor ? await store.viewsBySlug(dayFrom(Date.now(), -30)) : undefined));
   }
 
-  if (view && req.method === "GET") return (await serveShare(env, cfg, url, "s", view[2]!, !!view[3], who)) ?? lost();
+  if (view && req.method === "GET") {
+    const res = await serveShare(env, cfg, url, "s", view[2]!, !!view[3], who);
+    return res === null ? lost() : counted(req, env, ctx, view[2]!, !!view[3], res);
+  }
 
   // Erasing a Share for good (deleted or not): the Author only, from this Instance's own page, like the token form.
   if (path === "/erase") {
@@ -147,11 +153,10 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   }
 
   if (path === "/metrics") {
-    // The Author only, like the token page: the counts are for whoever runs the Instance.
+    // The Author only, like the token page: how often each of this Instance's Shares was opened.
     if (!isAuthor) return lost();
     if (req.method !== "GET") return lost();
-    const saved = await store.metricsSnapshot();
-    return html(200, metricsPage(visitor, saved === null ? null : { origin: saved.origin, generated_at: saved.generated_at, rows: metricsRows(saved.payload) }));
+    return html(200, metricsPage(visitor, (await store.recentShares(cfg.author, HOME_SHARES)).shares, await store.viewsBySlug(dayFrom(Date.now(), -30))));
   }
 
   if (path === "/tokens" || path.startsWith("/tokens/")) {
@@ -181,22 +186,6 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   }
 
   return lost();
-}
-
-/**
- * The rows a sync stored. The API validated them on the way in; a payload this Instance cannot read is shown as
- * nothing rather than as a broken table, and the next sync replaces it.
- */
-function metricsRows(payload: string): { page: string; views: number; last_seen: number }[] {
-  try {
-    const rows: unknown = JSON.parse(payload);
-    if (!Array.isArray(rows)) return [];
-    return rows.filter((r): r is { page: string; views: number; last_seen: number } =>
-      typeof r === "object" && r !== null && "page" in r && typeof r.page === "string" &&
-      "views" in r && typeof r.views === "number" && "last_seen" in r && typeof r.last_seen === "number");
-  } catch {
-    return [];
-  }
 }
 
 // What the Author may paste to name a Share: its slug, or its link on either path (the raw link too).
@@ -299,6 +288,18 @@ async function serveShare(env: Env, cfg: Config, url: URL, prefix: "s" | "p", sl
   // Only the Author, behind the gate, may erase: never on a public path, which needs no sign-in.
   const erase = prefix === "s" && who === cfg.author;
   return html(200, viewerPage(cfg.language, found.share, prefix, n, found.kept, found.share.latest_version, frame, erase));
+}
+
+/**
+ * Counts one opening of a Share's page, in the background, when a browser navigated to it: never for raw bytes, a
+ * prefetch or a Share the page did not find. A failed write is logged and never reaches the reader.
+ */
+function counted(req: Request, env: Env, ctx: ExecutionContext, slug: string, raw: boolean, res: Response): Response {
+  if (raw || res.status !== 200) return res;
+  if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return res;
+  const store = new Store(env.DB, env.BODIES);
+  ctx.waitUntil(store.countView(slug, dayFrom(Date.now(), 0)).catch((e) => console.error("view count", e)));
+  return res;
 }
 
 /** One file of a viewable site Version, or null. The path is decoded and checked by the zip's own rules. */

@@ -2,6 +2,19 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.6] - 2026-10-19
+
+### Changed
+
+- The metrics report is about this Instance's Shares, not the landing's pages: the home's board carries each
+  Share's views over the last 30 days, and `/metrics` lists every Share with its 30-day and all-time counts and
+  a button that opens it. The landing-page snapshot from 0.1.5, its sync command and its API are gone.
+- Views are counted on the server, from the request a browser already sends, as one row per Share and UTC day
+  (`share_views`): no cookie, no script, no visitor, address or identifier. Raw bytes, a prefetch and a page
+  that does not exist are not views. Erasing a Share drops its count in the same transaction; the hourly
+  cleanup drops them with an expired Share's bodies. `docs/privacy.md` lists the new table, and the landing's
+  FAQ now says what an Instance counts and what it does not.
+
 ## [0.1.5] - 2026-10-19
 
 ### Added

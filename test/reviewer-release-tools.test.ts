@@ -149,7 +149,9 @@ async function execute(tool: "bench" | "smoke", scenario = "pass", url = "https:
   const args = tool === "bench" ? ["scripts/bench.ts", "--live", url, "--runs", "1"] : ["scripts/smoke.mjs", url];
   const child = spawn(process.execPath, ["--import", preload, ...args], {
     ...(scenario.startsWith("hang-") ? { timeout: 25_000 } : {}),
-    env: { ...process.env, HTMLGATE_TOKEN: "hg_disposable-control", RELEASE_CONTROL: scenario, ...(paced ? {} : { HTMLGATE_LIVE_GAP_MS: "0" }) },
+    // Pin the budget: these controls assert on the verdict's wording and outcome, so they must measure the same
+    // number on the 18-core dev machine (50 ms) and on CI's 3-core runner (150 ms).
+    env: { ...process.env, HTMLGATE_TOKEN: "hg_disposable-control", RELEASE_CONTROL: scenario, HTMLGATE_BENCH_BUDGET_MS: "50", ...(paced ? {} : { HTMLGATE_LIVE_GAP_MS: "0" }) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let out = "";

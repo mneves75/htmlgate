@@ -48,7 +48,8 @@ class Htmlgate < Formula
     resource("types-node").stage(buildpath/"node_modules/@types/node")
     resource("undici-types").stage(buildpath/"node_modules/undici-types")
     system Formula["node"].opt_bin/"node", "node_modules/typescript/bin/tsc", "-p", "."
-    libexec.install "dist", "package.json", "LICENSE", "README.md"
+    libexec.install "dist", "package.json"
+    prefix.install "LICENSE", "README.md"
     (bin/"htmlgate").write <<~EOS
       #!/bin/sh
       exec "#{Formula["node"].opt_bin}/node" "#{libexec}/dist/bin.js" "$@"

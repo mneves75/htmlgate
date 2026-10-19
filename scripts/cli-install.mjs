@@ -97,7 +97,9 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
     command("brew", [action, FORMULA]);
 
     step("checking the installed rebuild receipt and artifacts");
-    const receipt = JSON.parse(command("brew", ["info", "--json=v2", "--installed", FORMULA]));
+    // Never `--installed`: that dumps every installed formula and cask on the machine (1.76 MB here) and overflows
+    // spawnSync's 1 MB buffer. Asking for the one formula returns the same `installed[]` and `linked_keg` in ~10 KB.
+    const receipt = JSON.parse(command("brew", ["info", "--json=v2", FORMULA]));
     const expectedVersion = `${version}_${verified.revision}`;
     const info = receipt?.formulae?.length === 1 ? receipt.formulae[0] : undefined;
     if (info?.full_name !== FORMULA || info.linked_keg !== expectedVersion ||
@@ -116,12 +118,20 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
         if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw new Error(`Unsafe installed artifact: ${relative}`);
         return stat.isDirectory() ? fileList(join(directory, name), relative + "/") : [relative];
       });
-      const expectedFiles = ["LICENSE", "README.md", "package.json", ...fileList(join(build, "dist"), "dist/")].sort();
+      // Homebrew hoists the metafiles out of libexec into the keg root after the formula's install step, so libexec
+      // holds the built JavaScript and the manifest; the licence and README are checked at the keg root, where
+      // Homebrew puts them and where a reader finds them.
+      const libexecFiles = ["package.json", ...fileList(join(build, "dist"), "dist/")].sort();
       const libexec = join(installedPrefix, "libexec");
       const actualFiles = fileList(libexec);
-      if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) throw new Error("Installed artifact file set mismatch.");
-      for (const name of expectedFiles) {
+      if (JSON.stringify(actualFiles) !== JSON.stringify(libexecFiles)) {
+        throw new Error(`Installed artifact file set mismatch: ${JSON.stringify(actualFiles)}.`);
+      }
+      for (const name of libexecFiles) {
         if (!readFileSync(join(libexec, name)).equals(readFileSync(join(build, name)))) throw new Error(`Installed artifact mismatch: ${name}`);
+      }
+      for (const name of ["LICENSE", "README.md"]) {
+        if (!readFileSync(join(installedPrefix, name)).equals(readFileSync(join(build, name)))) throw new Error(`Installed metafile mismatch: ${name}`);
       }
     } finally {
       rmSync(build, { recursive: true, force: true });

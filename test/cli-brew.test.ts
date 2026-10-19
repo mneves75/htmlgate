@@ -146,7 +146,9 @@ describe("the Homebrew formula", () => {
   test("keeps metadata, CLI-root build and launcher behavior", () => {
     expect(source).toContain('depends_on "node"');
     expect(source).toContain('license "MIT"');
-    expect(source).toContain('libexec.install "dist", "package.json", "LICENSE", "README.md"');
+    // Homebrew hoists metafiles out of libexec into the keg root, so install them there and keep libexec to the build.
+    expect(source).toContain('libexec.install "dist", "package.json"');
+    expect(source).toContain('prefix.install "LICENSE", "README.md"');
     expect(source).toContain('exec "#{Formula["node"].opt_bin}/node" "#{libexec}/dist/bin.js" "$@"');
     expect(source).toContain('assert_equal version.to_s, shell_output("#{bin}/htmlgate --version").strip');
     expect(source).not.toContain('cd "packages/cli"');
@@ -209,12 +211,13 @@ function execute({ absent = false, tapped = false, installed = false, version = 
   const installedPrefix = join(prefix, "Cellar/htmlgate", cli.version + "_1");
   const libexec = join(installedPrefix, "libexec");
   mkdirSync(libexec, { recursive: true });
-  for (const name of ["dist", "package.json", "LICENSE", "README.md"]) cpSync(resolve("packages/cli", name), join(libexec, name), { recursive: true });
+  for (const name of ["dist", "package.json"]) cpSync(resolve("packages/cli", name), join(libexec, name), { recursive: true });
+  for (const name of ["LICENSE", "README.md"]) cpSync(resolve("packages/cli", name), join(installedPrefix, name));
   mkdirSync(join(prefix, "bin"));
   const binary = join(prefix, "bin/htmlgate");
   const nodePrefix = dirname(dirname(process.execPath));
   writeFileSync(binary, '#!/bin/sh\nexec "' + join(nodePrefix, "bin/node") + '" "' + libexec + '/dist/bin.js" "$@"\n', { mode: 0o755 });
-  if (staleArtifact) writeFileSync(join(libexec, staleArtifact), "stale artifact\n");
+  if (staleArtifact) writeFileSync(join(["LICENSE", "README.md"].includes(staleArtifact) ? installedPrefix : libexec, staleArtifact), "stale artifact\n");
   if (tapMismatch) {
     writeFileSync(join(repository, "packages/cli/src/added.ts"), "export const added = 1;\n");
     expect(pinFormula({ root: repository, log: silent })).toBe(0);
@@ -258,7 +261,8 @@ function execute({ absent = false, tapped = false, installed = false, version = 
       if (operation === "--repository " + tap) return ok(repository);
       if (operation === "list --formula --full-name") return ok(installed ? formula : "node");
       if (operation === (installed ? "upgrade " : "install ") + formula) return ok();
-      if (operation === "info --json=v2 --installed " + formula) return ok(JSON.stringify({ formulae: [{ full_name: formula, linked_keg: linked, installed: [{ version: receipt }] }] }));
+      // One formula, never `--installed`: that dumps every installed formula and cask and overflows the buffer.
+      if (operation === "info --json=v2 " + formula) return ok(JSON.stringify({ formulae: [{ full_name: formula, linked_keg: linked, installed: [{ version: receipt }] }] }));
       if (operation === "--prefix") return ok(prefix);
       if (operation === "--prefix " + formula) return ok(installedPrefix);
       if (operation === "--prefix node") return ok(nodePrefix);
@@ -326,8 +330,11 @@ describe("the CLI Homebrew installer", () => {
   test("an unlinked expected receipt is refused", () => {
     const r = execute({ linked: "0.1.0" }); expect(r.code).toBe(1); expect(r.err).toMatch(/receipt/i);
   });
-  test.each(["dist/bin.js", "dist/api.js", "package.json", "README.md", "LICENSE"])("a stale installed %s fails despite a matching product version", (staleArtifact) => {
+  test.each(["dist/bin.js", "dist/api.js", "package.json"])("a stale installed %s fails despite a matching product version", (staleArtifact) => {
     const r = execute({ staleArtifact }); expect(r.code).toBe(1); expect(r.err).toContain(staleArtifact); expect(r.err).toMatch(/artifact/i);
+  });
+  test.each(["LICENSE", "README.md"])("a stale keg-root metafile %s fails despite a matching product version", (staleArtifact) => {
+    const r = execute({ staleArtifact }); expect(r.code).toBe(1); expect(r.err).toContain(staleArtifact); expect(r.err).toMatch(/metafile/i);
   });
   test("a version mismatch stops before PATH", () => {
     const r = execute({ version: "0.1.0-beta.12" }); expect(r.code).toBe(1); expect(r.err).toMatch(/version mismatch/i);
@@ -343,7 +350,7 @@ describe("the CLI Homebrew installer", () => {
     "fetch --tags --prune origin", "status --porcelain", "rev-parse HEAD", "rev-parse origin/main",
     "merge-base --is-ancestor HEAD origin/main", "merge --ff-only origin/main",
     "list --formula --full-name", "install " + formula, "upgrade " + formula,
-    "info --json=v2 --installed " + formula, "--prefix", "--prefix " + formula, "--prefix node",
+    "info --json=v2 " + formula, "--prefix", "--prefix " + formula, "--prefix node",
   ])("failed %s stops immediately", (failure) => {
     const r = execute({ failure, installed: failure.startsWith("upgrade") });
     expect(r.code).toBe(1); expect(r.err).toContain("controlled command failure");

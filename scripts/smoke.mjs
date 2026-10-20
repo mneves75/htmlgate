@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Live checks against a deployed Instance (issue #17). Needs a token in HTMLGATE_TOKEN.
-// It publishes test Shares that expire within minutes, and soft-deletes them at the end; the hourly cleanup then
-// deletes their bodies.
+// It publishes test Shares that expire within minutes, and soft-deletes them at the end; the Instance's cleanup
+// then deletes their bodies. On an Instance with "crons": [], they stay in the bucket.
 // Usage: HTMLGATE_TOKEN=hg_... pnpm run smoke https://<the Instance's domain, or name.subdomain.workers.dev without one>
 import { writeZip } from "../packages/cli/src/zip.ts";
 const base = (process.argv[2] ?? "").replace(/\/+$/, "");

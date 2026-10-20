@@ -55,7 +55,8 @@ export default {
   },
 
   /**
-   * Hourly (wrangler.jsonc triggers): purge expired Shares, then delete due bodies. At most 3 purge batches (4 D1
+   * On the Instance's Cron Triggers (`crons`, hourly by default; none when `crons` is []): purge expired Shares,
+   * then delete due bodies. At most 3 purge batches (4 D1
    * queries each) and 10 trash rounds (2 each): 32 queries, under Workers Free's 50 per invocation. What is left
    * waits for the next hour. Each step runs whatever the other did, and a failure is logged by name before the run
    * fails: an Instance logs errors only, so an unlogged failure would show up first as a full storage cap.

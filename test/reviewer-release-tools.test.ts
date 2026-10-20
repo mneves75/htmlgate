@@ -83,6 +83,7 @@ globalThis.fetch = async (url, init = {}) => {
     } else if (init.redirect === "error") throw new Error("redirect refused");
     return new Response(null, { status: 302, headers: { location: "https://other.example/redirect-target" } });
   }
+  if (path === "/robots.txt") return new Response("User-agent: *\nAllow: /p/\nDisallow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } });
   if (path === "/api/onboard") return json({ expiry: { default_days: 30 } });
   // A Public Share's card poster: real JPEG bytes, as the Instance serves it without a session.
   const card = /^\/p\/([^/]+)\/card\.jpg$/.exec(path);

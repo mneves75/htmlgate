@@ -2,6 +2,22 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.14] - 2026-10-20
+
+### Fixed
+
+- A Public Share's link showed its card on WhatsApp but not on X. The Instance's `robots.txt` sat behind Cloudflare
+  Access, so no crawler could read it, and X refuses to build a card for a site whose `robots.txt` it cannot fetch
+  (WhatsApp's unfurler ignores `robots.txt`, which is exactly the difference). `pnpm run setup` now creates a second
+  Access application, `htmlgate: <name> robots`, that opens that one path with a `bypass` policy, and the policy allows
+  `Allow: /p/` with `Disallow: /`: a Public Share is readable by crawlers, everything else stays out, and the pages keep
+  `noindex`.
+- `pnpm run smoke` checks that a crawler gets 200 from `robots.txt` and that the policy names `/p/`, so a missing bypass
+  application is caught on the deployed Instance.
+
+X caches a card per URL: a link it has already fetched keeps its old (image-less) card, so test with a URL it has not
+seen, such as the same link with `?v=2`.
+
 ## [0.1.13] - 2026-10-20
 
 ### Fixed

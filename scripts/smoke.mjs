@@ -113,6 +113,16 @@ try {
     must(a.headers.get("content-security-policy") === b.headers.get("content-security-policy"), "CSP differs");
   });
 
+  // X refuses to build a card for a site whose robots.txt it cannot read, and the Instance needs to be readable to say
+  // what may be crawled. This is the check that catches a missing bypass application in production.
+  await check("robots.txt answers a crawler and lets it read a Public Share", async () => {
+    const r = await paced(base + "/robots.txt", { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } });
+    must(r.status === 200, `answered ${r.status}`);
+    const body = await r.text();
+    must(/^Allow: \/p\/$/m.test(body), `no Allow: /p/ in: ${body.slice(0, 120)}`);
+    must(/^Disallow: \/$/m.test(body), "no Disallow: /");
+  });
+
   // A crawler has no session, so an unfurl of a Public Share fetches the card image without one. It lives under /p/,
   // which the Access application leaves public: if that ever changes, every shared link loses its thumbnail while the
   // pages themselves still answer.

@@ -366,6 +366,24 @@ export function accessApp(inst, workerId) {
   };
 }
 
+/**
+ * The second Access application an Instance needs: one path, `robots.txt`, open to everyone. A crawler reads robots.txt
+ * before it reads anything else, so a gated one is a policy no crawler can follow - X in particular refuses to build a
+ * card for a site whose robots.txt it cannot read, which is why a Public Share previewed on WhatsApp and not on X. The
+ * path is a separate application because a public override on the gate application only matches `<segment>/*` paths:
+ * `/og.jpg` and `/robots.txt` were persisted there and never took effect.
+ */
+export function robotsApp(inst, host) {
+  return {
+    type: "self_hosted",
+    name: `htmlgate: ${inst.name} robots`,
+    domain: `${host}/robots.txt`,
+    session_duration: "24h",
+    app_launcher_visible: false,
+    policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "bypass", include: [{ everyone: {} }] }],
+  };
+}
+
 /** The text after `wrangler`'s failure that names Cloudflare's "R2 is not enabled" answer. */
 export const r2NotEnabled = (message) => /\b10042\b|enable R2/i.test(message);
 
@@ -475,6 +493,18 @@ async function main() {
     vars: instanceVars(inst, teamUrl, app.aud),
   });
   const urls = deploymentUrls(inst, sh(WRANGLER, ["deploy", "-c", config]));
+
+  step("opening robots.txt to crawlers");
+  const host = new URL(urls[0]).host;
+  const robotsName = `htmlgate: ${inst.name} robots`;
+  const robotsWanted = `${host}/robots.txt`;
+  const mine = listApplications().filter((a) => a?.name === robotsName);
+  if (mine.length > 1) throw new Error(`Ambiguous ownership for ${robotsName}; more than one application has that name.`);
+  if (mine.length === 1 && mine[0].domain !== robotsWanted) {
+    throw new Error(`${robotsName} answers ${mine[0].domain}, not ${robotsWanted}; refusing to repoint another application.`);
+  }
+  cf("zero-trust", "access", "applications", mine.length ? "update" : "create", ...(mine.length ? [mine[0].id] : []),
+    "--body", JSON.stringify(robotsApp(inst, host)));
 
   step("checking the gate");
   const results = [];

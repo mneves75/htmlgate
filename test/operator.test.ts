@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest";
 // @ts-expect-error plain JavaScript module
-import { accessApp, checkDomain, checkSameAccount, deploymentUrls, gated, generatedConfig, instanceVars, isGateRedirect, listWorkers, r2NotEnabled, readInstance, workerConfig, wranglerWho } from "../scripts/setup.mjs";
+import { accessApp, checkDomain, checkSameAccount, deploymentUrls, gated, generatedConfig, instanceVars, isGateRedirect, listWorkers, r2NotEnabled, readInstance, robotsApp, workerConfig, wranglerWho } from "../scripts/setup.mjs";
 import { AUTHOR, settings, startInstance, type Instance } from "./global-setup";
 
 const run = promisify(execFile);
@@ -444,6 +444,18 @@ test("setup names R2's 'not enabled' answer, and only that, as a missing subscri
 
 describe("the Access application setup creates", () => {
   const app = accessApp({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"] }, "w123");
+
+  test("the robots application opens exactly robots.txt, to everyone, and nothing else", () => {
+    // A gated robots.txt is a policy no crawler can read; X refuses to build a card for a site whose robots.txt it
+    // cannot fetch, which is why a Public Share previewed on WhatsApp and not on X.
+    const app = robotsApp({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com"] }, "app.example.com");
+    expect(app.name).toBe("htmlgate: my-bin robots");
+    expect(app.domain).toBe("app.example.com/robots.txt");
+    expect(app.destinations).toBeUndefined();
+    expect(app.policies).toHaveLength(1);
+    expect(app.policies[0].decision).toBe("bypass");
+    expect(app.policies[0].include).toEqual([{ everyone: {} }]);
+  });
 
   test("the deployed config keeps the rule that bundles the card poster", () => {
     // Without it, `wrangler deploy` builds the Worker without the image module and the card points at nothing.

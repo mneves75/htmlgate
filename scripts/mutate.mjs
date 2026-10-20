@@ -249,6 +249,10 @@ const MUTATIONS = [
   ["a Gated Share's link unfurls too","src/pages.ts",'prefix === "p" && d.public === 1 && origin !== ""','origin !== ""',"test/social.test.ts"],
   // The card image has to be reachable without a session, or every unfurl gets a login redirect instead of a thumbnail.
   ["the card image ignores the Share's visibility","src/index.ts",'const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, true, null);','const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, false, null);',"test/social.test.ts"],
+  // A robots policy that opens the Instance, and a robots application that gates it, are both silent failures: no
+  // unfurl and no page shows either.
+  ["robots.txt opens the whole Instance","src/index.ts",'const ROBOTS = "User-agent: *\\nAllow: /p/\\nDisallow: /\\n";','const ROBOTS = "User-agent: *\\nAllow: /\\n";',"test/api.test.ts"],
+  ["the robots application gates robots.txt","scripts/setup.mjs",'policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "bypass", include: [{ everyone: {} }] }],','policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "allow", include: [{ everyone: {} }] }],',"test/operator.test.ts"],
   ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
 ];
 

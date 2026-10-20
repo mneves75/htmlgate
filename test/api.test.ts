@@ -284,8 +284,8 @@ describe("discoverability", () => {
     expect(r.json.token_format).toBe("hg_ followed by 40 letters and digits");
   });
 
-  test("robots.txt disallows everything", async () => {
+  test("robots.txt lets a crawler read a Public Share and nothing else", async () => {
     const r = await fetch(`${base}/robots.txt`);
-    expect(await r.text()).toBe("User-agent: *\nDisallow: /\n");
+    expect(await r.text()).toBe("User-agent: *\nAllow: /p/\nDisallow: /\n");
   });
 });

@@ -68,11 +68,13 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     ["a count outlives the Share it belongs to","src/store.ts",'        WHERE EXISTS (SELECT 1 FROM shares WHERE slug = ?1 AND ${live()})','        WHERE 1',"test/store-sites-expiry.test.ts"],
     ["a Gated Share's link unfurls too","src/pages.ts",'prefix === "p" && d.public === 1 && origin !== ""','origin !== ""',"test/social.test.ts"],
     ["the card image ignores the Share's visibility","src/index.ts",'const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, true, null);','const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, false, null);',"test/social.test.ts"],
+    ["robots.txt opens the whole Instance","src/index.ts",'const ROBOTS = "User-agent: *\\nAllow: /p/\\nDisallow: /\\n";','const ROBOTS = "User-agent: *\\nAllow: /\\n";',"test/api.test.ts"],
+    ["the robots application gates robots.txt","scripts/setup.mjs",'policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "bypass", include: [{ everyone: {} }] }],','policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "allow", include: [{ everyone: {} }] }],',"test/operator.test.ts"],
     ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
   ];
   const base = after.slice(0, before.length);
 
-  test("229 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
+  test("231 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
     expect(before).toHaveLength(182);
     expect(createHash("sha256").update(history).digest("hex")).toBe("659fa0b319ae9a82381cabfc7c993557f8231ebd0f2853e0300e51375aa9732e");
     expect(after).toHaveLength(before.length + added.length);

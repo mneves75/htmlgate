@@ -18,6 +18,14 @@ async function html(status: number, page: PageResult | Promise<PageResult>): Pro
 
 const notFound = (lang: Language, opts: { signInPath?: string; home?: "author" | "viewer" } = {}) => html(404, notFoundPage(lang, opts));
 
+/**
+ * What a crawler may read. A Public Share is meant to be shared, and an unfurler (X, WhatsApp, LinkedIn) reads the
+ * page and its card image before it can preview anything, so `/p/` is open to crawlers; every other path - the gated
+ * pages, tokens, metrics, the API and ticket URLs - stays out. The pages carry `noindex`, so being readable is not
+ * being listed.
+ */
+const ROBOTS = "User-agent: *\nAllow: /p/\nDisallow: /\n";
+
 /** One Public Share's card image, and its type: a single poster for the whole Instance, bundled from the landing's
  * artwork. Not exported: this module's exports are the Worker's handlers. */
 const CARD_IMAGE = /^\/p\/([A-Za-z0-9]{12})\/card\.jpg$/;
@@ -85,9 +93,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   const insecure = cleartext(req, url);
   if (insecure) return insecure;
 
-  if (path === "/robots.txt" && req.method === "GET") {
-    return text(200, "User-agent: *\nDisallow: /\n", "text/plain; charset=utf-8");
-  }
+  if (path === "/robots.txt" && req.method === "GET") return text(200, ROBOTS, "text/plain; charset=utf-8");
 
   const cfg = readConfig(env);
   if (!cfg) return fail(503, "server_misconfigured", "This Instance is missing its settings. The Operator must run setup.");

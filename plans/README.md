@@ -172,6 +172,7 @@ header; axe on the empty home; wider pt-BR test coverage; pt-BR terms in GLOSSAR
 | 15 | [Package and verify a single-commit 0.1 release](015-single-commit-release.md) | Adversarial design reviewed; implementation pending | 13, 14 for final release |
 | 16 | [Page counts on the landing, with no cookie banner](016-landing-page-counts.md) | Implemented; release 0.1.1 | 15 |
 | 17 | [A Share link that shows a card when it is shared](017-share-social-card.md) | Implemented; release 0.1.11 | 16 |
+| 18 | [Read a Public Share's link on X as well as WhatsApp](018-crawlers-read-robots.md) | Implemented; release 0.1.14 | 17 |
 
 Considered and rejected: caching the Instance stylesheet as a separate file (every Instance response
 is `no-store` by rule, but for the card image at `/p/<slug>/card.jpg`, and Cloudflare compresses the inline CSS anyway); a template engine with

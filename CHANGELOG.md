@@ -10,6 +10,7 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
   remove every Cron Trigger, for example on a staging Instance. Expired Shares stay hidden without cleanup, but their
   bodies remain in the bucket and count toward the storage cap.
 - Cron fields are range-checked against Cloudflare's table and whitespace is normalized; docs cover staging without Cron Triggers.
+- `scripts/print-triggers.mjs` prints an Instance's Cron Triggers locally without running setup; cron checks refuse non-ASCII, oversized steps and special forms in lists, and catch duplicates such as `sun`/`1`.
 
 ## [0.1.16] - 2026-10-20
 

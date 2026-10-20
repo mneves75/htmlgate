@@ -389,7 +389,7 @@ Each character sits on its own flap: a repeating cell-colored block one characte
 A thin graphite strip, wrapping to two lines on phones, with the title clamped to two lines. The Versions menu is a `<details>` with a mono summary ("v3 of 7") and a graphite list; the current Version is yellow. The older-Version notice is a full-width yellow band directly under it.
 
 ### Link cards
-A Public Share's link unfurls with the landing's 1600×900 poster (`site/public/media/htmlgate-15s.jpg`) and the Share's own title and description: one raster asset, one source, served by the Instance at `/og.jpg` with an immutable cache. Per-Share artwork would mean a raster renderer in the Worker; it is not worth a runtime dependency for a thumbnail.
+A Public Share's link unfurls with the landing's 1600×900 poster (`site/public/media/htmlgate-15s.jpg`) and the Share's own title and description: one raster asset, one source, served by the Instance at `/p/<slug>/card.jpg` with an immutable cache. Per-Share artwork would mean a raster renderer in the Worker; it is not worth a runtime dependency for a thumbnail.
 
 ### Release line
 The version an Operator is running, in mono at 0.75rem: a footer under every Instance page, and a chip in the viewer bar's meta so it never overlays the Share. The landing carries the same number in its footer, in mono at 0.8125rem next to the wordmark. One line, muted, never an action.

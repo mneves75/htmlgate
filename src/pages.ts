@@ -14,8 +14,7 @@ function escapeHtml(s: string): string {
 /** What a Share may do, in the viewer's iframe and as a top-level page. No allow-same-origin: issue #12. */
 export const SHARE_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
 
-/** The card image and its real size: the landing's 1600 by 900 poster, bundled and served at /og.jpg. */
-export const OG_IMAGE = "/og.jpg";
+/** The card image's real size: the landing's 1600 by 900 poster, bundled and served per Share at /p/<slug>/card.jpg. */
 export const OG_IMAGE_WIDTH = 1600;
 export const OG_IMAGE_HEIGHT = 900;
 
@@ -859,7 +858,7 @@ export function viewerPage(lang: Language, d: { slug: string; title: string; des
     title: d.title,
     description: written ? written : t.cardLead,
     url: `${origin}/p/${d.slug}`,
-    image: `${origin}${OG_IMAGE}`,
+    image: `${origin}/p/${d.slug}/card.jpg`,
     imageAlt: t.cardImageAlt,
     imageWidth: OG_IMAGE_WIDTH,
     imageHeight: OG_IMAGE_HEIGHT,

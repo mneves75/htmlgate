@@ -248,7 +248,7 @@ const MUTATIONS = [
   // A Gated Share must stay bare: its page is behind the gate, and its title may never reach a crawler's cache.
   ["a Gated Share's link unfurls too","src/pages.ts",'prefix === "p" && d.public === 1 && origin !== ""','origin !== ""',"test/social.test.ts"],
   // The card image has to be reachable without a session, or every unfurl gets a login redirect instead of a thumbnail.
-  ["the card image needs a sign-in","scripts/setup.mjs",', "/og.jpg"]',']',"test/social.test.ts"],
+  ["the card image ignores the Share's visibility","src/index.ts",'const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, true, null);','const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, false, null);',"test/social.test.ts"],
   ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
 ];
 

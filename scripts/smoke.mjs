@@ -79,15 +79,6 @@ try {
     }
   });
 
-  // A crawler has no session, so an unfurl of a Public Share fetches this without one. If Cloudflare Access ever stops
-  // marking the path public, every shared link loses its thumbnail while the page itself still works.
-  await check("the card image answers without signing in", async () => {
-    const r = await paced(base + "/og.jpg", { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } });
-    must(r.status === 200, `answered ${r.status}`);
-    must((r.headers.get("content-type") ?? "") === "image/jpeg", `content-type ${r.headers.get("content-type")}`);
-    must((await r.arrayBuffer()).byteLength > 1024, "the body is not the poster");
-  });
-
   await check("the API without a token answers 401 with the error envelope", async () => {
     const r = await get("/api/shares");
     must(r.status === 401, `answered ${r.status}`);
@@ -120,6 +111,22 @@ try {
     must(a.status === 404 && b.status === 404, `${a.status} ${b.status}`);
     must(ta === tb, "bodies differ");
     must(a.headers.get("content-security-policy") === b.headers.get("content-security-policy"), "CSP differs");
+  });
+
+  // A crawler has no session, so an unfurl of a Public Share fetches the card image without one. It lives under /p/,
+  // which the Access application leaves public: if that ever changes, every shared link loses its thumbnail while the
+  // pages themselves still answer.
+  await check("a card image answers a crawler only while the Share is public", async () => {
+    must((await paced(base + `/p/${gated.slug}/card.jpg`, { headers: { "user-agent": "Twitterbot/1.0" } })).status === 404, "a gated Share served its image");
+    must((await api("POST", `/api/shares/${gated.slug}/visibility`, { public: true })).status === 200, "visibility on failed");
+    try {
+      const r = await paced(base + `/p/${gated.slug}/card.jpg`, { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } });
+      must(r.status === 200, `a public Share answered ${r.status}`);
+      must((r.headers.get("content-type") ?? "") === "image/jpeg", `content-type ${r.headers.get("content-type")}`);
+      must((await r.arrayBuffer()).byteLength > 1024, "the body is not the poster");
+    } finally {
+      await api("POST", `/api/shares/${gated.slug}/visibility`, { public: false });
+    }
   });
 
   await check("making a Share public opens /p/ with the isolation headers, and gating it again closes it on the next request", async () => {

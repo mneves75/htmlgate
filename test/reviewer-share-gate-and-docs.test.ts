@@ -67,7 +67,7 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     ["a prefetch counts as a view","src/index.ts",'  if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return res;','  if (req.headers.get("sec-fetch-dest") !== "document") return res;',"test/metrics.test.ts"],
     ["a count outlives the Share it belongs to","src/store.ts",'        WHERE EXISTS (SELECT 1 FROM shares WHERE slug = ?1 AND ${live()})','        WHERE 1',"test/store-sites-expiry.test.ts"],
     ["a Gated Share's link unfurls too","src/pages.ts",'prefix === "p" && d.public === 1 && origin !== ""','origin !== ""',"test/social.test.ts"],
-    ["the card image needs a sign-in","scripts/setup.mjs",', "/og.jpg"]',']',"test/social.test.ts"],
+    ["the card image ignores the Share's visibility","src/index.ts",'const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, true, null);','const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, false, null);',"test/social.test.ts"],
     ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
   ];
   const base = after.slice(0, before.length);

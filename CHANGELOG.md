@@ -2,6 +2,18 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.13] - 2026-10-20
+
+### Fixed
+
+- The card image moved from `/og.jpg` to `/p/<slug>/card.jpg`. The gateway override for a new top-level path was
+  persisted on the Access application and still answered 302 to the sign-in page, while the prefix `/p/` passed on the
+  same application: the image now lives under the prefix the edge already leaves public, so this feature needs no gate
+  change, each Share gets its own cache key, and a Gated Share's image answers not-found like its page. Plan 017
+  records the experiment.
+
+0.1.11 and 0.1.12 were tagged but never deployed.
+
 ## [0.1.12] - 2026-10-19
 
 ### Fixed
@@ -21,9 +33,10 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 ### Added
 
 - A Public Share's link now unfurls with a large card on X, WhatsApp and the other Open Graph consumers: the Share's
-  title, its description (or a neutral sentence when it has none) and the Instance's poster image at `/og.jpg`, which
-  a crawler fetches without a session. `/og.jpg` joins the paths Cloudflare Access leaves to the Worker, `pnpm run
-  smoke` now checks it, and `docs/operator.md` says how to share a link that previews.
+  title, its description (or a neutral sentence when it has none) and the Instance's poster image at
+  `/p/<slug>/card.jpg`, which a crawler fetches without a session. The image sits under the prefix Cloudflare Access
+  already leaves public, so the gate configuration needs no special case; a Gated Share's image answers not-found, like
+  its page. `pnpm run smoke` checks both, and `docs/operator.md` says how to share a link that previews.
 
 ### Fixed
 

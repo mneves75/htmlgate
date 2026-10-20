@@ -35,8 +35,8 @@ describe("a Public Share's link unfurls", () => {
     expect(meta(html, "property", "og:title")).toBe("Quarterly numbers");
     expect(meta(html, "property", "og:description")).toBe("Revenue, costs and the three surprises.");
     // Absolute, on this Instance, and the same image for X and for the Open Graph consumers.
-    expect(meta(html, "property", "og:image")).toBe(`${base}/og.jpg`);
-    expect(meta(html, "name", "twitter:image")).toBe(`${base}/og.jpg`);
+    expect(meta(html, "property", "og:image")).toBe(`${base}/p/${slug}/card.jpg`);
+    expect(meta(html, "name", "twitter:image")).toBe(`${base}/p/${slug}/card.jpg`);
     expect(meta(html, "property", "og:image:type")).toBe("image/jpeg");
     expect(meta(html, "property", "og:image:width")).toBe("1600");
     expect(meta(html, "property", "og:image:height")).toBe("900");
@@ -103,7 +103,8 @@ describe("a Gated Share's link stays bare", () => {
 
 describe("the card image is fetchable without signing in", () => {
   test("GET returns real JPEG bytes with an immutable cache", async () => {
-    const res = await fetch(`${base}/og.jpg`, { headers: { "user-agent": "Twitterbot/1.0" } });
+    const { slug } = await share("Has a card image", true);
+    const res = await fetch(`${base}/p/${slug}/card.jpg`, { headers: { "user-agent": "Twitterbot/1.0" } });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/jpeg");
     expect(res.headers.get("cache-control")).toContain("immutable");
@@ -118,17 +119,32 @@ describe("the card image is fetchable without signing in", () => {
   });
 
   test("HEAD answers the same headers without a body", async () => {
-    const res = await fetch(`${base}/og.jpg`, { method: "HEAD" });
+    const { slug } = await share("Head check", true);
+    const res = await fetch(`${base}/p/${slug}/card.jpg`, { method: "HEAD" });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/jpeg");
     expect((await res.arrayBuffer()).byteLength).toBe(0);
   });
 
-  test("the path is public at the edge, or the crawler would get a login redirect", () => {
+  test("the image sits under the prefix the edge already leaves public", () => {
+    // No Access change is needed for this feature: the image lives under /p/, which the application marks public. A
+    // Gated Share and a slug that does not exist answer the same not-found, so the image is no oracle either.
     const app = accessApp({ name: "an-instance", author: "me@example.com", allowlist: ["me@example.com"] }, "w123") as {
       destinations: { overrides: { path_pattern: string }[] }[];
     };
     const patterns = app.destinations[0]!.overrides.map((o) => o.path_pattern);
-    expect(patterns).toContain("/og.jpg");
+    expect(patterns).toContain("/p/*");
+    expect(patterns).not.toContain("/og.jpg");
+  });
+
+  test("a Gated Share's image is not there at all", async () => {
+    const { slug } = await share("No image for the gated one", false);
+    const res = await fetch(`${base}/p/${slug}/card.jpg`);
+    expect(res.status).toBe(404);
+  });
+
+  test("a slug that does not exist answers like one that is gated", async () => {
+    const missing = await fetch(`${base}/p/ZZZZZZZZZZZZ/card.jpg`);
+    expect(missing.status).toBe(404);
   });
 });

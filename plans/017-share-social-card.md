@@ -30,7 +30,7 @@ A **Gated Share** keeps its access policy and gains no card: no `og:` metadata, 
 2. **Nothing on the gated page.** `/s/<slug>` emits no card at all. Access already blocks crawlers, and a
    Share that is Gated by design must not leak a title, description or image into any cache.
 3. **An image the crawler can fetch.** Serve the existing branded poster (1600×900 JPEG, 35 KB,
-   `site/public/media/htmlgate-15s.jpg`) from the Instance at `/og.jpg`: bundled with the Worker (Wrangler
+   `site/public/media/htmlgate-15s.jpg`) from the Instance at `/p/<slug>/card.jpg`: bundled with the Worker (Wrangler
    `Data` rule so the file stays a file), `content-type: image/jpeg`, `cache-control: public, max-age=
    31536000, immutable`, no auth. `/og.jpg` joins `PUBLIC_PATHS` so Cloudflare Access lets the crawler through;
    without that override the card would point at a 302.
@@ -40,18 +40,17 @@ A **Gated Share** keeps its access policy and gains no card: no `og:` metadata, 
 ## Tests that would fail without the change
 
 - `test/social.test.ts` through the real Worker: `GET /p/<slug>` with `Twitterbot` UA returns one
-  `twitter:card` = `summary_large_image`, one absolute HTTPS `og:image` equal to `<origin>/og.jpg`, an
+  `twitter:card` = `summary_large_image`, one absolute HTTPS `og:image` equal to `<origin>/p/<slug>/card.jpg`, an
   `og:title` equal to the Share's title (escaped), an `og:url` equal to the canonical public URL, and an alt
-  text; `GET /s/<slug>` returns none of them; `/og.jpg` answers 200 with `image/jpeg`, real JPEG bytes over
-  1 KB, and the immutable cache header; a request for `/og.jpg` never requires Access configuration —
-  asserted against `accessApp().destinations[0].overrides`, which must contain the path, so setup cannot
-  quietly drop the bypass.
+  text; `GET /s/<slug>` returns none of them; the image answers 200 with `image/jpeg`, real JPEG bytes over 1 KB and
+  the immutable cache header while the Share is public, and 404 once it is gated again; a slug that does not exist
+  answers the same 404, so the image is no oracle.
 - The gated case is the security half: if someone emitted the card on both paths, this test fails.
 
 ## Gates and release
 
 `pnpm run check`, `pnpm run mutate --check` (an anchor for the gated page's "no card" branch), `pnpm run
-bench` (`/og.jpg` is not a page), axe unchanged. Version 0.1.11, changelog, README + operator docs, tag
+bench` (the image is not a page), axe unchanged. Version 0.1.11, changelog, README + operator docs, tag
 `v0.1.11-beta1` for staging and `v0.1.11` for production, security gate record for the exact commit, then
 live checks: `Twitterbot` GET of the public page, the image, and the gated page.
 
@@ -77,6 +76,16 @@ live checks: `Twitterbot` GET of the public page, the image, and the gated page.
 - Tests now cover the description's escaping, the `public` conjunct on the public path, and the image's hardening
   headers. The description appears in the card but not on the page; `docs/operator.md` says so, since re-gating does
   not clear a crawler's cache.
+
+## What the edge taught us
+
+The first design served the poster at `/og.jpg` and added it to the paths Cloudflare Access leaves public. The
+override persisted in the application (`/og.jpg`, then `/og.jpg*`, then `/og/*`, and first in the list) and the edge
+still answered **302 to the login page** for it, while `/p/*` passed on the same application and the same zone. The
+path a crawler needs therefore sits under the prefix that already works: `/p/<slug>/card.jpg`. That is a better
+design anyway: no gate change to get wrong, one crawler cache key per Share, and a namespace for per-Share artwork if
+it ever comes. A test asserts the card image lives under `/p/*` and that `/og.jpg` never returns to the public-path
+list.
 
 ## Current status
 

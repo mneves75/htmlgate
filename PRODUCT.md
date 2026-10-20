@@ -43,7 +43,7 @@ from chat links; the Author arrives from a terminal.
 ## Capabilities and Constraints
 
 - Instance pages run no script and load nothing from elsewhere: one stylesheet allowed by its
-  CSP hash, inline SVG, system fonts. Every response is `no-store`, except the card image at `/og.jpg`, which a crawler must be able to cache.
+  CSP hash, inline SVG, system fonts. Every response is `no-store`, except the card image at `/p/<slug>/card.jpg`, which a crawler must be able to cache.
 - Landing pages run no script: one same-origin stylesheet, the SVG favicon and self-hosted
   demonstration videos with JPEG posters. The social preview reuses a poster. No web fonts or
   `url()` in CSS.

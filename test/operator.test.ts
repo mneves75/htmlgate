@@ -451,14 +451,12 @@ describe("the Access application setup creates", () => {
     expect(config.rules).toEqual([{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }]);
   });
 
-  test("gates the Worker everywhere except the API, the public prefix and the card image", () => {
+  test("gates the Worker everywhere except the API and the public prefixes", () => {
     expect(app.destinations).toEqual([{
       type: "worker", worker_id: "w123",
       overrides: [
         { behavior: "public", path_pattern: "/api/*" }, { behavior: "public", path_pattern: "/p/*" },
         { behavior: "public", path_pattern: "/f/*" },
-        // Without this one a crawler gets a login redirect instead of the thumbnail.
-        { behavior: "public", path_pattern: "/og.jpg" },
       ],
     }]);
   });

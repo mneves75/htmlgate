@@ -16,9 +16,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
 // /f/* holds a Gated site's files under tickets the Worker checks itself (plan 009): a Share's requests never carry the
 // Access cookie, so Access must leave them to the Worker, as it does the API and Public Shares.
-// /og.jpg is the card image a crawler fetches; without the bypass, Cloudflare Access answers the unfurl with a login
-// redirect and every shared link loses its thumbnail.
-const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*", "/og.jpg"];
+// A Public Share's card image lives under /p/, which is already public, so a crawler fetches it without a session and
+// this list needs no special case.
+const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*"];
 // The hourly cleanup of expired Shares (plan 008).
 export const CRONS = ["17 * * * *"];
 

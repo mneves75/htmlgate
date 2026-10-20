@@ -98,7 +98,7 @@ With several Instances, put `api_url = "https://..."` in a project's `.htmlgate/
 ## Sharing a link
 
 A **Public** Share's link unfurls with a card: its title, its description, and the Instance's poster image, which every
-Instance serves itself at `/og.jpg` (one branded JPEG, no session needed). `htmlgate publish` and `htmlgate public`
+Instance serves itself at `/p/<slug>/card.jpg` (one branded JPEG, no session needed). `htmlgate publish` and `htmlgate public`
 print that link (`/p/<slug>`); a link copied from the address bar while signed in is the gated one (`/s/<slug>`), which
 sits behind Cloudflare Access and therefore never previews. That is the point of the gate, not a defect: to preview,
 make the Share public. The card carries `noindex`, so a preview is not an invitation for search engines to list it.

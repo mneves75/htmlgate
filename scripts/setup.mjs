@@ -498,13 +498,25 @@ async function main() {
   const host = new URL(urls[0]).host;
   const robotsName = `htmlgate: ${inst.name} robots`;
   const robotsWanted = `${host}/robots.txt`;
-  const mine = listApplications().filter((a) => a?.name === robotsName);
-  if (mine.length > 1) throw new Error(`Ambiguous ownership for ${robotsName}; more than one application has that name.`);
-  if (mine.length === 1 && mine[0].domain !== robotsWanted) {
-    throw new Error(`${robotsName} answers ${mine[0].domain}, not ${robotsWanted}; refusing to repoint another application.`);
+  // Find it by name, then by the path it answers: an application someone made by hand for this path is still an
+  // application this setup must not silently duplicate (Cloudflare refuses that with 409) or repoint.
+  const apps = listApplications();
+  const byName = apps.filter((a) => a?.name === robotsName);
+  if (byName.length > 1) throw new Error(`Ambiguous ownership for ${robotsName}; more than one application has that name.`);
+  const byPath = apps.filter((a) => a?.domain === robotsWanted);
+  if (byPath.length > 1) throw new Error(`Ambiguous ownership for ${robotsWanted}; more than one application answers it.`);
+  if (byPath.length && byName.length && byPath[0].id !== byName[0].id) {
+    throw new Error(`${robotsName} answers ${byName[0].domain} while another application answers ${robotsWanted}; refusing to guess.`);
   }
-  cf("zero-trust", "access", "applications", mine.length ? "update" : "create", ...(mine.length ? [mine[0].id] : []),
+  if (byPath.length && !byName.length) {
+    throw new Error(`${robotsWanted} is already answered by the application "${byPath[0].name}", which setup does not own. Remove it, or rename it ${robotsName}.`);
+  }
+  if (byName.length && byName[0].domain !== robotsWanted) {
+    throw new Error(`${robotsName} answers ${byName[0].domain}, not ${robotsWanted}; refusing to repoint another application.`);
+  }
+  cf("zero-trust", "access", "applications", byName.length ? "update" : "create", ...(byName.length ? [byName[0].id] : []),
     "--body", JSON.stringify(robotsApp(inst, host)));
+  console.log(`  ${robotsWanted} answers without a session`);
 
   step("checking the gate");
   const results = [];

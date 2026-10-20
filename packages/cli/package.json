@@ -1,7 +1,7 @@
 {
   "name": "@htmlgate/cli",
   "private": true,
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Publish HTML pages and sites to your own htmlgate Instance and get a URL.",
   "homepage": "https://github.com/mneves75/htmlgate",
   "license": "MIT",

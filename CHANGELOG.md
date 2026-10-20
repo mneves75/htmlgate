@@ -2,6 +2,17 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.16] - 2026-10-20
+
+### Fixed
+
+- `pnpm run setup` now finds the robots application by the path it answers as well as by its name, and refuses with a
+  clear message when another application already owns `<host>/robots.txt` instead of failing on Cloudflare's
+  `application_already_exists`. An application made by hand for that path can no longer turn into a 409 or be silently
+  repointed.
+
+0.1.15 was tagged but never deployed.
+
 ## [0.1.15] - 2026-10-20
 
 ### Fixed

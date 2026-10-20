@@ -457,6 +457,13 @@ describe("the Access application setup creates", () => {
     expect(app.policies[0].include).toEqual([{ everyone: {} }]);
   });
 
+  test("the robots application is found by path as well as by name", () => {
+    // The check lives in setup's run, so this pins the shape it compares: the name and the exact domain.
+    const app = robotsApp({ name: "my-bin" }, "app.example.com");
+    expect(app.domain).toBe("app.example.com/robots.txt");
+    expect(app.name).toBe("htmlgate: my-bin robots");
+  });
+
   test("the deployed config keeps the rule that bundles the card poster", () => {
     // Without it, `wrangler deploy` builds the Worker without the image module and the card points at nothing.
     const config = workerConfig({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com"] }, { name: "my-bin-db", uuid: "00000000-0000-0000-0000-000000000000" }, { open: true, vars: {} });

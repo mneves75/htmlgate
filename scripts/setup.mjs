@@ -22,36 +22,51 @@ const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*"];
 // The hourly cleanup of expired Shares (plan 008).
 export const CRONS = ["17 * * * *"];
 
+const CRON_FIELDS = [
+  [0, 59],
+  [0, 23],
+  [1, 31],
+  [1, 12, "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ")],
+  [1, 7, "SUN MON TUE WED THU FRI SAT".split(" ")],
+];
+
 function validCronField(field, index) {
-  const [min, max, names = []] = [
-    [0, 59],
-    [0, 23],
-    [1, 31],
-    [1, 12, "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ")],
-    [1, 7, "SUN MON TUE WED THU FRI SAT".split(" ")],
-  ][index];
+  if (!/^[\x21-\x7e]+$/.test(field)) return false;
+  const [min, max, names = []] = CRON_FIELDS[index];
   const value = (token) => {
     const n = names.includes(token) ? names.indexOf(token) + 1 : /^\d+$/.test(token) ? Number(token) : NaN;
     return n >= min && n <= max ? n : NaN;
   };
-  return field.toUpperCase().split(",").every((item) => {
-    if (index === 2) {
-      if (item === "L" || item === "LW") return true;
-      const nearest = /^(\d+)W$/.exec(item);
-      if (nearest) return !Number.isNaN(value(nearest[1]));
-    }
-    if (index === 4) {
-      const last = /^(\d+|[A-Z]{3})L$/.exec(item);
-      if (last) return !Number.isNaN(value(last[1]));
-      const nth = /^(\d+)#[1-5]$/.exec(item);
-      if (nth) return !Number.isNaN(value(nth[1]));
-    }
+  field = field.toUpperCase();
+  // These special forms must occupy the whole field, never an item in a list.
+  if (index === 2) {
+    if (field === "L" || field === "LW") return true;
+    const nearest = /^(\d+)W$/.exec(field);
+    if (nearest) return !Number.isNaN(value(nearest[1]));
+  }
+  if (index === 4) {
+    if (field === "L") return true;
+    const last = /^(\d+|[A-Z]{3})L$/.exec(field);
+    if (last) return !Number.isNaN(value(last[1]));
+    const nth = /^(\d+)#[1-5]$/.exec(field);
+    if (nth) return !Number.isNaN(value(nth[1]));
+  }
+  return field.split(",").every((item) => {
     const match = /^(\*|[0-9A-Z]+)(?:-([0-9A-Z]+))?(?:\/(\d+))?$/.exec(item);
-    if (!match || (match[3] !== undefined && Number(match[3]) < 1)) return false;
+    if (!match || (match[3] !== undefined && (Number(match[3]) < 1 || Number(match[3]) > max - min))) return false;
     const [, start, end] = match;
     if (start === "*") return end === undefined;
     const first = value(start);
     return !Number.isNaN(first) && (end === undefined || first <= value(end));
+  });
+}
+
+// Called only after validation; keep the author's spelling in the returned crons.
+function canonicalCronField(field, index) {
+  const [, , names = []] = CRON_FIELDS[index];
+  return field.toUpperCase().replace(/[A-Z]{3}|\d+/g, (token) => {
+    const named = names.indexOf(token);
+    return String(named < 0 ? Number(token) : named + 1);
   });
 }
 
@@ -94,12 +109,15 @@ export function readInstance(path) {
     throw new Error("crons must be an array of at most 3 distinct cron strings.");
   }
   const crons = schedules.map((cron) => cron.trim().replace(/\s+/g, " "));
-  if (new Set(crons).size !== crons.length) throw new Error("crons must contain distinct expressions after whitespace normalization.");
+  const seen = new Set();
   for (const cron of crons) {
     const fields = cron.split(" ");
     if (fields.length !== 5 || !fields.every(validCronField)) {
       throw new Error(`crons contains an invalid expression: ${JSON.stringify(cron)}. Use 5 fields with values in their allowed ranges.`);
     }
+    const key = fields.map(canonicalCronField).join(" ");
+    if (seen.has(key)) throw new Error("crons must contain distinct expressions after normalization.");
+    seen.add(key);
   }
   const author = raw.authorEmail.trim().toLowerCase();
   const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];

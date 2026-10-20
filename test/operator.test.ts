@@ -418,7 +418,7 @@ describe("the Worker config setup deploys", () => {
 
   test.each([
     { crons: ["* * * * *", "*/30 * * * *", "45 * * * *"] },
-    { crons: ["0 17 * * sun", "0 17 * * 1", "10 7 * * mon-fri"] },
+    { crons: ["0 17 * * sun", "0 17 * * 2", "10 7 * * mon-fri"] },
     { crons: ["10 7 * * 2-6", "0 15 1 * *", "0 18 * * 6L"] },
     { crons: ["0 18 * * friL", "59 23 LW * *", "0 0 * jan,Aug *"] },
     { crons: ["0 12 15W * *", "0 9 * * 2#1", "0-59/5 * * * *"] },
@@ -449,6 +449,61 @@ describe("the Worker config setup deploys", () => {
     "* * * foo *",
   ])("readInstance refuses unsupported crons (SPEC-01): %j", (cron) => {
     expect(() => readInstance(file("unsupported-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test.each([
+    "0 0 * * ſun",
+    "0 0 * * frı",
+    "0 0 * ſep *",
+  ])("readInstance refuses non-ASCII crons before case folding (SPEC-03): %j", (cron) => {
+    expect(() => readInstance(file("non-ascii-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test.each([
+    "*/60 * * * *",
+    "*/99 * * * *",
+    "0 */24 * * *",
+    "0 0 */31 * *",
+    "0 0 * */12 *",
+    "0 0 * * */7",
+  ])("readInstance refuses cron steps larger than max - min (SPEC-04a): %j", (cron) => {
+    expect(() => readInstance(file("oversized-step-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test.each([
+    "*/59 * * * *",
+    "0 */23 * * *",
+    "0 0 * * */6",
+  ])("readInstance accepts cron steps equal to max - min (SPEC-04a): %j", (cron) => {
+    const parsed = readInstance(file("boundary-step-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }));
+    expect(parsed.crons).toEqual([cron]);
+  });
+
+  test.each([
+    "0 0 L,15 * *",
+    "0 0 LW,15 * *",
+    "0 0 1,L * *",
+    "0 0 15W,1 * *",
+    "0 0 * * 6L,2#1",
+    "0 0 * * 1,2#1",
+  ])("readInstance refuses special cron forms inside lists (SPEC-04b): %j", (cron) => {
+    expect(() => readInstance(file("special-list-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test("readInstance accepts standalone L in the weekday field unchanged (SPEC-04c)", () => {
+    const parsed = readInstance(file("weekday-l-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["0 0 * * L"] }));
+    expect(parsed.crons).toEqual(["0 0 * * L"]);
+  });
+
+  test.each([
+    { crons: ["0 17 * * sun", "0 17 * * SUN"] },
+    { crons: ["17 * * * *", "017 * * * *"] },
+    { crons: ["0 17 * * 1", "0 17 * * sun"] },
+    { crons: ["0 0 * jan *", "0 0 * 1 *"] },
+  ])("readInstance refuses semantic cron duplicates and preserves accepted spelling (SPEC-04d): $crons", ({ crons }) => {
+    const parsed = readInstance(file("spelling-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["  0 17\t* * sun  "] }));
+    expect(parsed.crons).toEqual(["0 17 * * sun"]);
+    expect(() => readInstance(file("semantic-duplicate-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons }))).toThrow(/crons/);
   });
 
   test("readInstance returns crons with whitespace collapsed and trimmed (SPEC-02)", () => {

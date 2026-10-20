@@ -104,6 +104,9 @@ sits behind Cloudflare Access and therefore never previews. That is the point of
 make the Share public. The card carries `noindex`, so a preview is not an invitation for search engines to list it,
 and `robots.txt` lets a crawler read `/p/` (and nothing else on the Instance) so unfurlers can find the tags at all.
 
+A consumer caches a card per URL. To make it fetch again, change a parameter other than `v` (`?x=2`), because `v`
+selects a Version and an unknown Version answers not-found.
+
 ## Limits
 
 - A page is at most 2 MiB. A site's zip is at most 10 MiB, with at most 1,000 files of up to 5 MiB each and 25 MiB in all once unzipped; paths are at most 512 bytes. The CLI refuses anything larger before it sends it.

@@ -79,6 +79,15 @@ try {
     }
   });
 
+  // A crawler has no session, so an unfurl of a Public Share fetches this without one. If Cloudflare Access ever stops
+  // marking the path public, every shared link loses its thumbnail while the page itself still works.
+  await check("the card image answers without signing in", async () => {
+    const r = await paced(base + "/og.jpg", { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } });
+    must(r.status === 200, `answered ${r.status}`);
+    must((r.headers.get("content-type") ?? "") === "image/jpeg", `content-type ${r.headers.get("content-type")}`);
+    must((await r.arrayBuffer()).byteLength > 1024, "the body is not the poster");
+  });
+
   await check("the API without a token answers 401 with the error envelope", async () => {
     const r = await get("/api/shares");
     must(r.status === 401, `answered ${r.status}`);

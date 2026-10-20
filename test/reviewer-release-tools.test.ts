@@ -84,6 +84,8 @@ globalThis.fetch = async (url, init = {}) => {
     return new Response(null, { status: 302, headers: { location: "https://other.example/redirect-target" } });
   }
   if (path === "/api/onboard") return json({ expiry: { default_days: 30 } });
+  // The card poster: real JPEG bytes, as the Instance serves them without a session.
+  if (path === "/og.jpg") return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(2048).fill(0), 0xff, 0xd9]), { headers: { "content-type": "image/jpeg" } });
   if (path === "/api/shares" && authenticated && method === "POST") {
     if (init.headers?.["content-type"] === "application/zip") {
       const slug = scenario === "slug" ? "../not-owned" : "ABCDEFGHIJK" + (++next);

@@ -2,6 +2,23 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.11] - 2026-10-19
+
+### Added
+
+- A Public Share's link now unfurls with a large card on X, WhatsApp and the other Open Graph consumers: the Share's
+  title, its description (or a neutral sentence when it has none) and the Instance's poster image at `/og.jpg`, which
+  a crawler fetches without a session. `/og.jpg` joins the paths Cloudflare Access leaves to the Worker, `pnpm run
+  smoke` now checks it, and `docs/operator.md` says how to share a link that previews.
+
+### Fixed
+
+- A **Gated** Share deliberately gains no card: its page is behind the gate, and no title, description or image may
+  reach a crawler's cache. A mutation control and a test hold that line, and the same test shows the card appearing the
+  moment the Share is made public.
+- The viewer page read the Share without its description, so a description the publisher wrote never reached the
+  page; it is selected now and feeds both the card and the page.
+
 ## [0.1.10] - 2026-10-19
 
 ### Fixed

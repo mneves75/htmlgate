@@ -95,6 +95,14 @@ htmlgate public <slug>                                 # anyone with the link; `
 
 With several Instances, put `api_url = "https://..."` in a project's `.htmlgate/config` to choose one there. In CI, set `HTMLGATE_URL` and `HTMLGATE_TOKEN` instead of signing in. [packages/cli/README.md](packages/cli/README.md) lists every command, flag and exit code. The full list of API requests is at `GET /api/onboard` on your Instance. Agents can use the Publisher skill in [skills/htmlgate/SKILL.md](skills/htmlgate/SKILL.md).
 
+## Sharing a link
+
+A **Public** Share's link unfurls with a card: its title, its description, and the Instance's poster image, which every
+Instance serves itself at `/og.jpg` (one branded JPEG, no session needed). `htmlgate publish` and `htmlgate public`
+print that link (`/p/<slug>`); a link copied from the address bar while signed in is the gated one (`/s/<slug>`), which
+sits behind Cloudflare Access and therefore never previews. That is the point of the gate, not a defect: to preview,
+make the Share public. The card carries `noindex`, so a preview is not an invitation for search engines to list it.
+
 ## Limits
 
 - A page is at most 2 MiB. A site's zip is at most 10 MiB, with at most 1,000 files of up to 5 MiB each and 25 MiB in all once unzipped; paths are at most 512 bytes. The CLI refuses anything larger before it sends it.

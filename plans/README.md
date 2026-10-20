@@ -171,6 +171,7 @@ header; axe on the empty home; wider pt-BR test coverage; pt-BR terms in GLOSSAR
 | 14 | [Restore the landing's social preview image](014-social-preview.md) | Diagnosed; implementation pending | 13 for combined release |
 | 15 | [Package and verify a single-commit 0.1 release](015-single-commit-release.md) | Adversarial design reviewed; implementation pending | 13, 14 for final release |
 | 16 | [Page counts on the landing, with no cookie banner](016-landing-page-counts.md) | Implemented; release 0.1.1 | 15 |
+| 17 | [A Share link that shows a card when it is shared](017-share-social-card.md) | Implemented; release 0.1.11 | 16 |
 
 Considered and rejected: caching the Instance stylesheet as a separate file (every Instance response
 is `no-store` by rule, and Cloudflare compresses the inline CSS anyway); a template engine with

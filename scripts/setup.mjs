@@ -16,7 +16,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
 // /f/* holds a Gated site's files under tickets the Worker checks itself (plan 009): a Share's requests never carry the
 // Access cookie, so Access must leave them to the Worker, as it does the API and Public Shares.
-const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*"];
+// /og.jpg is the card image a crawler fetches; without the bypass, Cloudflare Access answers the unfurl with a login
+// redirect and every shared link loses its thumbnail.
+const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*", "/og.jpg"];
 // The hourly cleanup of expired Shares (plan 008).
 export const CRONS = ["17 * * * *"];
 
@@ -152,6 +154,8 @@ export function workerConfig(inst, db, { open, vars }) {
     r2_buckets: [{ binding: "BODIES", bucket_name: bodiesBucket(inst) }],
     ratelimits: [{ name: "WRITE_LIMIT", namespace_id: "1001", simple: { limit: 60, period: 60 } }],
     triggers: { crons: CRONS },
+    // The same rule as wrangler.jsonc: the card image is bundled from the landing's poster.
+    rules: [{ type: "Data", globs: ["**/*.jpg"], fallthrough: true }],
     // The Worker's own logs (only unexpected errors), but no record of every request and no traces (docs/privacy.md).
     observability: { enabled: true, logs: { enabled: true, invocation_logs: false }, traces: { enabled: false } },
     vars: { ...vars, HTMLGATE_INSTANCE: inst.name },

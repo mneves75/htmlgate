@@ -18,5 +18,8 @@
   ],
   // Hourly cleanup of expired Shares; locally it runs only when a test asks for it (/__scheduled).
   "triggers": { "crons": ["17 * * * *"] },
+  // The card image the Instance serves at /og.jpg is the landing's poster, imported as a data module and bundled into
+  // the Worker: one asset, one source, no runtime dependency on another origin.
+  "rules": [{ "type": "Data", "globs": ["**/*.jpg"], "fallthrough": true }],
   "observability": { "enabled": true }
 }

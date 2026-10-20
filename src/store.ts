@@ -461,11 +461,12 @@ export class Store {
   /** A viewable Share with its kept Versions, newest first, or null. */
   async viewableWithVersions(author: string, slug: string, publicOnly: boolean) {
     const r = await this.db
-      .prepare(`SELECT d.slug, d.title, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind FROM shares d
+      .prepare(`SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind
+        FROM shares d
         JOIN versions v ON v.slug = d.slug
         WHERE d.slug = ? AND d.author = ? AND ${live("d.")} ${publicOnly ? "AND d.public = 1" : ""} ORDER BY v.n DESC`)
       .bind(slug, author)
-      .all<{ slug: string; title: string; public: number; latest_version: number; updated_at: number; expires_at: number | null; n: number; kind: Kind }>();
+      .all<{ slug: string; title: string; description: string | null; public: number; latest_version: number; updated_at: number; expires_at: number | null; n: number; kind: Kind }>();
     const first = r.results[0];
     return first ? { share: first, kept: r.results.map((x) => x.n), kinds: new Map(r.results.map((x) => [x.n, x.kind])) } : null;
   }

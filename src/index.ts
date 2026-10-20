@@ -5,7 +5,8 @@ import { handleApi } from "./api";
 import { readConfig, type Config, type Env, type Language } from "./config";
 import { contentTypeFor, fail, readCapped, redirect, stream, text } from "./http";
 import { POSITIVE, SLUG, newToken, randomHex, sha256Hex } from "./ids";
-import { SHARE_SANDBOX, HOME_SHARES, homePage, metricsPage, notFoundPage, tokensPage, viewerPage, type HomeNote, type PageResult, type Visitor } from "./pages";
+import ogPoster from "../site/public/media/htmlgate-15s.jpg";
+import { SHARE_SANDBOX, HOME_SHARES, OG_IMAGE, homePage, metricsPage, notFoundPage, tokensPage, viewerPage, type HomeNote, type PageResult, type Visitor } from "./pages";
 import { CLEANUP_BATCH, Store } from "./store";
 import { importTicketKey, openTicket, sealTicket, TICKET_TTL_MS } from "./ticket";
 import { siteRequestPath } from "./zip";
@@ -17,6 +18,9 @@ async function html(status: number, page: PageResult | Promise<PageResult>): Pro
 
 const notFound = (lang: Language, opts: { signInPath?: string; home?: "author" | "viewer" } = {}) => html(404, notFoundPage(lang, opts));
 
+/** The card image's type: one poster for the whole Instance, bundled from the landing's artwork. Not exported: this
+ * module's exports are the Worker's handlers. */
+const OG_IMAGE_TYPE = "image/jpeg";
 const VIEW = /^\/(s|p)\/([A-Za-z0-9]{12})(\/raw)?$/;
 /** How many Shares the report lists: every one an Instance is likely to hold, and its own row count, not a page. */
 const METRICS_SHARES = 500;
@@ -79,6 +83,13 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
 
   const insecure = cleartext(req, url);
   if (insecure) return insecure;
+
+  if (path === OG_IMAGE && (req.method === "GET" || req.method === "HEAD")) {
+    // The card image every shared Public Share points at: one branded poster, no session, cached for good.
+    return new Response(ogPoster, {
+      headers: { "content-type": OG_IMAGE_TYPE, "cache-control": "public, max-age=31536000, immutable" },
+    });
+  }
 
   if (path === "/robots.txt" && req.method === "GET") {
     return text(200, "User-agent: *\nDisallow: /\n", "text/plain; charset=utf-8");
@@ -289,7 +300,7 @@ async function serveShare(env: Env, cfg: Config, url: URL, prefix: "s" | "p", sl
   if (frame === null) return null;
   // Only the Author, behind the gate, may erase: never on a public path, which needs no sign-in.
   const erase = prefix === "s" && who === cfg.author;
-  return html(200, viewerPage(cfg.language, found.share, prefix, n, found.kept, found.share.latest_version, frame, erase));
+  return html(200, viewerPage(cfg.language, found.share, prefix, n, found.kept, found.share.latest_version, frame, erase, url.origin));
 }
 
 /**

@@ -14,6 +14,11 @@ function escapeHtml(s: string): string {
 /** What a Share may do, in the viewer's iframe and as a top-level page. No allow-same-origin: issue #12. */
 export const SHARE_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
 
+/** The card image and its real size: the landing's 1600 by 900 poster, bundled and served at /og.jpg. */
+export const OG_IMAGE = "/og.jpg";
+export const OG_IMAGE_WIDTH = 1600;
+export const OG_IMAGE_HEIGHT = 900;
+
 /** How many Shares the Author's home lists, most recently updated first. */
 export const HOME_SHARES = 50;
 
@@ -60,6 +65,9 @@ const en = {
   requestsListed: "Every request is listed at",
   viewerTitle: "You're signed in",
   viewerLead: "Open a Share with the link its Author sent you. This Instance keeps no list of Shares, so there is nothing to browse here.",
+  // The card a Public Share unfurls to: a description when the publisher wrote none, and the poster's alt text.
+  cardLead: "Published with htmlgate, in its author's own Cloudflare account.",
+  cardImageAlt: "The htmlgate mark and the address htmlgate.com.",
   metrics: "Metrics",
   metricsTitle: "Metrics",
   metricsLead: "How often each of this Instance's Shares was opened. The count happens on the server, from the request the browser already sends: no cookie, no script, and no visitor, address or identifier, so it says how often, never by whom.",
@@ -164,6 +172,8 @@ const ptBR: typeof en = {
   requestsListed: "Todos os pedidos estão listados em",
   viewerTitle: "Você entrou",
   viewerLead: "Abra um Share pelo link que o autor mandou. Esta Instância não mostra uma lista de Shares, então não há nada para navegar aqui.",
+  cardLead: "Publicada com o htmlgate, na conta Cloudflare do próprio autor.",
+  cardImageAlt: "A marca htmlgate e o endereço htmlgate.com.",
   metrics: "Métricas",
   metricsTitle: "Métricas",
   metricsLead: "Quantas vezes cada Share desta Instância foi aberto. A contagem é no servidor, a partir do pedido que o navegador já manda: sem cookie, sem script e sem visitante, endereço ou identificador, então ela diz quantas vezes, nunca por quem.",
@@ -520,7 +530,45 @@ const ARROW = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke
 /** The release an Operator is running. Every page of the Instance's own UI carries it. */
 const VER = `htmlgate ${VERSION}`;
 
-async function layout(lang: Language, title: string, body: string, opts: { bodyClass?: string; frames?: boolean; sandbox?: boolean } = {}): Promise<PageResult> {
+/** What a link unfurls to: the Open Graph and X card a crawler reads before any script runs. */
+export interface SocialCard {
+  title: string;
+  description: string;
+  /** The canonical absolute URL of the page being shared. */
+  url: string;
+  /** The absolute HTTPS URL of the image, its bytes' size and a description of what it shows. */
+  image: string;
+  imageAlt: string;
+  imageWidth: number;
+  imageHeight: number;
+  siteName: string;
+}
+
+/**
+ * The card's elements. Titles and descriptions are the publisher's text, so they are escaped; the image is one
+ * branded poster the Instance serves itself. Both X and the Open Graph consumers in messaging apps read these before
+ * any script, which is the point: the page itself runs none.
+ */
+function cardMeta(c: SocialCard): string {
+  const e = (s: string) => escapeHtml(s);
+  return `<meta property="og:type" content="website">
+<meta property="og:site_name" content="${e(c.siteName)}">
+<meta property="og:title" content="${e(c.title)}">
+<meta property="og:description" content="${e(c.description)}">
+<meta property="og:url" content="${e(c.url)}">
+<meta property="og:image" content="${e(c.image)}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="${c.imageWidth}">
+<meta property="og:image:height" content="${c.imageHeight}">
+<meta property="og:image:alt" content="${e(c.imageAlt)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${e(c.title)}">
+<meta name="twitter:description" content="${e(c.description)}">
+<meta name="twitter:image" content="${e(c.image)}">
+<meta name="twitter:image:alt" content="${e(c.imageAlt)}">`;
+}
+
+async function layout(lang: Language, title: string, body: string, opts: { bodyClass?: string; frames?: boolean; sandbox?: boolean; card?: SocialCard } = {}): Promise<PageResult> {
   const html = `<!doctype html>
 <html lang="${lang}">
 <head>
@@ -528,7 +576,7 @@ async function layout(lang: Language, title: string, body: string, opts: { bodyC
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex, nofollow">
-<title>${escapeHtml(title)}</title>
+<title>${escapeHtml(title)}</title>${opts.card ? "\n" + cardMeta(opts.card) : ""}
 <style>${CSS}</style>
 </head>
 <body${opts.bodyClass ? ` class="${opts.bodyClass}"` : ""}>
@@ -801,9 +849,22 @@ ${items}
 }
 
 /** `frame`: where the shown Version opens when it is a site (its files' URL); a page opens from its raw URL. */
-export function viewerPage(lang: Language, d: { slug: string; title: string; public: number; updated_at: number; expires_at: number | null }, prefix: "s" | "p", shown: number,
-  versions: number[], latest: number, frame?: string, erase = false): Promise<PageResult> {
+export function viewerPage(lang: Language, d: { slug: string; title: string; description?: string | null; public: number; updated_at: number; expires_at: number | null }, prefix: "s" | "p", shown: number,
+  versions: number[], latest: number, frame?: string, erase = false, origin = ""): Promise<PageResult> {
   const t = STRINGS[lang];
+  // Only a Public Share unfurls: its page is reachable without signing in, and its title is already visible to anyone
+  // with the link. A Gated Share's page is behind the gate and stays bare - no title, description or image to cache.
+  const written = d.description?.trim();
+  const card: SocialCard | undefined = prefix === "p" && d.public === 1 && origin !== "" ? {
+    title: d.title,
+    description: written ? written : t.cardLead,
+    url: `${origin}/p/${d.slug}`,
+    image: `${origin}${OG_IMAGE}`,
+    imageAlt: t.cardImageAlt,
+    imageWidth: OG_IMAGE_WIDTH,
+    imageHeight: OG_IMAGE_HEIGHT,
+    siteName: "htmlgate",
+  } : undefined;
   const latestHref = `/${prefix}/${d.slug}`;
   const items = versions.map((n) => {
     const href = n === latest ? latestHref : `/${prefix}/${d.slug}?v=${n}`;
@@ -834,5 +895,5 @@ ${erase ? `<details class="confirm">
 </details>
 ` : ""}</div>
 </header>
-${shown === latest ? "" : `<p class="older" role="status">${t.older(shown, latest)} <a href="${latestHref}">${t.showLatest}</a></p>\n`}<iframe class="share" sandbox="${SHARE_SANDBOX}" src="${escapeHtml(frame ?? raw)}" id="share" title="${escapeHtml(d.title)}"></iframe>`, { bodyClass: "viewer", frames: true });
+${shown === latest ? "" : `<p class="older" role="status">${t.older(shown, latest)} <a href="${latestHref}">${t.showLatest}</a></p>\n`}<iframe class="share" sandbox="${SHARE_SANDBOX}" src="${escapeHtml(frame ?? raw)}" id="share" title="${escapeHtml(d.title)}"></iframe>`, { bodyClass: "viewer", frames: true, ...(card ? { card } : {}) });
 }

@@ -32,6 +32,7 @@ Before any remote write, an existing Worker's ownership must be unambiguous: the
 - `language` is optional: `"en"` (the default) or `"pt-BR"`. It sets the language of the Instance's own pages (home, tokens, the Share viewer, not-found) for everyone who opens them. The API, the CLI, Cloudflare's sign-in page and the JSON errors an Instance answers with when it is misconfigured or fails stay in English. Any other value makes the Instance refuse everything, like any other malformed setting. Run setup again to change it.
 
 - `expiryDays` is optional: how many days a Share lives after its latest publish, unless a Publisher sets a date. 30 when left out; 0 means Shares never expire on their own. A whole number up to 3650. Changing it applies to each Share from its next publish.
+- `crons` is optional: the cleanup schedules, default `["17 * * * *"]` (hourly). At most 3 distinct strings, each with 5 whitespace-separated cron fields. Set `[]` to turn cleanup off, for example for a staging Instance whose Cron Triggers are kept at zero. Without cleanup, expired Shares stay hidden, but their bodies stay in the bucket and count toward the storage cap.
 
 The file is git-ignored. Keep it out of commits: it holds email addresses.
 

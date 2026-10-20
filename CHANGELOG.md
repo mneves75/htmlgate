@@ -2,6 +2,14 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `instance.json` accepts optional `crons` cleanup schedules, keeping the hourly default when omitted. Set `[]` to
+  remove every Cron Trigger, for example on a staging Instance. Expired Shares stay hidden without cleanup, but their
+  bodies remain in the bucket and count toward the storage cap.
+
 ## [0.1.16] - 2026-10-20
 
 ### Fixed

@@ -56,9 +56,20 @@ export function readInstance(path) {
   if (!Number.isSafeInteger(expiryDays) || expiryDays < 0 || expiryDays > 3650) {
     throw new Error("expiryDays must be a whole number of days from 0 (never) to 3650.");
   }
+  const schedules = raw.crons === undefined ? [...CRONS] : raw.crons;
+  if (!Array.isArray(schedules) || schedules.length > 3 || !schedules.every((cron) => typeof cron === "string")) {
+    throw new Error("crons must be an array of at most 3 distinct cron strings.");
+  }
+  const crons = schedules.map((cron) => cron.trim());
+  if (new Set(crons).size !== crons.length || !crons.every((cron) => {
+    const fields = cron.split(/\s+/);
+    return fields.length === 5 && fields.every((field) => /^[0-9A-Za-z*,/?#-]+$/.test(field));
+  })) {
+    throw new Error("crons must contain distinct strings of exactly 5 whitespace-separated cron fields.");
+  }
   const author = raw.authorEmail.trim().toLowerCase();
   const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];
-  return { name: raw.name, author, allowlist, domain, language, expiryDays };
+  return { name: raw.name, author, allowlist, domain, language, expiryDays, crons };
 }
 
 /** The settings the deployed Worker reads (src/config.ts). */
@@ -153,7 +164,8 @@ export function workerConfig(inst, db, { open, vars }) {
     d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid, migrations_dir: "../migrations" }],
     r2_buckets: [{ binding: "BODIES", bucket_name: bodiesBucket(inst) }],
     ratelimits: [{ name: "WRITE_LIMIT", namespace_id: "1001", simple: { limit: 60, period: 60 } }],
-    triggers: { crons: CRONS },
+    // An explicit [] removes every Cron Trigger; undefined triggers would leave existing ones in place.
+    triggers: { crons: inst.crons ?? CRONS },
     // The same rule as wrangler.jsonc: the card image is bundled from the landing's poster.
     rules: [{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }],
     // The Worker's own logs (only unexpected errors), but no record of every request and no traces (docs/privacy.md).

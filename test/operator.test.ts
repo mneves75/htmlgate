@@ -17,11 +17,12 @@ const file = (name: string, body: unknown) => {
   writeFileSync(p, JSON.stringify(body));
   return p;
 };
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("the instance file", () => {
   test("names the Author and the Allowlist; the Author is always on it; emails are lowercased", () => {
     const inst = readInstance(file("ok.json", { name: "my-bin", authorEmail: "Me@Example.com", allowlist: ["A@b.c"] }));
-    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30 });
+    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30, crons: ["17 * * * *"] });
   });
 
   test("sets the Instance's language: English unless the file says pt-BR", () => {
@@ -391,6 +392,48 @@ describe("the Worker config setup deploys", () => {
 
   test("every deploy runs the hourly cleanup of expired Shares", () => {
     for (const open of [false, true]) expect(workerConfig(inst, db, { open, vars: {} }).triggers).toEqual({ crons: ["17 * * * *"] });
+  });
+
+  test.each([
+    { label: "omitted", fields: {}, expected: ["17 * * * *"] },
+    { label: "empty", fields: { crons: [] }, expected: [] },
+    { label: "a valid list", fields: { crons: ["*/15 * * * *", "0 0 * * 1-5", "0,30 8-18/2 * * *"] }, expected: ["*/15 * * * *", "0 0 * * 1-5", "0,30 8-18/2 * * *"] },
+  ])("readInstance returns crons when $label", ({ fields, expected }) => {
+    const parsed = readInstance(file("crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], ...fields }));
+    expect(parsed.crons).toEqual(expected);
+  });
+
+  test.each([
+    { label: "a string instead of an array", crons: "17 * * * *" },
+    { label: "null instead of an array", crons: null },
+    { label: "an object instead of an array", crons: {} },
+    { label: "a non-string entry", crons: [17] },
+    { label: "four fields", crons: ["17 * * *"] },
+    { label: "six fields", crons: ["17 * * * * *"] },
+    { label: "duplicate entries", crons: ["17 * * * *", "17 * * * *"] },
+    { label: "more than three entries", crons: ["0 * * * *", "15 * * * *", "30 * * * *", "45 * * * *"] },
+  ])("readInstance refuses crons with $label", ({ crons }) => {
+    expect(() => readInstance(file("bad-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons }))).toThrow(/crons/);
+  });
+
+  test.each([false, true])("an Instance with no crons explicitly removes every trigger, open=%s", (open) => {
+    const config = workerConfig({ ...inst, crons: [] }, db, { open, vars: {} });
+    expect(Object.hasOwn(config, "triggers")).toBe(true);
+    expect(Object.hasOwn(config.triggers, "crons")).toBe(true);
+    expect(config.triggers).toEqual({ crons: [] });
+  });
+
+  test.each([
+    { name: "htmlgate-staging", fields: { crons: [] }, expected: [] },
+    { name: "htmlgate-production", fields: {}, expected: ["17 * * * *"] },
+  ])("Wrangler resolves $name crons from the instance file", async ({ name, fields, expected }) => {
+    const { unstable_readConfig } = await import("wrangler");
+    const parsed = readInstance(file(`${name}.json`, { name, authorEmail: "a@b.c", allowlist: [], ...fields }));
+    const config = workerConfig(parsed, { name: `${name}-db`, uuid: "00000000-0000-0000-0000-000000000000" }, { open: true, vars: {} });
+    config.main = join(process.cwd(), "src/index.ts");
+    config.d1_databases[0].migrations_dir = join(process.cwd(), "migrations");
+    const resolved = unstable_readConfig({ config: file(`${name}.wrangler.jsonc`, config) });
+    expect(resolved.triggers.crons).toEqual(expected);
   });
 
   test("every deploy binds the Instance's own R2 bucket for Share bodies", () => {

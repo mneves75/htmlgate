@@ -2,6 +2,17 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.15] - 2026-10-20
+
+### Fixed
+
+- The four tests that do dozens of round trips or multi-megabyte bodies in `test/limits.test.ts` now carry a 60-second
+  timeout. On a loaded three-core runner one of them hit Vitest's five-second default during the mutation gate, which
+  the gate can only report as BROKEN, and the release could not be certified. A slower machine now reports a failure,
+  not a timeout.
+
+0.1.14 was tagged but never deployed: its only open question was this gate run.
+
 ## [0.1.14] - 2026-10-20
 
 ### Fixed

@@ -41,7 +41,7 @@ describe("an Instance missing its settings fails closed", () => {
 });
 
 describe("the storage cap", () => {
-  test("a publish that would pass the Instance's cap is refused with quota_exceeded", async () => {
+  test("a publish that would pass the Instance's cap is refused with quota_exceeded", { timeout: 60_000 }, async () => {
     const small = await startInstance(settings(teamUrl, { STORAGE_LIMIT_BYTES: String(2_500_000) }));
     extra.push(small);
     const base = small.base;
@@ -59,7 +59,7 @@ describe("the storage cap", () => {
     expect(((await third.json()) as any).error.code).toBe("quota_exceeded");
   });
 
-  test("concurrent publishes cannot pass the cap together: the room is checked inside the write", async () => {
+  test("concurrent publishes cannot pass the cap together: the room is checked inside the write", { timeout: 60_000 }, async () => {
     const small = await startInstance(settings(teamUrl, { STORAGE_LIMIT_BYTES: String(2_500_000) }));
     extra.push(small);
     const base = small.base;
@@ -89,7 +89,7 @@ describe("the storage cap", () => {
 });
 
 describe("request bodies", () => {
-  test("a body that never ends is refused once it passes the cap, without waiting for its end", async () => {
+  test("a body that never ends is refused once it passes the cap, without waiting for its end", { timeout: 60_000 }, async () => {
     const token = await mintToken("endless");
     const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
     // One attempt: an endless body as far as the Worker can tell, stopping once the answer is in (or at 200 MiB) so it
@@ -138,7 +138,7 @@ describe("request bodies", () => {
 });
 
 describe("the write rate limit", () => {
-  test("a token gets 429 with Retry-After after 60 changes in a minute, and reads still work", async () => {
+  test("a token gets 429 with Retry-After after 60 changes in a minute, and reads still work", { timeout: 60_000 }, async () => {
     const call = api(await mintToken("busy"));
     const { json: d } = await call("POST", "/api/shares", { html: page("0"), title: "busy" });
     // The limiter counts a rolling minute, so the burst has to finish inside it. Sent one at a time, 70 writes can each

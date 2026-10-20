@@ -2,6 +2,20 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.12] - 2026-10-19
+
+### Fixed
+
+- The card image kept the Instance's hardening headers (`nosniff`, HSTS, referrer policy) and is the one response whose
+  cache policy is not `no-store`; `AGENTS.md` and `PRODUCT.md` now name that exception instead of contradicting it.
+- The image's bundling rule names the media directory rather than every JPEG, and a test asserts the generated deploy
+  config keeps it, so development and deployment cannot drift.
+- Tests now cover the description's escaping in the card, the public flag as the guard that enables it on the public
+  path, and the image's headers. `docs/operator.md` says the description goes to the card and not to the page, and that
+  re-gating a Share does not clear a crawler's cache.
+
+0.1.11 was tagged but never deployed.
+
 ## [0.1.11] - 2026-10-19
 
 ### Added

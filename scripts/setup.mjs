@@ -155,7 +155,7 @@ export function workerConfig(inst, db, { open, vars }) {
     ratelimits: [{ name: "WRITE_LIMIT", namespace_id: "1001", simple: { limit: 60, period: 60 } }],
     triggers: { crons: CRONS },
     // The same rule as wrangler.jsonc: the card image is bundled from the landing's poster.
-    rules: [{ type: "Data", globs: ["**/*.jpg"], fallthrough: true }],
+    rules: [{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }],
     // The Worker's own logs (only unexpected errors), but no record of every request and no traces (docs/privacy.md).
     observability: { enabled: true, logs: { enabled: true, invocation_logs: false }, traces: { enabled: false } },
     vars: { ...vars, HTMLGATE_INSTANCE: inst.name },

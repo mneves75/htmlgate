@@ -68,6 +68,16 @@ live checks: `Twitterbot` GET of the public page, the image, and the gated page.
 - Five years out, a static poster plus correct metadata stays inspectable, cacheable and dependency-free; the
   per-Share renderer is a product decision with a cost, not a fix for a missing thumbnail.
 
+## Review notes absorbed
+
+- The image route keeps every `BASE` header (`src/http.ts`) and replaces only the cache policy; `AGENTS.md`,
+  `PRODUCT.md` and this plan's own text now name that single exception to "every Instance response is `no-store`".
+- The `Data` glob names `**/media/*.jpg` rather than every JPEG, and a test asserts the generated deploy config keeps
+  the rule, so dev and deploy cannot drift.
+- Tests now cover the description's escaping, the `public` conjunct on the public path, and the image's hardening
+  headers. The description appears in the card but not on the page; `docs/operator.md` says so, since re-gating does
+  not clear a crawler's cache.
+
 ## Current status
 
 Implemented on `fix/share-social-card`, together with the metadata, the image route, the Access bypass, the

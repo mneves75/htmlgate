@@ -445,6 +445,12 @@ test("setup names R2's 'not enabled' answer, and only that, as a missing subscri
 describe("the Access application setup creates", () => {
   const app = accessApp({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"] }, "w123");
 
+  test("the deployed config keeps the rule that bundles the card poster", () => {
+    // Without it, `wrangler deploy` builds the Worker without the image module and the card points at nothing.
+    const config = workerConfig({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com"] }, { name: "my-bin-db", uuid: "00000000-0000-0000-0000-000000000000" }, { open: true, vars: {} });
+    expect(config.rules).toEqual([{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }]);
+  });
+
   test("gates the Worker everywhere except the API, the public prefix and the card image", () => {
     expect(app.destinations).toEqual([{
       type: "worker", worker_id: "w123",

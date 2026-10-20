@@ -3,7 +3,7 @@
 import { person } from "./access";
 import { handleApi } from "./api";
 import { readConfig, type Config, type Env, type Language } from "./config";
-import { contentTypeFor, fail, readCapped, redirect, stream, text } from "./http";
+import { BASE, contentTypeFor, fail, readCapped, redirect, stream, text } from "./http";
 import { POSITIVE, SLUG, newToken, randomHex, sha256Hex } from "./ids";
 import ogPoster from "../site/public/media/htmlgate-15s.jpg";
 import { SHARE_SANDBOX, HOME_SHARES, OG_IMAGE, homePage, metricsPage, notFoundPage, tokensPage, viewerPage, type HomeNote, type PageResult, type Visitor } from "./pages";
@@ -87,7 +87,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (path === OG_IMAGE && (req.method === "GET" || req.method === "HEAD")) {
     // The card image every shared Public Share points at: one branded poster, no session, cached for good.
     return new Response(ogPoster, {
-      headers: { "content-type": OG_IMAGE_TYPE, "cache-control": "public, max-age=31536000, immutable" },
+      headers: { ...BASE, "content-type": OG_IMAGE_TYPE, "cache-control": "public, max-age=31536000, immutable" },
     });
   }
 

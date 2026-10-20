@@ -4,6 +4,7 @@
 import { describe, expect, test } from "vitest";
 // @ts-expect-error plain JavaScript module
 import { accessApp } from "../scripts/setup.mjs";
+import { viewerPage } from "../src/pages";
 import { asPerson, api, base, mintToken } from "./helpers";
 
 const CRAWLERS = ["Twitterbot/1.0", "WhatsApp/2.23.20.0", "facebookexternalhit/1.1"];
@@ -53,6 +54,25 @@ describe("a Public Share's link unfurls", () => {
     expect(html).not.toContain("<img src=x");
   });
 
+  test("the card needs the public flag, not just the public path", async () => {
+    // `/p/` already refuses a Gated Share in the store, so this asserts the page's own guard: a view rendered on the
+    // public path for a Share that is not public carries no card at all.
+    const gated = { slug: "AAAAAAAAAAAA", title: "Still gated", public: 0, updated_at: 0, expires_at: null };
+    const { body } = await viewerPage("en", gated, "p", 1, [1], 1, undefined, false, "https://instance.example");
+    expect(body).not.toContain('property="og:');
+    expect(body).not.toContain('name="twitter:');
+    const open = { ...gated, public: 1 };
+    const shown = await viewerPage("en", open, "p", 1, [1], 1, undefined, false, "https://instance.example");
+    expect(shown.body).toContain('name="twitter:card"');
+  });
+
+  test("a description with markup is escaped in the card too", async () => {
+    const { slug } = await share('Escapes & co', true, 'Stop "><script>alert(1)</script> now');
+    const html = await (await fetch(`${base}/p/${slug}`)).text();
+    expect(meta(html, "property", "og:description")).toBe("Stop &quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt; now");
+    expect(html).not.toContain("<script>alert(1)");
+  });
+
   test("a Share with no description carries the Instance's own wording", async () => {
     const { slug } = await share("No description", true);
     const html = await (await fetch(`${base}/p/${slug}`)).text();
@@ -87,6 +107,10 @@ describe("the card image is fetchable without signing in", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/jpeg");
     expect(res.headers.get("cache-control")).toContain("immutable");
+    // Every Instance response keeps its hardening headers, this one included; only the cache policy is the exception.
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("strict-transport-security")).toContain("max-age=31536000");
+    expect(res.headers.get("referrer-policy")).toBe("same-origin");
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect(bytes.length).toBeGreaterThan(1024);
     // A JPEG starts with SOI (FF D8) and ends with EOI (FF D9): the file is there, not an error page.

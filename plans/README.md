@@ -174,7 +174,7 @@ header; axe on the empty home; wider pt-BR test coverage; pt-BR terms in GLOSSAR
 | 17 | [A Share link that shows a card when it is shared](017-share-social-card.md) | Implemented; release 0.1.11 | 16 |
 
 Considered and rejected: caching the Instance stylesheet as a separate file (every Instance response
-is `no-store` by rule, and Cloudflare compresses the inline CSS anyway); a template engine with
+is `no-store` by rule, but for the card image at `/og.jpg`, and Cloudflare compresses the inline CSS anyway); a template engine with
 automatic escaping (an abstraction nobody asked for in security-pinned code; tests and mutations
 cover escaping); per-visitor language from `Accept-Language` (the owner chose a per-Instance setting);
 a committed screenshot script (agent-browser tests already render every page; revisit if visual

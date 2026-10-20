@@ -1,5 +1,5 @@
-/** Headers on every response the Instance makes. */
-const BASE: Record<string, string> = {
+/** Headers on every response the Instance makes. Exported for the one response that replaces its cache policy. */
+export const BASE: Record<string, string> = {
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
   // Our own pages send their address to themselves only. A form POST under no-referrer carries

@@ -37,7 +37,9 @@ function validCronField(field, index) {
     const n = names.includes(token) ? names.indexOf(token) + 1 : /^\d+$/.test(token) ? Number(token) : NaN;
     return n >= min && n <= max ? n : NaN;
   };
-  field = field.toUpperCase();
+  // Only 3-letter names are case-insensitive. L, W and # stay as typed: the config keeps the author's spelling, and
+  // Cloudflare refuses lowercase l and w.
+  field = field.replace(/[a-z]{3}/gi, (name) => name.toUpperCase());
   // These special forms must occupy the whole field, never an item in a list.
   if (index === 2) {
     if (field === "L" || field === "LW") return true;

@@ -490,6 +490,35 @@ describe("the Worker config setup deploys", () => {
     expect(() => readInstance(file("special-list-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
   });
 
+  test.each([
+    "0 0 l * *",
+    "0 0 lw * *",
+    "0 0 Lw * *",
+    "0 0 lW * *",
+    "0 0 15w * *",
+    "0 0 * * 6l",
+    "0 0 * * fril",
+    "0 0 * * FRIl",
+    "0 0 * * l",
+    "0 0 * * 2#1l",
+  ])("readInstance refuses lowercase special cron forms, since the config keeps the spelling (SPEC-05): %j", (cron) => {
+    expect(() => readInstance(file("lowercase-special-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test.each([
+    "0 0 L * *",
+    "0 0 LW * *",
+    "0 0 15W * *",
+    "0 0 * * 6L",
+    "0 0 * * friL",
+    "0 0 * * FriL",
+    "0 0 * * L",
+    "0 0 * jan-Mar mOn-fri",
+  ])("readInstance accepts uppercase special forms with names in any case (SPEC-05): %j", (cron) => {
+    const parsed = readInstance(file("uppercase-special-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }));
+    expect(parsed.crons).toEqual([cron]);
+  });
+
   test("readInstance accepts standalone L in the weekday field unchanged (SPEC-04c)", () => {
     const parsed = readInstance(file("weekday-l-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["0 0 * * L"] }));
     expect(parsed.crons).toEqual(["0 0 * * L"]);

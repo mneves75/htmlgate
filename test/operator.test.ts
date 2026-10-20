@@ -416,6 +416,50 @@ describe("the Worker config setup deploys", () => {
     expect(() => readInstance(file("bad-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons }))).toThrow(/crons/);
   });
 
+  test.each([
+    { crons: ["* * * * *", "*/30 * * * *", "45 * * * *"] },
+    { crons: ["0 17 * * sun", "0 17 * * 1", "10 7 * * mon-fri"] },
+    { crons: ["10 7 * * 2-6", "0 15 1 * *", "0 18 * * 6L"] },
+    { crons: ["0 18 * * friL", "59 23 LW * *", "0 0 * jan,Aug *"] },
+    { crons: ["0 12 15W * *", "0 9 * * 2#1", "0-59/5 * * * *"] },
+    { crons: ["17 * * * *"] },
+  ])("readInstance returns Cloudflare-supported crons: $crons", ({ crons }) => {
+    const parsed = readInstance(file("supported-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons }));
+    expect(parsed.crons).toEqual(crons);
+  });
+
+  test.each([
+    "99 * * * *",
+    "60 * * * *",
+    "* 24 * * *",
+    "* * 0 * *",
+    "* * 32 * *",
+    "* * * 0 *",
+    "* * * 13 * ",
+    "* * * * 0",
+    "* * * * 8",
+    "abc def ghi jkl mno",
+    "? * * * *",
+    "#1 * * * *",
+    "L * * * *",
+    "* * * * W",
+    "*/0 * * * *",
+    "5-1 * * * *",
+    "1, * * * *",
+    "* * * foo *",
+  ])("readInstance refuses unsupported crons (SPEC-01): %j", (cron) => {
+    expect(() => readInstance(file("unsupported-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test("readInstance returns crons with whitespace collapsed and trimmed (SPEC-02)", () => {
+    const parsed = readInstance(file("whitespace-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["  17\t*  * * *  "] }));
+    expect(parsed.crons).toEqual(["17 * * * *"]);
+  });
+
+  test("readInstance refuses crons duplicated after whitespace normalization (SPEC-02)", () => {
+    expect(() => readInstance(file("duplicate-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["17 * * * *", "17  * * * *"] }))).toThrow(/crons/);
+  });
+
   test.each([false, true])("an Instance with no crons explicitly removes every trigger, open=%s", (open) => {
     const config = workerConfig({ ...inst, crons: [] }, db, { open, vars: {} });
     expect(Object.hasOwn(config, "triggers")).toBe(true);

@@ -22,6 +22,39 @@ const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*"];
 // The hourly cleanup of expired Shares (plan 008).
 export const CRONS = ["17 * * * *"];
 
+function validCronField(field, index) {
+  const [min, max, names = []] = [
+    [0, 59],
+    [0, 23],
+    [1, 31],
+    [1, 12, "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ")],
+    [1, 7, "SUN MON TUE WED THU FRI SAT".split(" ")],
+  ][index];
+  const value = (token) => {
+    const n = names.includes(token) ? names.indexOf(token) + 1 : /^\d+$/.test(token) ? Number(token) : NaN;
+    return n >= min && n <= max ? n : NaN;
+  };
+  return field.toUpperCase().split(",").every((item) => {
+    if (index === 2) {
+      if (item === "L" || item === "LW") return true;
+      const nearest = /^(\d+)W$/.exec(item);
+      if (nearest) return !Number.isNaN(value(nearest[1]));
+    }
+    if (index === 4) {
+      const last = /^(\d+|[A-Z]{3})L$/.exec(item);
+      if (last) return !Number.isNaN(value(last[1]));
+      const nth = /^(\d+)#[1-5]$/.exec(item);
+      if (nth) return !Number.isNaN(value(nth[1]));
+    }
+    const match = /^(\*|[0-9A-Z]+)(?:-([0-9A-Z]+))?(?:\/(\d+))?$/.exec(item);
+    if (!match || (match[3] !== undefined && Number(match[3]) < 1)) return false;
+    const [, start, end] = match;
+    if (start === "*") return end === undefined;
+    const first = value(start);
+    return !Number.isNaN(first) && (end === undefined || first <= value(end));
+  });
+}
+
 /** The Wrangler config setup writes for one Instance. One file each, so Instances set up from one checkout never share it. */
 export const generatedConfig = (inst) => join(ROOT, ".instance", `${inst.name}.wrangler.jsonc`);
 
@@ -60,12 +93,13 @@ export function readInstance(path) {
   if (!Array.isArray(schedules) || schedules.length > 3 || !schedules.every((cron) => typeof cron === "string")) {
     throw new Error("crons must be an array of at most 3 distinct cron strings.");
   }
-  const crons = schedules.map((cron) => cron.trim());
-  if (new Set(crons).size !== crons.length || !crons.every((cron) => {
-    const fields = cron.split(/\s+/);
-    return fields.length === 5 && fields.every((field) => /^[0-9A-Za-z*,/?#-]+$/.test(field));
-  })) {
-    throw new Error("crons must contain distinct strings of exactly 5 whitespace-separated cron fields.");
+  const crons = schedules.map((cron) => cron.trim().replace(/\s+/g, " "));
+  if (new Set(crons).size !== crons.length) throw new Error("crons must contain distinct expressions after whitespace normalization.");
+  for (const cron of crons) {
+    const fields = cron.split(" ");
+    if (fields.length !== 5 || !fields.every(validCronField)) {
+      throw new Error(`crons contains an invalid expression: ${JSON.stringify(cron)}. Use 5 fields with values in their allowed ranges.`);
+    }
   }
   const author = raw.authorEmail.trim().toLowerCase();
   const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];

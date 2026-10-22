@@ -10,7 +10,7 @@ This guide is for the Operator: the person who sets up an Instance in a Cloudfla
 |---|---|---|
 | D1 database | `<name>-db` | Holds Shares, Versions' metadata and tokens. Migrations are applied on every run. |
 | R2 bucket | `<name>-bodies` | Holds each Version's body, one private object per Version: a page's HTML or a site's zip. It needs the account's R2 subscription. |
-| Worker | `<name>` | Reachable at `domain` if you set one, and only there: its workers.dev hostname is off. Without a `domain`, reachable at `https://<name>.<subdomain>.workers.dev`. Preview URLs are off. Workers Logs keep only the Worker's unexpected errors: per-request invocation logs and traces are off (see [privacy.md](privacy.md)). It holds one secret, `TICKET_KEY`, and runs an hourly Cron Trigger that purges expired Shares. |
+| Worker | `<name>` | Reachable at `domain` if you set one, and only there: its workers.dev hostname is off. Without a `domain`, reachable at `https://<name>.<subdomain>.workers.dev`. Preview URLs are off. Workers Logs keep only the Worker's unexpected errors: per-request invocation logs and traces are off (see [privacy.md](privacy.md)). It holds one secret, `TICKET_KEY`. Its cleanup Cron Trigger purges expired Shares: per Instance, hourly by default, and off when the instance file sets `"crons": []`. |
 | Access application | `htmlgate: <name>` | Gates the Worker on every hostname it answers at, and its Version URLs. Leaves `/api/*`, `/p/*` and `/f/*` to the Worker, so a Public Share's link preview and its image (`/p/<slug>/card.jpg`) load without a session. |
 | Access policy | `htmlgate: <name> allowlist` | Allows the emails in `instance.json`, one by one. |
 | Access application (robots) | `htmlgate: <name> robots` | Opens `/robots.txt` to everyone with a `bypass` policy. A crawler reads a robots policy before anything else, and X refuses to build a link card for a site whose `robots.txt` it cannot fetch. Setup creates it, and refuses to repoint an application of that name at another host. |
@@ -32,6 +32,7 @@ Before any remote write, an existing Worker's ownership must be unambiguous: the
 - `language` is optional: `"en"` (the default) or `"pt-BR"`. It sets the language of the Instance's own pages (home, tokens, the Share viewer, not-found) for everyone who opens them. The API, the CLI, Cloudflare's sign-in page and the JSON errors an Instance answers with when it is misconfigured or fails stay in English. Any other value makes the Instance refuse everything, like any other malformed setting. Run setup again to change it.
 
 - `expiryDays` is optional: how many days a Share lives after its latest publish, unless a Publisher sets a date. 30 when left out; 0 means Shares never expire on their own. A whole number up to 3650. Changing it applies to each Share from its next publish.
+- `crons` is optional: the cleanup schedules, default `["17 * * * *"]` (hourly). At most 3 distinct strings, each with 5 whitespace-separated cron fields. Setup checks each expression's shape and value ranges against Cloudflare's table: ASCII only; special forms `L`, `W` and `#` must stand alone; a step must be smaller than its field's span; wrap-around ranges such as `FRI-MON` are refused. It does not check a schedule's meaning beyond duplicates. Cloudflare has the last word when the schedule is written. The cap of 3 is htmlgate's own. Cloudflare's [Limits doc](https://developers.cloudflare.com/workers/platform/limits/#account-plan-limits) limits Cron Triggers per account: 5 on Workers Free, 250 on Paid. Several Instances on one Free account share that limit. Set `[]` to turn cleanup off, for example for a staging Instance whose Cron Triggers are kept at zero. Without cleanup, expired Shares stay hidden, but their bodies stay in the bucket and count toward the storage cap.
 
 The file is git-ignored. Keep it out of commits: it holds email addresses.
 
@@ -65,6 +66,21 @@ pnpm run token list --config .instance/production.json
 ```
 
 The token command refuses an Instance whose config does not exist yet: run setup for it first.
+
+## A staging Instance without Cron Triggers
+
+- A staging Instance with `"crons": []` takes only synthetic data: smoke, bench and test Shares. Never publish real or personal content there. Without cleanup, expired and soft-deleted Shares' bodies stay in R2 and their rows in D1 indefinitely. Each `pnpm run smoke` leaves at least 2 MiB. An Erase still deletes the body at once.
+- Once a month, check the staging bucket size with the read-only command `pnpm exec wrangler r2 bucket info <name>-bodies`. Act above 1 GB. At the 5 GB storage cap, new publishes get 507.
+- To clean up, restore the default `crons` for a short window in a staging deploy, then set it back to `[]`. Both deploys need the owner's exception and the security gate. Never add an R2 lifecycle rule to the bucket: it would delete bodies still referenced by live Versions and break the trash ledger. Never delete by hand in R2 or D1.
+
+To turn the staging cron off after this change is merged:
+
+1. The owner adds `"crons": []` to the staging instance file, which stays git-ignored. Leave production's file untouched.
+2. Before deploying, record the security gate's verdict on the merged main SHA and a clean `git status`. Run `node scripts/print-triggers.mjs --config <staging file>`: it must print `{"crons":[]}`. This is local and read-only: it makes no network call and writes nothing. Do not run setup to get this evidence: setup deploys. Mask account and database IDs in any evidence. Record production's version and crons for comparison. Also record the staging Worker's current version id with the read-only command `pnpm exec wrangler deployments list --name <staging name> --json`. Keep it with the evidence: it is the rollback target.
+3. Deploy with `pnpm run setup --config <staging file>` under the owner's credential, without `--rotate-ticket-key`. Keep the output with IDs masked.
+4. Wait at least 15 minutes for propagation. Check that the Worker has zero Cron Triggers in the dashboard under Settings > Triggers, or with a read-only API GET of its schedules returning `[]`. Check for no cron event in the next 2 hours, a green `pnpm run smoke <staging-url>`, and production unchanged (version and crons). Smoke needs a Publisher token for the staging Instance in `HTMLGATE_TOKEN`. Create it with `pnpm run token create <name> --config <staging file>`. Never write its value into evidence or files. Get its id with `pnpm run token list --config <staging file>` and revoke it afterwards with `pnpm run token revoke <id> --config <staging file>`.
+
+Rollback: rolling back the Worker version does not restore crons. Remove `crons` from the staging instance file and run setup through the same security gate to restore the default schedule. If setup fails midway with the new version up, for example before the Cron Triggers are written, roll the code back with `pnpm exec wrangler rollback <previous version id> --name <staging name> -m "<reason>"` through the same security gate. A version rollback restores code only, not Cron Triggers or D1 migrations. Migrations are forward-only.
 
 ## Day to day
 

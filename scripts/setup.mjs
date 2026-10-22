@@ -22,6 +22,54 @@ const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*"];
 // The hourly cleanup of expired Shares (plan 008).
 export const CRONS = ["17 * * * *"];
 
+const CRON_FIELDS = [
+  [0, 59],
+  [0, 23],
+  [1, 31],
+  [1, 12, "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ")],
+  [1, 7, "SUN MON TUE WED THU FRI SAT".split(" ")],
+];
+
+function validCronField(field, index) {
+  if (!/^[\x21-\x7e]+$/.test(field)) return false;
+  const [min, max, names = []] = CRON_FIELDS[index];
+  const value = (token) => {
+    const n = names.includes(token) ? names.indexOf(token) + 1 : /^\d+$/.test(token) ? Number(token) : NaN;
+    return n >= min && n <= max ? n : NaN;
+  };
+  field = field.toUpperCase();
+  // These special forms must occupy the whole field, never an item in a list.
+  if (index === 2) {
+    if (field === "L" || field === "LW") return true;
+    const nearest = /^(\d+)W$/.exec(field);
+    if (nearest) return !Number.isNaN(value(nearest[1]));
+  }
+  if (index === 4) {
+    if (field === "L") return true;
+    const last = /^(\d+|[A-Z]{3})L$/.exec(field);
+    if (last) return !Number.isNaN(value(last[1]));
+    const nth = /^(\d+)#[1-5]$/.exec(field);
+    if (nth) return !Number.isNaN(value(nth[1]));
+  }
+  return field.split(",").every((item) => {
+    const match = /^(\*|[0-9A-Z]+)(?:-([0-9A-Z]+))?(?:\/(\d+))?$/.exec(item);
+    if (!match || (match[3] !== undefined && (Number(match[3]) < 1 || Number(match[3]) > max - min))) return false;
+    const [, start, end] = match;
+    if (start === "*") return end === undefined;
+    const first = value(start);
+    return !Number.isNaN(first) && (end === undefined || first <= value(end));
+  });
+}
+
+// Called only after validation; keep the author's spelling in the returned crons.
+function canonicalCronField(field, index) {
+  const [, , names = []] = CRON_FIELDS[index];
+  return field.toUpperCase().replace(/[A-Z]{3}|\d+/g, (token) => {
+    const named = names.indexOf(token);
+    return String(named < 0 ? Number(token) : named + 1);
+  });
+}
+
 /** The Wrangler config setup writes for one Instance. One file each, so Instances set up from one checkout never share it. */
 export const generatedConfig = (inst) => join(ROOT, ".instance", `${inst.name}.wrangler.jsonc`);
 
@@ -56,9 +104,24 @@ export function readInstance(path) {
   if (!Number.isSafeInteger(expiryDays) || expiryDays < 0 || expiryDays > 3650) {
     throw new Error("expiryDays must be a whole number of days from 0 (never) to 3650.");
   }
+  const schedules = raw.crons === undefined ? [...CRONS] : raw.crons;
+  if (!Array.isArray(schedules) || schedules.length > 3 || !schedules.every((cron) => typeof cron === "string")) {
+    throw new Error("crons must be an array of at most 3 distinct cron strings.");
+  }
+  const crons = schedules.map((cron) => cron.trim().replace(/\s+/g, " "));
+  const seen = new Set();
+  for (const cron of crons) {
+    const fields = cron.split(" ");
+    if (fields.length !== 5 || !fields.every(validCronField)) {
+      throw new Error(`crons contains an invalid expression: ${JSON.stringify(cron)}. Use 5 fields with values in their allowed ranges.`);
+    }
+    const key = fields.map(canonicalCronField).join(" ");
+    if (seen.has(key)) throw new Error("crons must contain distinct expressions after normalization.");
+    seen.add(key);
+  }
   const author = raw.authorEmail.trim().toLowerCase();
   const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];
-  return { name: raw.name, author, allowlist, domain, language, expiryDays };
+  return { name: raw.name, author, allowlist, domain, language, expiryDays, crons };
 }
 
 /** The settings the deployed Worker reads (src/config.ts). */
@@ -153,7 +216,8 @@ export function workerConfig(inst, db, { open, vars }) {
     d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid, migrations_dir: "../migrations" }],
     r2_buckets: [{ binding: "BODIES", bucket_name: bodiesBucket(inst) }],
     ratelimits: [{ name: "WRITE_LIMIT", namespace_id: "1001", simple: { limit: 60, period: 60 } }],
-    triggers: { crons: CRONS },
+    // An explicit [] removes every Cron Trigger; undefined triggers would leave existing ones in place.
+    triggers: { crons: inst.crons ?? CRONS },
     // The same rule as wrangler.jsonc: the card image is bundled from the landing's poster.
     rules: [{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }],
     // The Worker's own logs (only unexpected errors), but no record of every request and no traces (docs/privacy.md).

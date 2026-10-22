@@ -17,11 +17,12 @@ const file = (name: string, body: unknown) => {
   writeFileSync(p, JSON.stringify(body));
   return p;
 };
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("the instance file", () => {
   test("names the Author and the Allowlist; the Author is always on it; emails are lowercased", () => {
     const inst = readInstance(file("ok.json", { name: "my-bin", authorEmail: "Me@Example.com", allowlist: ["A@b.c"] }));
-    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30 });
+    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30, crons: ["17 * * * *"] });
   });
 
   test("sets the Instance's language: English unless the file says pt-BR", () => {
@@ -391,6 +392,147 @@ describe("the Worker config setup deploys", () => {
 
   test("every deploy runs the hourly cleanup of expired Shares", () => {
     for (const open of [false, true]) expect(workerConfig(inst, db, { open, vars: {} }).triggers).toEqual({ crons: ["17 * * * *"] });
+  });
+
+  test.each([
+    { label: "omitted", fields: {}, expected: ["17 * * * *"] },
+    { label: "empty", fields: { crons: [] }, expected: [] },
+    { label: "a valid list", fields: { crons: ["*/15 * * * *", "0 0 * * 1-5", "0,30 8-18/2 * * *"] }, expected: ["*/15 * * * *", "0 0 * * 1-5", "0,30 8-18/2 * * *"] },
+  ])("readInstance returns crons when $label", ({ fields, expected }) => {
+    const parsed = readInstance(file("crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], ...fields }));
+    expect(parsed.crons).toEqual(expected);
+  });
+
+  test.each([
+    { label: "a string instead of an array", crons: "17 * * * *" },
+    { label: "null instead of an array", crons: null },
+    { label: "an object instead of an array", crons: {} },
+    { label: "a non-string entry", crons: [17] },
+    { label: "four fields", crons: ["17 * * *"] },
+    { label: "six fields", crons: ["17 * * * * *"] },
+    { label: "duplicate entries", crons: ["17 * * * *", "17 * * * *"] },
+    { label: "more than three entries", crons: ["0 * * * *", "15 * * * *", "30 * * * *", "45 * * * *"] },
+  ])("readInstance refuses crons with $label", ({ crons }) => {
+    expect(() => readInstance(file("bad-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons }))).toThrow(/crons/);
+  });
+
+  test.each([
+    { crons: ["* * * * *", "*/30 * * * *", "45 * * * *"] },
+    { crons: ["0 17 * * sun", "0 17 * * 2", "10 7 * * mon-fri"] },
+    { crons: ["10 7 * * 2-6", "0 15 1 * *", "0 18 * * 6L"] },
+    { crons: ["0 18 * * friL", "59 23 LW * *", "0 0 * jan,Aug *"] },
+    { crons: ["0 12 15W * *", "0 9 * * 2#1", "0-59/5 * * * *"] },
+    { crons: ["17 * * * *"] },
+  ])("readInstance returns Cloudflare-supported crons: $crons", ({ crons }) => {
+    const parsed = readInstance(file("supported-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons }));
+    expect(parsed.crons).toEqual(crons);
+  });
+
+  test.each([
+    "99 * * * *",
+    "60 * * * *",
+    "* 24 * * *",
+    "* * 0 * *",
+    "* * 32 * *",
+    "* * * 0 *",
+    "* * * 13 * ",
+    "* * * * 0",
+    "* * * * 8",
+    "abc def ghi jkl mno",
+    "? * * * *",
+    "#1 * * * *",
+    "L * * * *",
+    "* * * * W",
+    "*/0 * * * *",
+    "5-1 * * * *",
+    "1, * * * *",
+    "* * * foo *",
+  ])("readInstance refuses unsupported crons (SPEC-01): %j", (cron) => {
+    expect(() => readInstance(file("unsupported-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test.each([
+    "0 0 * * ſun",
+    "0 0 * * frı",
+    "0 0 * ſep *",
+  ])("readInstance refuses non-ASCII crons before case folding (SPEC-03): %j", (cron) => {
+    expect(() => readInstance(file("non-ascii-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test.each([
+    "*/60 * * * *",
+    "*/99 * * * *",
+    "0 */24 * * *",
+    "0 0 */31 * *",
+    "0 0 * */12 *",
+    "0 0 * * */7",
+  ])("readInstance refuses cron steps larger than max - min (SPEC-04a): %j", (cron) => {
+    expect(() => readInstance(file("oversized-step-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test.each([
+    "*/59 * * * *",
+    "0 */23 * * *",
+    "0 0 * * */6",
+  ])("readInstance accepts cron steps equal to max - min (SPEC-04a): %j", (cron) => {
+    const parsed = readInstance(file("boundary-step-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }));
+    expect(parsed.crons).toEqual([cron]);
+  });
+
+  test.each([
+    "0 0 L,15 * *",
+    "0 0 LW,15 * *",
+    "0 0 1,L * *",
+    "0 0 15W,1 * *",
+    "0 0 * * 6L,2#1",
+    "0 0 * * 1,2#1",
+  ])("readInstance refuses special cron forms inside lists (SPEC-04b): %j", (cron) => {
+    expect(() => readInstance(file("special-list-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: [cron] }))).toThrow(/crons/);
+  });
+
+  test("readInstance accepts standalone L in the weekday field unchanged (SPEC-04c)", () => {
+    const parsed = readInstance(file("weekday-l-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["0 0 * * L"] }));
+    expect(parsed.crons).toEqual(["0 0 * * L"]);
+  });
+
+  test.each([
+    { crons: ["0 17 * * sun", "0 17 * * SUN"] },
+    { crons: ["17 * * * *", "017 * * * *"] },
+    { crons: ["0 17 * * 1", "0 17 * * sun"] },
+    { crons: ["0 0 * jan *", "0 0 * 1 *"] },
+  ])("readInstance refuses semantic cron duplicates and preserves accepted spelling (SPEC-04d): $crons", ({ crons }) => {
+    const parsed = readInstance(file("spelling-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["  0 17\t* * sun  "] }));
+    expect(parsed.crons).toEqual(["0 17 * * sun"]);
+    expect(() => readInstance(file("semantic-duplicate-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons }))).toThrow(/crons/);
+  });
+
+  test("readInstance returns crons with whitespace collapsed and trimmed (SPEC-02)", () => {
+    const parsed = readInstance(file("whitespace-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["  17\t*  * * *  "] }));
+    expect(parsed.crons).toEqual(["17 * * * *"]);
+  });
+
+  test("readInstance refuses crons duplicated after whitespace normalization (SPEC-02)", () => {
+    expect(() => readInstance(file("duplicate-crons.json", { name: "my-bin", authorEmail: "a@b.c", allowlist: [], crons: ["17 * * * *", "17  * * * *"] }))).toThrow(/crons/);
+  });
+
+  test.each([false, true])("an Instance with no crons explicitly removes every trigger, open=%s", (open) => {
+    const config = workerConfig({ ...inst, crons: [] }, db, { open, vars: {} });
+    expect(Object.hasOwn(config, "triggers")).toBe(true);
+    expect(Object.hasOwn(config.triggers, "crons")).toBe(true);
+    expect(config.triggers).toEqual({ crons: [] });
+  });
+
+  test.each([
+    { name: "htmlgate-staging", fields: { crons: [] }, expected: [] },
+    { name: "htmlgate-production", fields: {}, expected: ["17 * * * *"] },
+  ])("Wrangler resolves $name crons from the instance file", async ({ name, fields, expected }) => {
+    const { unstable_readConfig } = await import("wrangler");
+    const parsed = readInstance(file(`${name}.json`, { name, authorEmail: "a@b.c", allowlist: [], ...fields }));
+    const config = workerConfig(parsed, { name: `${name}-db`, uuid: "00000000-0000-0000-0000-000000000000" }, { open: true, vars: {} });
+    config.main = join(process.cwd(), "src/index.ts");
+    config.d1_databases[0].migrations_dir = join(process.cwd(), "migrations");
+    const resolved = unstable_readConfig({ config: file(`${name}.wrangler.jsonc`, config) });
+    expect(resolved.triggers.crons).toEqual(expected);
   });
 
   test("every deploy binds the Instance's own R2 bucket for Share bodies", () => {

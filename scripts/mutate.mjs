@@ -254,6 +254,7 @@ const MUTATIONS = [
   ["robots.txt opens the whole Instance","src/index.ts",'const ROBOTS = "User-agent: *\\nAllow: /p/\\nDisallow: /\\n";','const ROBOTS = "User-agent: *\\nAllow: /\\n";',"test/api.test.ts"],
   ["the robots application gates robots.txt","scripts/setup.mjs",'policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "bypass", include: [{ everyone: {} }] }],','policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "allow", include: [{ everyone: {} }] }],',"test/operator.test.ts"],
   ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
+  ["setup ignores the Instance's crons", "scripts/setup.mjs", "inst.crons ?? CRONS", "CRONS", "test/operator.test.ts"],
 ];
 
 const onlyAt = process.argv.indexOf("--only");

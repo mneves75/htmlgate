@@ -13,7 +13,7 @@ type Statement = {
   bind: (...args: SQLInputValue[]) => Statement;
   first: () => Promise<Record<string, unknown> | null>;
   all: () => Promise<{ results: Record<string, unknown>[] }>;
-  run: () => Promise<{ meta: { changes: number } }>;
+  run: () => Promise<{ results: Record<string, unknown>[]; meta: { changes: number } }>;
 };
 
 test.each(["PATCH", "PUT"])("a delayed %s preserves concurrent omitted fields", async (method) => {
@@ -29,7 +29,10 @@ test.each(["PATCH", "PUT"])("a delayed %s preserves concurrent omitted fields", 
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }),
     run: async () => {
       if (delay && method === "PATCH" && sql.startsWith("UPDATE shares SET")) { delay = false; arrived(); await resume; }
-      return { meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } };
+      // As D1: a statement that returns rows (a SELECT in a batch) carries them in `results`.
+      const st = sqlite.prepare(sql);
+      if (st.columns().length) return { results: st.all(...values), meta: { changes: 0 } };
+      return { results: [], meta: { changes: Number(st.run(...values).changes) } };
     },
   });
   const db = {

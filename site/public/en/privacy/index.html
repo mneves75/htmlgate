@@ -29,7 +29,7 @@
 <div class="wrap">
 <div class="intro">
 <h1>Privacy</h1>
-<p class="lead">What htmlgate.com records about its visitors, what an htmlgate Instance keeps, and how to ask to see or erase your data. Updated October 18, 2026.</p>
+<p class="lead">What htmlgate.com records about its visitors, what an htmlgate Instance keeps, and how to ask to see or erase your data. Updated October 31, 2026.</p>
 </div>
 
 <section id="site" aria-labelledby="site-heading">
@@ -47,6 +47,7 @@
 <p>Whoever installs htmlgate runs their own Instance, in their own Cloudflare account, and decides what happens to its data. htmlgate's maintainer receives nothing from those Instances.</p>
 <p>app.htmlgate.com is the maintainer's own Instance. Its Shares open only for the people on its Allowlist, after they sign in, unless the Author makes a Share public: then anyone with its <code>/p/</code> link can open it.</p>
 <p>To show each Share only to those who may open it, and to protect that access, Cloudflare Access records each sign-in (who, when and from where), the Instance keeps the Shares published, the Author's email and the token that published each one, and Cloudflare keeps, for 3 days (7 on the paid plan), only the Instance's unexpected errors, each with details of the request that caused it.</p>
+<p>The Instance counts how often each Share's page was opened, one number a day, without keeping who opened it. So that one visitor cannot inflate the count, Cloudflare allows one count a minute per network address and Share; the address serves only that limit and the Instance never writes it.</p>
 <p>By default a Share expires 30 days after its latest publish, but whoever publishes it can choose another date, or never. Expiry blocks access immediately. Physical deletion follows in bounded hourly cleanup batches, with retries on later runs; backlog or failures can delay it, with no guaranteed deadline. The Share's record (title, description, tags, dates, the Author's email and the token of its last change) is kept and marked deleted when expiry cleanup processes it; token names are kept too. Deleting a Share only hides it; its content stays until expiry cleanup or Author erasure. Its Author can erase a Share for good, record included, at any time. After that, the database's backups (D1 Time Travel) can still restore earlier states for 7 days (30 on the paid plan), and then they are gone too. Restoring the database cannot recover content already deleted from R2.</p>
 </div>
 </section>

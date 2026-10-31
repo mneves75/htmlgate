@@ -327,7 +327,7 @@ async function serveShare(env: Env, cfg: Config, url: URL, prefix: "s" | "p", sl
 /**
  * Counts one opening of a Share's page, in the background, when a browser navigated to it: never for raw bytes, a
  * prefetch or a Share the page did not find. Fetch Metadata is whatever the client sends, so VIEW_LIMIT bounds the
- * count to one a minute per network address and Share; the address keys the limit and is never written. Cloudflare
+ * count to one a minute per network address (an IPv6 /64) and Share; the address keys the limit and is never written. Cloudflare
  * always sends the address; without it (a test harness) every visitor of a Share shares one key. Without the limit
  * nothing is counted. A refused or failed count is never the reader's error.
  */
@@ -337,12 +337,26 @@ function counted(req: Request, env: Env, ctx: ExecutionContext, slug: string, ra
   const limit = env.VIEW_LIMIT;
   if (!limit) return res;
   const store = new Store(env.DB, env.BODIES);
-  const key = `${req.headers.get("cf-connecting-ip") ?? ""} ${slug}`;
+  const key = `${network(req.headers.get("cf-connecting-ip") ?? "")} ${slug}`;
   ctx.waitUntil((async () => {
     if (!(await limit.limit({ key })).success) return;
     await store.countView(slug, dayFrom(Date.now(), 0));
   })().catch((e) => console.error("view count", e)));
   return res;
+}
+
+/**
+ * The network an address belongs to, for the view limit: an IPv4 address itself, an IPv6 address's /64, the block a
+ * single subscriber is handed (RFC 6177), so rotating addresses inside it counts as one visitor.
+ */
+function network(address: string): string {
+  if (!address.includes(":")) return address;
+  const [head = "", tail] = address.split("::");
+  const groups = (part: string) => (part ? part.split(":").flatMap((g) => (g.includes(".") ? ["0", "0"] : [g])) : []);
+  const left = groups(head);
+  const right = tail === undefined ? [] : groups(tail);
+  const all = tail === undefined ? left : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+  return all.slice(0, 4).map((g) => (parseInt(g, 16) || 0).toString(16)).join(":") + "::/64";
 }
 
 /** One file of a viewable site Version, or null. The path is decoded and checked by the zip's own rules. */

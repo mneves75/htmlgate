@@ -46,6 +46,21 @@ describe("the view limit", () => {
     expect(views(i, b).v).toBe(1);
   });
 
+  test("IPv6 counts by /64 network, the block one subscriber holds: rotating within it counts once", async () => {
+    const i = await startInstance();
+    const slug = await publicShare(i);
+    await open(i, slug, "2001:db8:1:2::1");
+    await open(i, slug, "2001:db8:1:2:aaaa:bbbb:cccc:dddd");
+    await open(i, slug, "2001:0db8:0001:0002:0:0:0:ffff");
+    expect(views(i, slug).v).toBe(1);
+    await open(i, slug, "2001:db8:1:3::1");
+    expect(views(i, slug).v).toBe(2);
+    // IPv4 keeps the whole address: neighbours are different subscribers.
+    await open(i, slug, "203.0.113.7");
+    await open(i, slug, "203.0.113.8");
+    expect(views(i, slug).v).toBe(4);
+  });
+
   test("an Instance without its view limit still serves the page and counts nothing", async () => {
     const i = await startInstance();
     const slug = await publicShare(i);

@@ -66,8 +66,14 @@ describe("what the storage cap counts", () => {
 
   test("a body above the floor counts its own size, as before", async () => {
     const html = "x".repeat(VERSION_FLOOR + 1000);
-    const i = await startInstance({ STORAGE_LIMIT_BYTES: String(VERSION_FLOOR + 1000) });
+    // Room for the body and one more empty page, less one byte: the body fits, the empty page then does not.
+    const i = await startInstance({ STORAGE_LIMIT_BYTES: String(VERSION_FLOOR + 1000 + VERSION_FLOOR - 1) });
     expect((await i.api("POST", "/api/shares", { html, title: "big" })).status).toBe(201);
+    expect((await i.api("POST", "/api/shares", { html: "", title: "empty" })).status).toBe(507);
+    // With one byte more, it does.
+    const roomy = await startInstance({ STORAGE_LIMIT_BYTES: String(VERSION_FLOOR + 1000 + VERSION_FLOOR) });
+    expect((await roomy.api("POST", "/api/shares", { html, title: "big" })).status).toBe(201);
+    expect((await roomy.api("POST", "/api/shares", { html: "", title: "empty" })).status).toBe(201);
   });
 
   test("VERSION_FLOOR covers the most metadata a Share can hold", async () => {

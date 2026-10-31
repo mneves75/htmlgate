@@ -73,17 +73,22 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
     // Release 0.1.18: the view limit, what the storage cap counts, and revoke-all (security gate C-1, C-2, C-3, SEC-03).
     ["anonymous views skip the view limit","src/index.ts","    if (!(await limit.limit({ key })).success) return;\n","","test/views-limit.test.ts"],
-    ["the view limit ignores the address","src/index.ts","  const key = `${req.headers.get(\"cf-connecting-ip\") ?? \"\"} ${slug}`;","  const key = slug;","test/views-limit.test.ts"],
-    ["the view limit ignores the Share","src/index.ts","  const key = `${req.headers.get(\"cf-connecting-ip\") ?? \"\"} ${slug}`;","  const key = req.headers.get(\"cf-connecting-ip\") ?? \"\";","test/views-limit.test.ts"],
+    ["the view limit ignores the address","src/index.ts","  const key = `${network(req.headers.get(\"cf-connecting-ip\") ?? \"\")} ${slug}`;","  const key = slug;","test/views-limit.test.ts"],
+    ["the view limit ignores the Share","src/index.ts","  const key = `${network(req.headers.get(\"cf-connecting-ip\") ?? \"\")} ${slug}`;","  const key = network(req.headers.get(\"cf-connecting-ip\") ?? \"\");","test/views-limit.test.ts"],
     ["the cap forgets a stored site's index","src/store.ts","const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;","const COST = `MAX(size, ${VERSION_FLOOR})`;","test/storage-cost.test.ts"],
     ["stored empty Versions count nothing","src/store.ts","const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;","const COST = `(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)))`;","test/storage-cost.test.ts"],
     ["a publish reserves room for its zip alone","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => Math.max(size, VERSION_FLOOR);","test/storage-cost.test.ts"],
     ["an empty publish reserves no room","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => size + new TextEncoder().encode(files ?? \"\").length;","test/storage-cost.test.ts"],
-    ["revoke-all leaves Access sign-ins open","scripts/token.mjs","[[\"Ticket key\", rotateTicketKey], [\"Access sign-ins\", revokeSessions]]","[[\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
+    ["revoke-all leaves Access sign-ins open","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Account\", checkAccount], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
+    // Release 0.1.18, second candidate: IPv6 /64, and revoke-all's account check and order (gate F-1, F-01, F-03).
+    ["the view limit keys IPv6 by full address","src/index.ts","  if (!address.includes(\":\")) return address;","  return address;","test/views-limit.test.ts"],
+    ["revoke-all ends Access sign-ins last","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Account\", checkAccount], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey], [\"Access sign-ins\", revokeSessions]]","test/token-revoke-all.test.ts"],
+    ["revoke-all skips the account check","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
+    ["revoke-all's account step checks nothing","scripts/token.mjs","checkAccount: () => (checkSameAccount(wranglerWho(), cf(\"auth\", \"whoami\"), process.env), \"Wrangler and cf use the same one\")","checkAccount: () => \"Wrangler and cf use the same one\"","test/token-revoke-all.test.ts"],
   ];
   const base = after.slice(0, before.length);
 
-  test("239 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
+  test("243 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
     expect(before).toHaveLength(182);
     expect(createHash("sha256").update(history).digest("hex")).toBe("659fa0b319ae9a82381cabfc7c993557f8231ebd0f2853e0300e51375aa9732e");
     expect(after).toHaveLength(before.length + added.length);

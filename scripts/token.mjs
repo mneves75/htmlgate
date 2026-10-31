@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generatedConfig, listApplications, putTicketKey, readInstance, sh } from "./setup.mjs";
+import { cf, checkSameAccount, generatedConfig, listApplications, putTicketKey, readInstance, sh, wranglerWho } from "./setup.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
@@ -41,12 +41,16 @@ function d1(sql, inst, flags) {
 }
 
 /**
- * Ends every way in, for a lost laptop or a leaked token: every token, then every open ticket (a new TICKET_KEY), then
- * every Access sign-in to the Instance. A failed step stops the rest; each step is safe to repeat, so the fix is to run
- * the command again. A local database has only tokens.
+ * Ends every way in, for a lost laptop or a leaked token. First it checks that Wrangler and cf act on the same account,
+ * because cf finds the Access application by name and a name is not an account. Then every Access sign-in to the
+ * Instance, so a stolen session cannot make a token while the rest runs; then every token; then every open ticket (a new
+ * TICKET_KEY). A failed step stops the rest; each step is safe to repeat, so the fix is to run the command again. A
+ * local database has only tokens.
  */
-export function revokeAll({ revokeTokens, rotateTicketKey, revokeSessions }, { local, say }) {
-  const steps = [["Tokens", revokeTokens], ...(local ? [] : [["Ticket key", rotateTicketKey], ["Access sign-ins", revokeSessions]])];
+export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, say }) {
+  const steps = local
+    ? [["Tokens", revokeTokens]]
+    : [["Account", checkAccount], ["Access sign-ins", revokeSessions], ["Tokens", revokeTokens], ["Ticket key", rotateTicketKey]];
   for (const [name, step] of steps) {
     let result;
     try {
@@ -98,6 +102,7 @@ function main() {
     console.log(`Token ${arg} revoked.`);
   } else if (cmd === "revoke-all") {
     revokeAll({
+      checkAccount: () => (checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env), "Wrangler and cf use the same one"),
       revokeTokens: () => `${d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL RETURNING id`, inst, flags).length} revoked`,
       rotateTicketKey: () => (putTicketKey(generatedConfig(inst)), "replaced; every open ticket has ended"),
       revokeSessions: () => revokeSessions(inst),

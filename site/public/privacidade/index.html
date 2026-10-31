@@ -29,7 +29,7 @@
 <div class="wrap">
 <div class="intro">
 <h1>Privacidade</h1>
-<p class="lead">O que o htmlgate.com registra sobre quem o visita, o que uma Instância do htmlgate guarda, e como pedir para ver ou eliminar os seus dados. Atualizada em 18 de outubro de 2026.</p>
+<p class="lead">O que o htmlgate.com registra sobre quem o visita, o que uma Instância do htmlgate guarda, e como pedir para ver ou eliminar os seus dados. Atualizada em 31 de outubro de 2026.</p>
 </div>
 
 <section id="site" aria-labelledby="site-heading">
@@ -47,6 +47,7 @@
 <p>Quem instala o htmlgate roda a própria Instância, na própria conta Cloudflare, e decide o que acontece com os dados dela. O mantenedor do htmlgate não recebe nada dessas Instâncias.</p>
 <p>O endereço app.htmlgate.com é a Instância do mantenedor. Os Shares dela abrem só para quem está na lista de acesso, depois de entrar, a menos que o autor torne um Share público: aí qualquer pessoa com o link <code>/p/</code> dele o abre.</p>
 <p>Para mostrar cada Share só a quem pode abri-lo e proteger esse acesso, o Cloudflare Access registra cada login (quem, quando e de onde), a Instância guarda os Shares publicados, o e-mail do autor e o token que publicou cada um, e a Cloudflare guarda por 3 dias (7 no plano pago) só os erros inesperados da Instância, com dados do pedido que causou cada um.</p>
+<p>A Instância conta quantas vezes a página de cada Share foi aberta, um número por dia, sem guardar quem abriu. Para que um mesmo visitante não infle a contagem, a Cloudflare limita a uma contagem por minuto por endereço de rede e Share; o endereço serve só a esse limite e a Instância não o grava.</p>
 <p>Por padrão, um Share expira 30 dias depois da última publicação, mas quem publica pode escolher outra data, ou nunca. A expiração bloqueia o acesso imediatamente. A exclusão física ocorre depois, em lotes limitados de limpeza a cada hora, com novas tentativas nas execuções seguintes; o acúmulo de trabalho ou falhas podem atrasá-la, sem prazo garantido. O registro do Share (título, descrição, etiquetas, datas, o e-mail do autor e o token da última mudança) fica guardado e é marcado como apagado quando a limpeza processa o Share expirado; os nomes dos tokens também ficam. Apagar um Share só o oculta; o conteúdo permanece até a limpeza após a expiração ou a eliminação de vez pelo autor. O autor pode eliminar um Share de vez, registro incluído, a qualquer momento. Depois disso, as cópias de segurança do banco de dados (o Time Travel do D1) ainda permitem restaurar estados anteriores por 7 dias (30 no plano pago), e então também somem. Restaurar o banco de dados não recupera conteúdo já apagado do R2.</p>
 </div>
 </section>

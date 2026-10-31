@@ -7,16 +7,18 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 ### Security
 
 - A Share's page now counts as viewed at most once a minute per network address (a new `VIEW_LIMIT` rate limit,
-  keyed on the address and the Share). Before, any client could inflate a Public Share's count, and cost a database
+  keyed on the address and the Share; an IPv6 address by its /64, the block one subscriber holds). Before, any client could inflate a Public Share's count, and cost a database
   write, with every repeated request. The address keys Cloudflare's rate limiter and is never written; an Instance
   without the limit counts nothing. Run `pnpm run setup` to add the binding.
 - The storage cap counts what a Version makes the Instance hold: its body plus, for a site, its file index in the
   database, and never less than 20 KiB, which covers a Share's largest title, description and metadata. Before, a
   site of empty files with long names, or a run of empty pages, grew the database outside the cap. On an Instance
   near its cap, small Shares now use more of it.
-- `pnpm run token revoke-all` ends every way in at once: it revokes every token, replaces `TICKET_KEY` and revokes
-  every Access sign-in to the Instance, in that order. Each step is safe to repeat (docs/operator.md, "Stop a caller").
-- htmlgate.com publishes `/.well-known/security.txt`, pointing at private vulnerability reporting.
+- `pnpm run token revoke-all` ends every way in at once. It checks that Wrangler and `cf` use the same account,
+  then revokes every Access sign-in to the Instance (so a stolen session cannot make a token meanwhile), every token,
+  and replaces `TICKET_KEY`, in that order. Each step is safe to repeat (docs/operator.md, "Stop a caller").
+- htmlgate.com publishes `/.well-known/security.txt`, pointing at private vulnerability reporting. The landing's
+  privacy notice now says how an Instance counts views.
 - Local development: undici under miniflare goes to 7.30.1 (eight advisories), by a pnpm override until Wrangler
   carries it past the release-age rule.
 

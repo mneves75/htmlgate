@@ -188,6 +188,8 @@ describe("pages", () => {
     // A lapsed file must be renewed (at most a year ahead), so this fails the day it expires.
     const expires = Date.parse(field("Expires") ?? "");
     expect(expires).toBeGreaterThan(Date.now());
+    // RFC 9116 asks for less than a year: a renewal sets a date within a year of the day it is made.
+    expect(expires - Date.now()).toBeLessThan(366 * 24 * 60 * 60 * 1000);
   });
 
   test("/en without its slash goes to /en/", async () => {

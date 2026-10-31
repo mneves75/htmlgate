@@ -326,13 +326,22 @@ async function serveShare(env: Env, cfg: Config, url: URL, prefix: "s" | "p", sl
 
 /**
  * Counts one opening of a Share's page, in the background, when a browser navigated to it: never for raw bytes, a
- * prefetch or a Share the page did not find. A failed write is logged and never reaches the reader.
+ * prefetch or a Share the page did not find. Fetch Metadata is whatever the client sends, so VIEW_LIMIT bounds the
+ * count to one a minute per network address and Share; the address keys the limit and is never written. Cloudflare
+ * always sends the address; without it (a test harness) every visitor of a Share shares one key. Without the limit
+ * nothing is counted. A refused or failed count is never the reader's error.
  */
 function counted(req: Request, env: Env, ctx: ExecutionContext, slug: string, raw: boolean, res: Response): Response {
   if (raw || res.status !== 200) return res;
   if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return res;
+  const limit = env.VIEW_LIMIT;
+  if (!limit) return res;
   const store = new Store(env.DB, env.BODIES);
-  ctx.waitUntil(store.countView(slug, dayFrom(Date.now(), 0)).catch((e) => console.error("view count", e)));
+  const key = `${req.headers.get("cf-connecting-ip") ?? ""} ${slug}`;
+  ctx.waitUntil((async () => {
+    if (!(await limit.limit({ key })).success) return;
+    await store.countView(slug, dayFrom(Date.now(), 0));
+  })().catch((e) => console.error("view count", e)));
   return res;
 }
 

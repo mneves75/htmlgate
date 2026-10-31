@@ -21,7 +21,7 @@ const file = (name: string, body: unknown) => {
 describe("the instance file", () => {
   test("names the Author and the Allowlist; the Author is always on it; emails are lowercased", () => {
     const inst = readInstance(file("ok.json", { name: "my-bin", authorEmail: "Me@Example.com", allowlist: ["A@b.c"] }));
-    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30 });
+    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30, mfa: false });
   });
 
   test("sets the Instance's language: English unless the file says pt-BR", () => {
@@ -445,6 +445,26 @@ test("setup names R2's 'not enabled' answer, and only that, as a missing subscri
 describe("the Access application setup creates", () => {
   const app = accessApp({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"] }, "w123");
 
+  test("without mfa the application leaves MFA to the organization, and never turns it off", () => {
+    expect(app.mfa_config).toBeUndefined();
+    expect(readInstance(file("no-mfa.json", { name: "my-bin", authorEmail: "me@example.com", allowlist: [] })).mfa).toBe(false);
+  });
+
+  test("with mfa the application asks for a second factor the organization allows, once a day", () => {
+    const inst = readInstance(file("mfa.json", { name: "my-bin", authorEmail: "me@example.com", allowlist: [], mfa: true }));
+    expect(inst.mfa).toBe(true);
+    // Infrastructure-only methods (SSH keys) never apply to a web application.
+    const withMfa = accessApp(inst, "w123", ["biometrics", "security_key", "piv_key", "ssh_fido2_key"]);
+    expect(withMfa.mfa_config).toEqual({ mfa_disabled: false, allowed_authenticators: ["biometrics", "security_key"], session_duration: "24h" });
+  });
+
+  test("mfa with no method allowed in the organization stops setup and says where to allow one", () => {
+    const inst = readInstance(file("mfa2.json", { name: "my-bin", authorEmail: "me@example.com", allowlist: [], mfa: true }));
+    expect(() => accessApp(inst, "w123", [])).toThrow(/Access settings/);
+    expect(() => accessApp(inst, "w123", ["piv_key"])).toThrow(/Access settings/);
+    expect(() => readInstance(file("mfa3.json", { name: "my-bin", authorEmail: "me@example.com", allowlist: [], mfa: "yes" }))).toThrow(/mfa/);
+  });
+
   test("the robots application opens exactly robots.txt, to everyone, and nothing else", () => {
     // A gated robots.txt is a policy no crawler can read; X refuses to build a card for a site whose robots.txt it
     // cannot fetch, which is why a Public Share previewed on WhatsApp and not on X.
@@ -539,6 +559,21 @@ describe("the token command", () => {
     const r = await fetch(`${inst.base}/api/shares`, { headers: { authorization: `Bearer ${stdout.trim()}` } });
     expect(r.status).toBe(401);
   });
+
+  // Last in this block but one: it revokes every token the tests above made.
+  test("revoke-all ends every live token in one command", async () => {
+    const cfg = file("instance.json", { name: "local", authorEmail: AUTHOR, allowlist: [] });
+    const tok = (...a: string[]) => run("node", ["scripts/token.mjs", ...a, "--config", cfg, "--local", "--persist-to", inst.state]);
+    const tokens = [(await tok("create", "laptop")).stdout.trim(), (await tok("create", "ci")).stdout.trim()];
+    const use = (t: string) => fetch(`${inst.base}/api/shares`, { headers: { authorization: `Bearer ${t}` } });
+    for (const t of tokens) expect((await use(t)).status).toBe(200);
+    const { stdout } = await tok("revoke-all");
+    expect(stdout).toMatch(/^Tokens: [0-9]+ revoked\.$/m);
+    // Locally there is no deployed ticket key or Access application to touch, and the command says so.
+    expect(stdout).toContain("--local");
+    for (const t of tokens) expect((await use(t)).status).toBe(401);
+    expect((await tok("list")).stdout).not.toMatch(/ live$/m);
+  }, 120_000);
 
   test("refuses a name that could break out of the SQL", async () => {
     const cfg = file("instance2.json", { name: "local", authorEmail: AUTHOR, allowlist: [] });

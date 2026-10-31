@@ -6,6 +6,8 @@ export interface Env {
   BODIES: R2Bucket;
   /** Without it the API refuses every change (src/api.ts). */
   WRITE_LIMIT?: RateLimit;
+  /** One view a minute per network address and Share. Without it no view is counted (src/index.ts). */
+  VIEW_LIMIT?: RateLimit;
   ACCESS_TEAM_URL?: string;
   ACCESS_AUD?: string;
   AUTHOR_EMAIL?: string;

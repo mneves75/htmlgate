@@ -1,0 +1,5 @@
+Contact: https://github.com/mneves75/htmlgate/security/advisories/new
+Expires: 2027-10-30T00:00:00.000Z
+Policy: https://github.com/mneves75/htmlgate/blob/main/SECURITY.md
+Preferred-Languages: en, pt
+Canonical: https://htmlgate.com/.well-known/security.txt

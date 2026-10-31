@@ -73,7 +73,7 @@ const MUTATIONS = [
   ["a refused publish uploads anyway", "src/store.ts", "    if (!reserved.meta.changes) return null;\n", "", "test/storage.test.ts"],
   ["a written Version leaves its upload in the ledger", "src/store.ts", "const inserted = (await this.db.batch([...statements, claim]))", "const inserted = (await this.db.batch([...statements]))", "test/limits.test.ts"],
   ["an expired reservation can be claimed", "src/store.ts", "due_at > ${CLOCK}", "due_at > 0", "test/store-expiry.test.ts"],
-  ["no storage cap", "src/store.ts", 'const ROOM = "(SELECT COALESCE(SUM(size), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?";', 'const ROOM = "(? > -1 OR ? > -1)";', "test/limits.test.ts"],
+  ["no storage cap", "src/store.ts", 'const ROOM = `(SELECT COALESCE(SUM(${COST}), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?`;', 'const ROOM = "(? > -1 OR ? > -1)";', "test/limits.test.ts"],
   ["the gate check follows API redirects", "scripts/setup.mjs", 'api = await fetch(url + "/api/shares", { redirect: "manual", signal });', 'api = await fetch(url + "/api/shares", { signal });', "test/operator.test.ts"],
   ["gate requests have no deadline", "scripts/setup.mjs", "const signal = AbortSignal.timeout(Math.min(10_000, left));", "const signal = undefined;", "test/operator.test.ts"],
   ["the gate check polls past its budget", "scripts/setup.mjs", "    if (left <= 0) break;\n", "", "test/operator.test.ts"],
@@ -254,6 +254,15 @@ const MUTATIONS = [
   ["robots.txt opens the whole Instance","src/index.ts",'const ROBOTS = "User-agent: *\\nAllow: /p/\\nDisallow: /\\n";','const ROBOTS = "User-agent: *\\nAllow: /\\n";',"test/api.test.ts"],
   ["the robots application gates robots.txt","scripts/setup.mjs",'policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "bypass", include: [{ everyone: {} }] }],','policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "allow", include: [{ everyone: {} }] }],',"test/operator.test.ts"],
   ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
+  // Release 0.1.18: the view limit, what the storage cap counts, and revoke-all (security gate C-1, C-2, C-3, SEC-03).
+  ["anonymous views skip the view limit","src/index.ts","    if (!(await limit.limit({ key })).success) return;\n","","test/views-limit.test.ts"],
+  ["the view limit ignores the address","src/index.ts","  const key = `${req.headers.get(\"cf-connecting-ip\") ?? \"\"} ${slug}`;","  const key = slug;","test/views-limit.test.ts"],
+  ["the view limit ignores the Share","src/index.ts","  const key = `${req.headers.get(\"cf-connecting-ip\") ?? \"\"} ${slug}`;","  const key = req.headers.get(\"cf-connecting-ip\") ?? \"\";","test/views-limit.test.ts"],
+  ["the cap forgets a stored site's index","src/store.ts","const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;","const COST = `MAX(size, ${VERSION_FLOOR})`;","test/storage-cost.test.ts"],
+  ["stored empty Versions count nothing","src/store.ts","const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;","const COST = `(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)))`;","test/storage-cost.test.ts"],
+  ["a publish reserves room for its zip alone","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => Math.max(size, VERSION_FLOOR);","test/storage-cost.test.ts"],
+  ["an empty publish reserves no room","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => size + new TextEncoder().encode(files ?? \"\").length;","test/storage-cost.test.ts"],
+  ["revoke-all leaves Access sign-ins open","scripts/token.mjs","[[\"Ticket key\", rotateTicketKey], [\"Access sign-ins\", revokeSessions]]","[[\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
 ];
 
 const onlyAt = process.argv.indexOf("--only");

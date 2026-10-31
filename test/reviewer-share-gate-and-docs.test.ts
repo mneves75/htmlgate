@@ -71,10 +71,19 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     ["robots.txt opens the whole Instance","src/index.ts",'const ROBOTS = "User-agent: *\\nAllow: /p/\\nDisallow: /\\n";','const ROBOTS = "User-agent: *\\nAllow: /\\n";',"test/api.test.ts"],
     ["the robots application gates robots.txt","scripts/setup.mjs",'policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "bypass", include: [{ everyone: {} }] }],','policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "allow", include: [{ everyone: {} }] }],',"test/operator.test.ts"],
     ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
+    // Release 0.1.18: the view limit, what the storage cap counts, and revoke-all (security gate C-1, C-2, C-3, SEC-03).
+    ["anonymous views skip the view limit","src/index.ts","    if (!(await limit.limit({ key })).success) return;\n","","test/views-limit.test.ts"],
+    ["the view limit ignores the address","src/index.ts","  const key = `${req.headers.get(\"cf-connecting-ip\") ?? \"\"} ${slug}`;","  const key = slug;","test/views-limit.test.ts"],
+    ["the view limit ignores the Share","src/index.ts","  const key = `${req.headers.get(\"cf-connecting-ip\") ?? \"\"} ${slug}`;","  const key = req.headers.get(\"cf-connecting-ip\") ?? \"\";","test/views-limit.test.ts"],
+    ["the cap forgets a stored site's index","src/store.ts","const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;","const COST = `MAX(size, ${VERSION_FLOOR})`;","test/storage-cost.test.ts"],
+    ["stored empty Versions count nothing","src/store.ts","const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;","const COST = `(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)))`;","test/storage-cost.test.ts"],
+    ["a publish reserves room for its zip alone","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => Math.max(size, VERSION_FLOOR);","test/storage-cost.test.ts"],
+    ["an empty publish reserves no room","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => size + new TextEncoder().encode(files ?? \"\").length;","test/storage-cost.test.ts"],
+    ["revoke-all leaves Access sign-ins open","scripts/token.mjs","[[\"Ticket key\", rotateTicketKey], [\"Access sign-ins\", revokeSessions]]","[[\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
   ];
   const base = after.slice(0, before.length);
 
-  test("231 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
+  test("239 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
     expect(before).toHaveLength(182);
     expect(createHash("sha256").update(history).digest("hex")).toBe("659fa0b319ae9a82381cabfc7c993557f8231ebd0f2853e0300e51375aa9732e");
     expect(after).toHaveLength(before.length + added.length);
@@ -116,6 +125,8 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
       "a Viewer's home lists Shares",
       "the erased note shows any text from the link",
       "a link makes the home say a live Share was erased",
+      // A Version now counts its cost (body, site index, floor) toward the cap, so the ROOM line names COST.
+      "no storage cap",
     ].sort((x, y) => after.findIndex((e) => e[0] === x) - after.findIndex((e) => e[0] === y)));
     for (const [a, b] of differing) {
       // The planted violation is the same one: the replacement still differs from the anchor, and the only change from
@@ -153,6 +164,13 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
         expect(b[3]).not.toContain("SLUG.test(erased)");
         expect(a[2], a[0]).toBe("const asked = isAuthor && erased !== null && SLUG.test(erased);");
         expect(a[3], a[0]).toBe(a[2].replace(" && SLUG.test(erased)", ""));
+        continue;
+      }
+      if (a[0] === "no storage cap") {
+        // Still the same violation: the whole room check is replaced by one that always holds.
+        expect(b[2]).toContain("SUM(size), 0) FROM versions");
+        expect(a[2], a[0]).toContain("SUM(${COST}), 0) FROM versions");
+        expect(a[3], a[0]).toBe(rename(b[3]));
         continue;
       }
       if (a[0] === "a link makes the home say a live Share was erased") {

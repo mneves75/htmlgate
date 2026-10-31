@@ -2,14 +2,14 @@
 // The Operator's token command. It runs with the Operator's own Cloudflare login, which is as strong
 // as signing in to the token page, so it may create tokens (issue #13). Needs a prior `pnpm run setup`.
 //
-// Usage: pnpm run token create <name> | list | revoke <id>   [--config <file>] [--local --persist-to <dir>]
+// Usage: pnpm run token create <name> | list | revoke <id> | revoke-all   [--config <file>] [--local --persist-to <dir>]
 // --local acts on a `wrangler dev` database instead of the deployed one (used by the tests).
 import { createHash, randomInt } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generatedConfig, readInstance } from "./setup.mjs";
+import { generatedConfig, listApplications, putTicketKey, readInstance, sh } from "./setup.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
@@ -40,6 +40,36 @@ function d1(sql, inst, flags) {
   return JSON.parse(out)[0]?.results ?? [];
 }
 
+/**
+ * Ends every way in, for a lost laptop or a leaked token: every token, then every open ticket (a new TICKET_KEY), then
+ * every Access sign-in to the Instance. A failed step stops the rest; each step is safe to repeat, so the fix is to run
+ * the command again. A local database has only tokens.
+ */
+export function revokeAll({ revokeTokens, rotateTicketKey, revokeSessions }, { local, say }) {
+  const steps = [["Tokens", revokeTokens], ...(local ? [] : [["Ticket key", rotateTicketKey], ["Access sign-ins", revokeSessions]])];
+  for (const [name, step] of steps) {
+    let result;
+    try {
+      result = step();
+    } catch (e) {
+      throw new Error(`${name}: ${e.message}\nThe steps after it did not run. Every step is safe to repeat: run pnpm run token revoke-all again.`);
+    }
+    say(`${name}: ${result}.`);
+  }
+  if (local) say("--local: the ticket key and Access sign-ins belong to a deployed Instance and were not touched.");
+}
+
+/** Ends every Access session for the Instance's application, so everyone signs in again. */
+function revokeSessions(inst) {
+  const name = `htmlgate: ${inst.name}`;
+  const apps = listApplications().filter((a) => a.name === name);
+  if (apps.length !== 1) throw new Error(`expected one Access application named "${name}", found ${apps.length}`);
+  // Without --force cf asks, gets no answer, prints "Aborted." and still exits 0.
+  const out = sh("cf", ["zero-trust", "access", "applications", "revoke-tokens", apps[0].id, "--force"]);
+  if (/aborted/i.test(out)) throw new Error("cf did not revoke the sessions");
+  return "revoked; everyone signs in again";
+}
+
 function main() {
   const { cmd, arg, flags } = parseArgs(process.argv.slice(2));
   const inst = readInstance(resolve(ROOT, flags.config));
@@ -66,14 +96,22 @@ function main() {
     if (!arg || !/^[0-9a-f]{12}$/.test(arg)) throw new Error("Give the token id (12 hex characters) from `pnpm run token list`.");
     d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE id = '${arg}' AND revoked_at IS NULL`, inst, flags);
     console.log(`Token ${arg} revoked.`);
+  } else if (cmd === "revoke-all") {
+    revokeAll({
+      revokeTokens: () => `${d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL RETURNING id`, inst, flags).length} revoked`,
+      rotateTicketKey: () => (putTicketKey(generatedConfig(inst)), "replaced; every open ticket has ended"),
+      revokeSessions: () => revokeSessions(inst),
+    }, { local: flags.local, say: (line) => console.log(line) });
   } else {
-    throw new Error("Usage: pnpm run token create <name> | list | revoke <id>");
+    throw new Error("Usage: pnpm run token create <name> | list | revoke <id> | revoke-all");
   }
 }
 
-try {
-  main();
-} catch (e) {
-  console.error(`token failed: ${e.message}`);
-  process.exit(1);
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (e) {
+    console.error(`token failed: ${e.message}`);
+    process.exit(1);
+  }
 }

@@ -4,6 +4,8 @@
 
 Use GitHub's private vulnerability reporting on this repository: Security, then "Report a vulnerability". Please do not open a public issue for a vulnerability.
 
+The landing publishes the same contact at https://htmlgate.com/.well-known/security.txt (RFC 9116). It expires within a year; `test/site.test.ts` fails once it has, so renew `Expires` in `site/public/.well-known/security.txt` and deploy the landing.
+
 Say what you found, how to reproduce it and which version or commit you tested. Never include a real token, a sign-in cookie or anyone's Share.
 
 ## What is in scope

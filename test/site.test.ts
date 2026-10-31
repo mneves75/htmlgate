@@ -177,6 +177,19 @@ describe("pages", () => {
     for (const p of PRIVACY) expect(sitemap).toContain(`<loc>${p.canonical}</loc>`);
   });
 
+  test("security.txt says where to report a vulnerability, and has not expired (RFC 9116)", async () => {
+    const r = await hit("/.well-known/security.txt", { host: "htmlgate.com" });
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/^text\/plain/);
+    const field = (name: string) => r.body.match(new RegExp(`^${name}: (.+)$`, "m"))?.[1];
+    expect(field("Contact")).toBe("https://github.com/mneves75/htmlgate/security/advisories/new");
+    expect(field("Policy")).toBe("https://github.com/mneves75/htmlgate/blob/main/SECURITY.md");
+    expect(field("Canonical")).toBe("https://htmlgate.com/.well-known/security.txt");
+    // A lapsed file must be renewed (at most a year ahead), so this fails the day it expires.
+    const expires = Date.parse(field("Expires") ?? "");
+    expect(expires).toBeGreaterThan(Date.now());
+  });
+
   test("/en without its slash goes to /en/", async () => {
     const r = await hit("/en");
     expect(r.status).toBeGreaterThanOrEqual(301);

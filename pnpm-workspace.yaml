@@ -11,3 +11,6 @@ minimumReleaseAgeExclude:
 overrides:
   # miniflare pins 0.35.4; 0.35.5 fixes a librsvg vulnerability (CVE-2026-96889). Drop this once Wrangler moves past it.
   miniflare>sharp: 0.35.5
+  # miniflare pins 7.29.1; 7.30.1 fixes eight undici advisories (4 high). Wrangler 4.156.0 carries it but is younger
+  # than minimumReleaseAge; drop this once Wrangler is bumped past it.
+  miniflare>undici: 7.30.1

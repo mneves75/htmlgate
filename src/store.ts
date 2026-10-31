@@ -57,8 +57,17 @@ const SHARE_COLUMNS = `d.slug, d.author, d.title, d.description, d.tags, d.publi
 const CLAIM_MS = 60 * 60 * 1000;
 // One execution-time clock for expiry and cleanup, including a batch delayed after its statements were prepared.
 const CLOCK = "CAST(unixepoch('subsec') * 1000 AS INTEGER)";
-// Room for `?` more bytes under a cap of `?`: every Version's body and every ledgered body count.
-const ROOM = "(SELECT COALESCE(SUM(size), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?";
+/**
+ * The least a Version counts toward the storage cap. It covers the most a Share's row can hold (a title, a description
+ * and metadata at their limits in src/api.ts, which test/storage-cost.test.ts measures), so empty pages cannot pile up
+ * rows the cap never sees.
+ */
+export const VERSION_FLOOR = 20 * 1024;
+// What a Version costs: its body in R2 and its site index in D1, and never less than the floor.
+const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;
+const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? "").length, VERSION_FLOOR);
+// Room for `?` more bytes under a cap of `?`: every Version's cost and every ledgered body count.
+const ROOM = `(SELECT COALESCE(SUM(${COST}), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?`;
 // The batch's first statement wrote the Version holding body key `?`.
 const WROTE = "EXISTS (SELECT 1 FROM versions WHERE body_key = ?)";
 // The reservation for body key `?` has not expired when the database executes the write.
@@ -82,16 +91,19 @@ export class Store {
 
   // Bodies
 
-  /** Reserves room for a body under a fresh key, then uploads it. Null, with nothing uploaded, when there is no room. */
-  private async putBody(slug: string, b: Body, size: number, limit: number): Promise<string | null> {
+  /**
+   * Reserves room for a Version's cost (COST) under a fresh key, then uploads its body. Null, with nothing uploaded,
+   * when there is no room.
+   */
+  private async putBody(slug: string, b: Body, cost: number, limit: number): Promise<string | null> {
     const key = `bodies/${slug}/${randomHex(16)}`;
     const reserved = await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, ${CLOCK} + ? WHERE ${ROOM}`)
-      .bind(key, size, CLAIM_MS, size, limit).run();
+      .bind(key, cost, CLAIM_MS, cost, limit).run();
     if (!reserved.meta.changes) return null;
     try {
       await this.bodies.put(key, b.body, { httpMetadata: { contentType: b.kind === "site" ? "application/zip" : "text/html; charset=utf-8" } });
     } catch (e) {
-      await this.dueNow(key, size);
+      await this.dueNow(key, cost);
       throw e;
     }
     return key;
@@ -108,10 +120,10 @@ export class Store {
    * reservation holds), and claims that body from the ledger in the same transaction. Returns false when the insert
    * matched nothing; the upload is then due for deletion at once. A failed batch leaves it due when it expires.
    */
-  private async commit(key: string, size: number, statements: D1PreparedStatement[]): Promise<boolean> {
+  private async commit(key: string, cost: number, statements: D1PreparedStatement[]): Promise<boolean> {
     const claim = this.db.prepare(`DELETE FROM trash WHERE body_key = ? AND ${WROTE}`).bind(key, key);
     const inserted = (await this.db.batch([...statements, claim]))[0]?.meta.changes ?? 0;
-    if (inserted === 0) await this.dueNow(key, size);
+    if (inserted === 0) await this.dueNow(key, cost);
     return inserted > 0;
   }
 
@@ -252,10 +264,11 @@ export class Store {
     size: number; tokenId: string; now: number; limit: number; expiry: Expiry;
   }): Promise<Written> {
     const { slug, author, title, description, tags, size, tokenId, now, limit, expiry } = input;
-    const key = await this.putBody(slug, input, size, limit);
+    const cost = costOf(size, input.files);
+    const key = await this.putBody(slug, input, cost, limit);
     if (key === null) return "full";
     // The Version row comes first so commit() can tell whether it was written; the Share row follows only then.
-    const written = await this.commit(key, size, [
+    const written = await this.commit(key, cost, [
       this.db.prepare(`INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT ?, 1, ?, ?, ?, ?, ?, ? WHERE ${RESERVED}`)
         .bind(slug, key, size, now, tokenId, input.kind, input.files, key),
       this.db.prepare(`INSERT INTO shares (slug, author, title, description, tags, public, latest_version,
@@ -272,12 +285,13 @@ export class Store {
   }): Promise<Written> {
     const { author, slug, title, description, tags, size, tokenId, now, limit, expiry } = input;
     const pruned = `slug = ? AND n <= (SELECT latest_version FROM shares WHERE slug = ?) - ${KEEP_VERSIONS}`;
-    const key = await this.putBody(slug, input, size, limit);
+    const cost = costOf(size, input.files);
+    const key = await this.putBody(slug, input, cost, limit);
     if (key === null) return "full";
     // The Version number is computed inside the transaction, so concurrent publishes get distinct numbers. Only the
     // INSERT decides whether the Share is live: the clock moves between statements, and an expiry passing after the
     // INSERT must not leave its Version without the Share's update. The rest follows that INSERT (WROTE).
-    const written = await this.commit(key, size, [
+    const written = await this.commit(key, cost, [
       this.db.prepare(`INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files)
           SELECT slug, latest_version + 1, ?, ?, ?, ?, ?, ? FROM shares WHERE slug = ? AND author = ? AND ${live()} AND ${RESERVED}`)
         .bind(key, size, now, tokenId, input.kind, input.files, slug, author, key),

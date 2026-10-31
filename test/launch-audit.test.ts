@@ -93,7 +93,7 @@ describe("the write limit", () => {
 
   test("the config setup generates carries the limit", () => {
     const c = workerConfig({ name: "x", author: "a@b.c", allowlist: [], language: "en", expiryDays: 30 }, { uuid: "u", name: "x-db" }, { open: false, vars: {} });
-    expect(c.ratelimits).toEqual([{ name: "WRITE_LIMIT", namespace_id: expect.any(String), simple: { limit: 60, period: 60 } }]);
+    expect(c.ratelimits).toContainEqual({ name: "WRITE_LIMIT", namespace_id: expect.any(String), simple: { limit: 60, period: 60 } });
   });
 });
 

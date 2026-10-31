@@ -8,7 +8,7 @@ import worker from "../src/index";
 import type { Env } from "../src/config";
 import { newToken, randomHex, sha256Hex } from "../src/ids";
 import { Store } from "../src/store";
-import { fakeEnv, type FakeStatement } from "./fake-env";
+import { fakeEnv, windowLimit, type FakeStatement } from "./fake-env";
 
 export const AUTHOR = "author@example.com";
 export const VIEWER = "viewer@example.com";
@@ -46,6 +46,7 @@ export async function startInstance(vars: Vars = {}, opts: Parameters<typeof fak
   const ctx = { waitUntil: (p: Promise<unknown>) => void pending.push(p), passThroughOnException() {} } as unknown as ExecutionContext;
   const env: Env = {
     DB: fake.db, BODIES: fake.bucket, WRITE_LIMIT: { limit: async () => ({ success: true }) } as RateLimit,
+    VIEW_LIMIT: windowLimit(1) as unknown as RateLimit,
     ACCESS_TEAM_URL: access.url, ACCESS_AUD: AUD, AUTHOR_EMAIL: AUTHOR, ALLOWLIST: VIEWER, TICKET_KEY, ...vars,
   };
   const settle = async () => {

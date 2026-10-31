@@ -82,3 +82,16 @@ export function fakeEnv(opts: { before?: string; through?: string; seed?: (sqlit
   const rows = <T>(sql: string, ...values: SQLInputValue[]) => sqlite.prepare(sql).all(...values) as T[];
   return { db: db as unknown as D1Database, bucket: bucket as unknown as R2Bucket, sqlite, objects, hooks, one, rows };
 }
+
+/** A Workers rate limit within one window: the first `limit` calls for each key succeed. `keys` counts the calls. */
+export function windowLimit(limit: number) {
+  const keys = new Map<string, number>();
+  return {
+    keys,
+    limit: async ({ key }: { key: string }) => {
+      const n = (keys.get(key) ?? 0) + 1;
+      keys.set(key, n);
+      return { success: n <= limit };
+    },
+  };
+}

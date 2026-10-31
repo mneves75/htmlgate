@@ -113,8 +113,8 @@ selects a Version and an unknown Version answers not-found.
 - A site's links must be relative (`css/style.css`, not `/css/style.css`): its files live under their Version's path. A site cannot frame its own pages: they are refused under `frame-ancestors 'self'`, since the frame's parent is the sandbox's opaque origin.
 - A Share keeps its latest 20 Versions. Publishing the 21st removes the oldest for good.
 - A Share expires `expiryDays` (default 30) after its latest publish, unless a Publisher set a date; a date is from a minute to 3650 days ahead, or never.
-- The whole Instance holds at most 5 GB of bodies in R2, half of R2's free allowance. `STORAGE_LIMIT_BYTES` changes it. Deleted Shares count until they expire or the Author erases them.
-- A token may make 60 changes a minute. Cloudflare's rate limiter is approximate, and 0.1 promises no availability under attack.
+- The whole Instance holds at most 5 GB, half of R2's free allowance. `STORAGE_LIMIT_BYTES` changes it. Each Version counts its body plus a site's file index, and never less than 20 KiB. Deleted Shares count until they expire or the Author erases them.
+- A token may make 60 changes a minute. A Share's page counts as viewed at most once a minute per network address. Cloudflare's rate limiter is approximate, and 0.1 promises no availability under attack.
 
 ## What a token can do
 

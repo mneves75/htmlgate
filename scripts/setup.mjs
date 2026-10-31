@@ -56,9 +56,11 @@ export function readInstance(path) {
   if (!Number.isSafeInteger(expiryDays) || expiryDays < 0 || expiryDays > 3650) {
     throw new Error("expiryDays must be a whole number of days from 0 (never) to 3650.");
   }
+  const mfa = raw.mfa === undefined ? false : raw.mfa;
+  if (typeof mfa !== "boolean") throw new Error("mfa must be true or false (default false).");
   const author = raw.authorEmail.trim().toLowerCase();
   const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];
-  return { name: raw.name, author, allowlist, domain, language, expiryDays };
+  return { name: raw.name, author, allowlist, domain, language, expiryDays, mfa };
 }
 
 /** The settings the deployed Worker reads (src/config.ts). */
@@ -152,7 +154,10 @@ export function workerConfig(inst, db, { open, vars }) {
     preview_urls: false,
     d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid, migrations_dir: "../migrations" }],
     r2_buckets: [{ binding: "BODIES", bucket_name: bodiesBucket(inst) }],
-    ratelimits: [{ name: "WRITE_LIMIT", namespace_id: "1001", simple: { limit: 60, period: 60 } }],
+    ratelimits: [
+      { name: "WRITE_LIMIT", namespace_id: "1001", simple: { limit: 60, period: 60 } },
+      { name: "VIEW_LIMIT", namespace_id: "1002", simple: { limit: 1, period: 60 } },
+    ],
     triggers: { crons: CRONS },
     // The same rule as wrangler.jsonc: the card image is bundled from the landing's poster.
     rules: [{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }],
@@ -192,7 +197,7 @@ export function listWorkers(cf) {
 }
 
 // Access lists page silently too. A partial list cannot prove that a name or destination is free.
-function listApplications() {
+export function listApplications() {
   const all = [];
   for (let page = 1; page <= 1000; page++) {
     const batch = cf("zero-trust", "access", "applications", "list", "--per-page", "1000", "--page", String(page));
@@ -350,7 +355,19 @@ export async function gated(url, gate, { budgetMs = 180_000, pauseMs = 2000 } = 
   return done();
 }
 
-export function accessApp(inst, workerId) {
+// Second factors Access can ask for in a browser; piv_key and ssh_fido2_key apply only to SSH applications.
+const WEB_MFA = ["totp", "biometrics", "security_key"];
+
+/**
+ * The Access application that gates the Instance. With `mfa`, sign-in also asks for a second factor among those the
+ * organization allows (`orgMfa`), once a day; without it, the application sends no MFA setting, so the organization's
+ * default applies and is never turned off here.
+ */
+export function accessApp(inst, workerId, orgMfa = []) {
+  const methods = orgMfa.filter((m) => WEB_MFA.includes(m));
+  if (inst.mfa && !methods.length) {
+    throw new Error("mfa is on, but the Zero Trust organization allows no second factor for web sign-in. In the dashboard: Zero Trust, Access controls, Access settings, Allow multi-factor authentication: choose Biometrics, Security key or Authenticator application, save, enrol yours at https://<team>.cloudflareaccess.com/AddMfaDevice, then run setup again.");
+  }
   return {
     type: "self_hosted",
     name: `htmlgate: ${inst.name}`,
@@ -363,6 +380,7 @@ export function accessApp(inst, workerId) {
     destinations: [{ type: "worker", worker_id: workerId, overrides: PUBLIC_PATHS.map((p) => ({ behavior: "public", path_pattern: p })) }],
     // Named people only. Never a domain, a login method or Everyone: an empty list would admit nobody.
     policies: [{ name: `htmlgate: ${inst.name} allowlist`, decision: "allow", include: inst.allowlist.map((email) => ({ email: { email } })) }],
+    ...(inst.mfa ? { mfa_config: { mfa_disabled: false, allowed_authenticators: methods, session_duration: "24h" } } : {}),
   };
 }
 
@@ -395,10 +413,15 @@ export const r2NotEnabled = (message) => /\b10042\b|enable R2/i.test(message);
 function ensureTicketKey(config, rotate) {
   const names = JSON.parse(sh(WRANGLER, ["secret", "list", "-c", config, "--format", "json"])).map((s) => s.name);
   if (names.includes("TICKET_KEY") && !rotate) return "kept";
+  putTicketKey(config);
+  return names.includes("TICKET_KEY") ? "replaced" : "created";
+}
+
+/** Sets TICKET_KEY to 32 new random bytes, ending every open ticket. Also `pnpm run token revoke-all`. */
+export function putTicketKey(config) {
   execFileSync(WRANGLER, ["secret", "put", "TICKET_KEY", "-c", config], {
     cwd: ROOT, input: randomBytes(32).toString("base64url"), stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, CI: "1" },
   });
-  return names.includes("TICKET_KEY") ? "replaced" : "created";
 }
 
 async function main() {
@@ -411,8 +434,9 @@ async function main() {
   step("checking the Cloudflare logins");
   checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env);
 
-  const org = cf("zero-trust", "organizations", "list");
-  const authDomain = (Array.isArray(org) ? org[0] : org)?.auth_domain;
+  const orgs = cf("zero-trust", "organizations", "list");
+  const org = Array.isArray(orgs) ? orgs[0] : orgs;
+  const authDomain = org?.auth_domain;
   if (!authDomain) throw new Error("This account has no Zero Trust organization. Create one in the dashboard (Zero Trust), then run setup again.");
   const teamUrl = `https://${authDomain}`;
 
@@ -481,7 +505,7 @@ async function main() {
   console.log(`  ${ensureTicketKey(config, process.argv.includes("--rotate-ticket-key"))}`);
 
   step(existing ? "updating the Access application" : "creating the Access application");
-  const body = JSON.stringify(accessApp(inst, worker.id));
+  const body = JSON.stringify(accessApp(inst, worker.id, org.mfa_config?.allowed_authenticators ?? []));
   const app = existing
     ? cf("zero-trust", "access", "applications", "update", existing.id, "--body", body)
     : cf("zero-trust", "access", "applications", "create", "--body", body);

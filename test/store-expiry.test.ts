@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { expect, test } from "vitest";
-import { Store } from "../src/store";
+import { Store, VERSION_FLOOR } from "../src/store";
 
 type Statement = {
   sql: string; values: SQLInputValue[];
@@ -72,7 +72,7 @@ test.each(["create", "update", "late upload"])("an expired %s cannot claim its b
         lateStarted = true;
         sqlite.exec("UPDATE trash SET due_at = 1");
         await store.emptyTrash();
-        expect(await store.createShare({ ...input, slug: "Expiry000002", body: "other", limit: 8 })).toBe("written");
+        expect(await store.createShare({ ...input, slug: "Expiry000002", body: "other", limit: VERSION_FLOOR })).toBe("written");
       }
       objects.set(key, html);
       if (operation === "late upload" && objects.size === 2) lateOvershoot = true;
@@ -86,7 +86,7 @@ test.each(["create", "update", "late upload"])("an expired %s cannot claim its b
   const store = new Store(db as unknown as D1Database, bucket as unknown as R2Bucket);
   const input = {
     slug: "Expiry000001", author: "author@example.com", title: "expiry", description: null,
-    tags: "{}", body: "original", kind: "page" as const, files: null, size: 8, tokenId: "abcdefabcdef", now: Date.now(), limit: 1024,
+    tags: "{}", body: "original", kind: "page" as const, files: null, size: 8, tokenId: "abcdefabcdef", now: Date.now(), limit: 64 * VERSION_FLOOR,
     expiry: { at: null, set: false },
   };
   try {

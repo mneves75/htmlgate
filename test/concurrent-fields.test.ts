@@ -6,7 +6,7 @@ import { expect, test } from "vitest";
 import { handleApi } from "../src/api";
 import type { Config, Env } from "../src/config";
 import { sha256Hex } from "../src/ids";
-import { Store } from "../src/store";
+import { Store, VERSION_FLOOR } from "../src/store";
 
 type Statement = {
   sql: string; values: SQLInputValue[];
@@ -55,7 +55,7 @@ test.each(["PATCH", "PUT"])("a delayed %s preserves concurrent omitted fields", 
     delete: async (keys: string[]) => { for (const key of keys) bodies.delete(key); },
   };
   const env: Env = { DB: db as unknown as D1Database, BODIES: bucket as unknown as R2Bucket, WRITE_LIMIT: { limit: async () => ({ success: true }) } as RateLimit };
-  const cfg: Config = { author: "author@example.com", aud: "test", teamUrl: "https://team.example", allowlist: new Set(), storageLimit: 1024, language: "en", ticketKey: "k".repeat(43), expiryDays: 30 };
+  const cfg: Config = { author: "author@example.com", aud: "test", teamUrl: "https://team.example", allowlist: new Set(), storageLimit: 64 * VERSION_FLOOR, language: "en", ticketKey: "k".repeat(43), expiryDays: 30 };
   const store = new Store(env.DB, env.BODIES);
   const token = "hg_" + "Q".repeat(40);
   const slug = "Concurrent01";
@@ -67,7 +67,7 @@ test.each(["PATCH", "PUT"])("a delayed %s preserves concurrent omitted fields", 
   };
   try {
     await store.createToken("abcdefabcdef", cfg.author, "test", await sha256Hex(token), Date.now());
-    expect(await store.createShare({ slug, author: cfg.author, title: "original", description: "original", tags: '{"old":"1"}', body: "original", kind: "page", files: null, size: 8, tokenId: "abcdefabcdef", now: Date.now(), limit: 1024, expiry: { at: null, set: false } })).toBe("written");
+    expect(await store.createShare({ slug, author: cfg.author, title: "original", description: "original", tags: '{"old":"1"}', body: "original", kind: "page", files: null, size: 8, tokenId: "abcdefabcdef", now: Date.now(), limit: 64 * VERSION_FLOOR, expiry: { at: null, set: false } })).toBe("written");
     delay = true;
     const first = request(method, method === "PATCH" ? { title: "first" } : { html: "second body" });
     await held;

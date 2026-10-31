@@ -164,16 +164,24 @@ export class Store {
 
   /**
    * The live token with this digest, its use recorded at most once a minute (so routine reads write no rows). One
-   * batch, so one round trip: each is ~170 ms from Brazil to a D1 in North America (docs/perf/BASELINE.md).
+   * batch, so one round trip: each is ~176 ms from Brazil to a D1 in North America (docs/perf/BASELINE.md). When the
+   * batch fails (a database that refuses writes, say), the lookup alone decides: an unknown or revoked token is still
+   * no token, and a live one's failure stands, as it did when the lookup and the write were two statements.
    */
   async useToken(digest: string, now: number): Promise<TokenRow | null> {
-    const [found] = await this.db.batch<TokenRow>([
-      this.db.prepare("SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL").bind(digest),
-      this.db
-        .prepare("UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL")
-        .bind(now, digest, now - 60_000),
-    ]);
-    return found?.results[0] ?? null;
+    const find = this.db.prepare("SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL").bind(digest);
+    try {
+      const [found] = await this.db.batch<TokenRow>([
+        find,
+        this.db
+          .prepare("UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL")
+          .bind(now, digest, now - 60_000),
+      ]);
+      return found?.results[0] ?? null;
+    } catch (e) {
+      if ((await find.first<TokenRow>()) === null) return null;
+      throw e;
+    }
   }
 
   async createToken(id: string, author: string, name: string, digest: string, now: number): Promise<void> {

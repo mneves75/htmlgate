@@ -56,7 +56,7 @@ production `d1 insights` (blocked, above).
 
 What will show the result is right, other than us: the round-trip counter on the unchanged and the changed
 Worker (a deterministic counter, so a change either removes a wave or it does not), the existing 1,100+ test suite
-and mutation gate for behaviour, and the live `/p/<missing>` minus `/api/onboard` difference as the measured cost
+and mutation gate for behaviour, and the live `/p/<missing>` minus `/api/onboard` difference as the estimated cost
 of one D1 round trip from Brazil.
 
 ## Five-year premortem
@@ -156,8 +156,9 @@ response would cross the ocean anyway), Workers Cache or any Instance caching (s
 
 ## Guardrails (proposals; nothing ships without the owner)
 
-- `limits.cpu_ms`: the owner decided "no CPU limit" on 2026-10-12. Re-proposed only with the max observed CPU
-  time from OWNER-QUERIES.md §3 (value = max × 2 or more).
+- `limits.cpu_ms`: not proposed. The owner decided "no CPU limit" on 2026-10-12, and a multiple of the observed
+  maximum would not bound valid worst-case work (2 MiB pages, ZIP sites, a full cleanup batch; REVIEW.md finding 9).
+  A limit needs those workloads measured first.
 - Rate limiting: already in place (WAF 100/10 s per IP on `/p/*`, `/f/*`, `/api/*`; `WRITE_LIMIT` 60/min per
   token). No change proposed.
 - Observability: the Instance already logs without invocation logs and without traces; the landing has

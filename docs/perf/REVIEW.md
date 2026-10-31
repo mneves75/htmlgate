@@ -24,4 +24,18 @@ rows), and W2 has no authorization or data-loss regression. Both agree with RESU
 
 ## Round 2: final diff
 
-Pending.
+Same reviewer and setup, fresh worktree of `b9a707e`, brief in the same form. Verdict: **DIFF NEEDS CHANGES**.
+It checked every round-1 disposition against the code (all implemented) and found three failure-path gaps.
+
+| # | Sev | Finding | Status | Evidence and action |
+|---|---|---|---|---|
+| 1 | P2 | Versions: if the versions read fails before the Share check answers, `Promise.all` turns a 404 for a foreign or missing Share into a 500 | confirmed, fixed | The read starts first but its outcome is held; `mustShare` decides, then a read failure counts. Still one wave. Test: injected read failure with a 20 ms slower Share lookup → foreign Share 404, own Share 500 (`test/api-versions-owner.test.ts`). Control: `Promise.all` restored → the test fails with 500. |
+| 2 | P2 | `useToken`: a database that refuses the UPDATE fails the whole batch, so an unknown or revoked token became a 500 instead of 401 | confirmed, fixed | On batch failure the same bound lookup runs alone: no token → null (401), a live token → the original error (500), as before W1. One statement literal, so the mutation anchor stays unique. Test: read-only fake (`test/store-tokens.test.ts`). Control: fallback removed → the test fails with `read-only`. |
+| 3 | P2 | The route guard skipped routes with no ceiling (Viewer home, raw bodies, not-found) | confirmed, fixed | Every measured route must have a numeric ceiling; four ceilings added at their baseline values (a tightening of coverage, no budget relaxed); the Viewer home must make zero D1 calls, critical or background. Control: the home's view-count read without its Author check → the guard fails. |
+
+Also corrected from this round: PLAN.md called the route comparison a "measured cost" (now "estimated"), PLAN.md
+still carried the rejected `cpu_ms` = max × 2 proposal (removed), BASELINE.md described warm requests as
+interleaved one by one (they run in alternating blocks of five), and `docs/perf/raw/d1-roundtrips.md` now holds
+candidate counts: the baseline counts, from the same instrument run against `97823b7`, are in
+`docs/perf/raw/baseline/`. Served-version provenance stays open until a Wrangler login can read the Instance's
+deployments.

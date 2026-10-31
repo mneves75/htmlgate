@@ -71,8 +71,13 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
         if (method === "PATCH") return await patch(req, store, cfg, token, b, url);
         if (method === "DELETE") return await remove(store, cfg, token, b);
       } else if (c === "versions" && d === undefined && method === "GET") {
-        // The Author's own live Share, checked alongside the read: one round trip; a missing Share is still a 404.
-        const [, rows] = await Promise.all([mustShare(store, cfg, b), store.versions(b)]);
+        // The Author's own live Share, checked alongside the read: one round trip. The check decides first, so a Share
+        // that is not the Author's or not live is a 404 even when the read fails; a read failure counts only after it.
+        const read = store.versions(b).then((rows) => ({ rows }), (error: unknown) => ({ error }));
+        await mustShare(store, cfg, b);
+        const versions = await read;
+        if ("error" in versions) throw versions.error;
+        const { rows } = versions;
         return json(200, { data: rows.map((v) => ({ n: v.n, kind: v.kind, size: v.size, created_at: v.created_at, token: { id: v.token_id, name: v.token_name } })) });
       } else if (c === "versions" && d !== undefined && POSITIVE.test(d) && method === "GET") {
         await mustShare(store, cfg, b);

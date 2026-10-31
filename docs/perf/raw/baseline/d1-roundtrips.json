@@ -1,0 +1,337 @@
+{
+  "latencyMs": 20,
+  "sizes": {
+    "shares": 44,
+    "versions": 48,
+    "tokens": 1,
+    "trash": 0,
+    "share_views": 180
+  },
+  "rows": [
+    {
+      "key": "GET /",
+      "route": "GET / (Author home)",
+      "status": 200,
+      "d1Waves": 2,
+      "d1Calls": 2,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "all: SELECT d.slug, d.title, d.public, d.latest_version, d.updated_at, t.name AS changed_by_name, (SELECT COUNT(*) FROM shares WHERE author = ?1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))) AS total, (SELECT COUNT(*) FROM shares WHERE author = ?1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND public = 1) AS public_total FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ?1 AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ?2",
+        "all: SELECT slug, SUM(views) AS total, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS recent FROM share_views GROUP BY slug"
+      ]
+    },
+    {
+      "key": "GET / (Viewer)",
+      "route": "GET / (Viewer)",
+      "status": 200,
+      "d1Waves": 0,
+      "d1Calls": 0,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": []
+    },
+    {
+      "key": "GET /metrics",
+      "route": "GET /metrics",
+      "status": 200,
+      "d1Waves": 2,
+      "d1Calls": 2,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "all: SELECT d.slug, d.title, d.public, d.latest_version, d.updated_at, t.name AS changed_by_name, (SELECT COUNT(*) FROM shares WHERE author = ?1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))) AS total, (SELECT COUNT(*) FROM shares WHERE author = ?1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND public = 1) AS public_total FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ?1 AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ?2",
+        "all: SELECT slug, SUM(views) AS total, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS recent FROM share_views GROUP BY slug"
+      ]
+    },
+    {
+      "key": "GET /tokens",
+      "route": "GET /tokens",
+      "status": 200,
+      "d1Waves": 1,
+      "d1Calls": 1,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "all: SELECT id, name, created_at, last_used_at, revoked_at FROM tokens WHERE author = ? ORDER BY created_at DESC, id"
+      ]
+    },
+    {
+      "key": "GET /s/<slug>",
+      "route": "GET /s/<slug> (Gated page)",
+      "status": 200,
+      "d1Waves": 1,
+      "d1Calls": 1,
+      "r2Waves": 0,
+      "background": 1,
+      "sql": [
+        "all: SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind FROM shares d JOIN versions v ON v.slug = d.slug WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY v.n DESC"
+      ]
+    },
+    {
+      "key": "GET /s/<slug>/raw",
+      "route": "GET /s/<slug>/raw (Gated body)",
+      "status": 200,
+      "d1Waves": 1,
+      "d1Calls": 1,
+      "r2Waves": 1,
+      "background": 0,
+      "sql": [
+        "first: SELECT v.n, v.kind, v.body_key FROM shares d JOIN versions v ON v.slug = d.slug AND v.n = COALESCE(?, d.latest_version) WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
+      ]
+    },
+    {
+      "key": "GET /p/<slug>",
+      "route": "GET /p/<slug> (Public page)",
+      "status": 200,
+      "d1Waves": 1,
+      "d1Calls": 1,
+      "r2Waves": 0,
+      "background": 1,
+      "sql": [
+        "all: SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind FROM shares d JOIN versions v ON v.slug = d.slug WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND d.public = 1 ORDER BY v.n DESC"
+      ]
+    },
+    {
+      "key": "GET /p/<slug>/raw",
+      "route": "GET /p/<slug>/raw (Public body)",
+      "status": 200,
+      "d1Waves": 1,
+      "d1Calls": 1,
+      "r2Waves": 1,
+      "background": 0,
+      "sql": [
+        "first: SELECT v.n, v.kind, v.body_key FROM shares d JOIN versions v ON v.slug = d.slug AND v.n = COALESCE(?, d.latest_version) WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND d.public = 1"
+      ]
+    },
+    {
+      "key": "GET /p/<missing>",
+      "route": "GET /p/<missing> (not found)",
+      "status": 404,
+      "d1Waves": 1,
+      "d1Calls": 1,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "all: SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind FROM shares d JOIN versions v ON v.slug = d.slug WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND d.public = 1 ORDER BY v.n DESC"
+      ]
+    },
+    {
+      "key": "GET /api/shares",
+      "route": "GET /api/shares (list)",
+      "status": 200,
+      "d1Waves": 4,
+      "d1Calls": 4,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "first: SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "all: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ? OFFSET ?"
+      ]
+    },
+    {
+      "key": "GET /api/shares/<slug>",
+      "route": "GET /api/shares/<slug>",
+      "status": 200,
+      "d1Waves": 3,
+      "d1Calls": 3,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
+      ]
+    },
+    {
+      "key": "GET /api/shares/<slug>/versions",
+      "route": "GET /api/shares/<slug>/versions",
+      "status": 200,
+      "d1Waves": 4,
+      "d1Calls": 4,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "all: SELECT v.n, v.kind, v.size, v.created_at, v.token_id, t.name AS token_name FROM versions v JOIN shares d ON d.slug = v.slug AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) LEFT JOIN tokens t ON t.id = v.token_id WHERE v.slug = ? ORDER BY v.n DESC"
+      ]
+    },
+    {
+      "key": "POST /api/shares",
+      "route": "POST /api/shares (publish html)",
+      "status": 201,
+      "d1Waves": 5,
+      "d1Calls": 5,
+      "r2Waves": 1,
+      "background": 1,
+      "sql": [
+        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "run: INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER) + ? WHERE (SELECT COALESCE(SUM(size), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?",
+        "batch: INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT ?, 1, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "batch: INSERT INTO shares (slug, author, title, description, tags, public, latest_version, created_at, updated_at, changed_by, changed_at, expires_at, expiry_set) SELECT ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
+        "batch: DELETE FROM trash WHERE body_key = ? AND EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
+      ]
+    },
+    {
+      "key": "PUT /api/shares/<slug>",
+      "route": "PUT /api/shares/<slug> (new Version)",
+      "status": 200,
+      "d1Waves": 6,
+      "d1Calls": 6,
+      "r2Waves": 1,
+      "background": 1,
+      "sql": [
+        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "run: INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER) + ? WHERE (SELECT COALESCE(SUM(size), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?",
+        "batch: INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT slug, latest_version + 1, ?, ?, ?, ?, ?, ? FROM shares WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "batch: UPDATE shares SET latest_version = latest_version + 1, title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags), expires_at = CASE WHEN ? = 1 THEN ? WHEN expiry_set = 0 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?), updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
+        "batch: INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ? FROM versions WHERE slug = ? AND n <= (SELECT latest_version FROM shares WHERE slug = ?) - 20",
+        "batch: DELETE FROM versions WHERE slug = ? AND n <= (SELECT latest_version FROM shares WHERE slug = ?) - 20",
+        "batch: DELETE FROM trash WHERE body_key = ? AND EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
+      ]
+    },
+    {
+      "key": "PATCH /api/shares/<slug>",
+      "route": "PATCH /api/shares/<slug>",
+      "status": 200,
+      "d1Waves": 5,
+      "d1Calls": 5,
+      "r2Waves": 0,
+      "background": 1,
+      "sql": [
+        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "run: UPDATE shares SET title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags), expires_at = CASE WHEN ? = 1 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?), updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
+      ]
+    },
+    {
+      "key": "POST /api/shares/<slug>/visibility",
+      "route": "POST /api/shares/<slug>/visibility",
+      "status": 200,
+      "d1Waves": 5,
+      "d1Calls": 5,
+      "r2Waves": 0,
+      "background": 1,
+      "sql": [
+        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "run: UPDATE shares SET public = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
+      ]
+    }
+  ],
+  "plans": [
+    {
+      "sql": "SELECT d.slug, d.title, d.public, d.latest_version, d.updated_at, t.name AS changed_by_name, (SELECT COUNT(*) FROM shares WHERE author = ?1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))) AS total, (SELECT COUNT(*) FROM shares WHERE author = ?1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND public = 1) AS public_total FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ?1 AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ?2",
+      "plan": "SEARCH d USING INDEX shares_by_author (author=? AND deleted_at=?); SEARCH t USING INDEX sqlite_autoindex_tokens_1 (id=?) LEFT-JOIN; SCALAR SUBQUERY 1; SEARCH shares USING INDEX shares_by_author (author=? AND deleted_at=?); SCALAR SUBQUERY 2; SEARCH shares USING INDEX shares_by_author (author=? AND deleted_at=?); USE TEMP B-TREE FOR LAST TERM OF ORDER BY"
+    },
+    {
+      "sql": "SELECT slug, SUM(views) AS total, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS recent FROM share_views GROUP BY slug",
+      "plan": "SCAN share_views"
+    },
+    {
+      "sql": "SELECT id, name, created_at, last_used_at, revoked_at FROM tokens WHERE author = ? ORDER BY created_at DESC, id",
+      "plan": "SCAN tokens; USE TEMP B-TREE FOR ORDER BY"
+    },
+    {
+      "sql": "SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind FROM shares d JOIN versions v ON v.slug = d.slug WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY v.n DESC",
+      "plan": "SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH v USING INDEX sqlite_autoindex_versions_2 (slug=?)"
+    },
+    {
+      "sql": "INSERT INTO share_views (slug, day, views) SELECT ?1, ?2, 1 WHERE EXISTS (SELECT 1 FROM shares WHERE slug = ?1 AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))) ON CONFLICT (slug, day) DO UPDATE SET views = views + 1",
+      "plan": "SEARCH shares EXISTS USING INDEX sqlite_autoindex_shares_1 (slug=?)"
+    },
+    {
+      "sql": "SELECT v.n, v.kind, v.body_key FROM shares d JOIN versions v ON v.slug = d.slug AND v.n = COALESCE(?, d.latest_version) WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+      "plan": "SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH v USING INDEX sqlite_autoindex_versions_2 (slug=? AND n=?)"
+    },
+    {
+      "sql": "SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind FROM shares d JOIN versions v ON v.slug = d.slug WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND d.public = 1 ORDER BY v.n DESC",
+      "plan": "SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH v USING INDEX sqlite_autoindex_versions_2 (slug=?)"
+    },
+    {
+      "sql": "SELECT v.n, v.kind, v.body_key FROM shares d JOIN versions v ON v.slug = d.slug AND v.n = COALESCE(?, d.latest_version) WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND d.public = 1",
+      "plan": "SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH v USING INDEX sqlite_autoindex_versions_2 (slug=? AND n=?)"
+    },
+    {
+      "sql": "SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+      "plan": "SEARCH tokens USING INDEX sqlite_autoindex_tokens_2 (digest=?)"
+    },
+    {
+      "sql": "UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+      "plan": "SEARCH tokens USING INDEX sqlite_autoindex_tokens_1 (id=?)"
+    },
+    {
+      "sql": "SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+      "plan": "SEARCH d USING INDEX shares_by_author (author=? AND deleted_at=?)"
+    },
+    {
+      "sql": "SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ? OFFSET ?",
+      "plan": "SEARCH d USING INDEX shares_by_author (author=? AND deleted_at=?); SEARCH t USING INDEX sqlite_autoindex_tokens_1 (id=?) LEFT-JOIN; USE TEMP B-TREE FOR LAST TERM OF ORDER BY"
+    },
+    {
+      "sql": "SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+      "plan": "SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH t USING INDEX sqlite_autoindex_tokens_1 (id=?) LEFT-JOIN"
+    },
+    {
+      "sql": "SELECT v.n, v.kind, v.size, v.created_at, v.token_id, t.name AS token_name FROM versions v JOIN shares d ON d.slug = v.slug AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) LEFT JOIN tokens t ON t.id = v.token_id WHERE v.slug = ? ORDER BY v.n DESC",
+      "plan": "SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH v USING INDEX sqlite_autoindex_versions_2 (slug=?); SEARCH t USING INDEX sqlite_autoindex_tokens_1 (id=?) LEFT-JOIN"
+    },
+    {
+      "sql": "INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER) + ? WHERE (SELECT COALESCE(SUM(size), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?",
+      "plan": "SCAN CONSTANT ROW; SCALAR SUBQUERY 1; SCAN versions; SCALAR SUBQUERY 2; SCAN trash"
+    },
+    {
+      "sql": "INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT ?, 1, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+      "plan": "SEARCH trash EXISTS USING INDEX sqlite_autoindex_trash_1 (body_key=?)"
+    },
+    {
+      "sql": "INSERT INTO shares (slug, author, title, description, tags, public, latest_version, created_at, updated_at, changed_by, changed_at, expires_at, expiry_set) SELECT ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
+      "plan": "SEARCH versions EXISTS USING COVERING INDEX sqlite_autoindex_versions_1 (body_key=?)"
+    },
+    {
+      "sql": "DELETE FROM trash WHERE body_key = ? AND EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
+      "plan": "SEARCH trash USING INDEX sqlite_autoindex_trash_1 (body_key=?); SCALAR SUBQUERY 1; SEARCH versions USING COVERING INDEX sqlite_autoindex_versions_1 (body_key=?)"
+    },
+    {
+      "sql": "SELECT body_key, due_at FROM trash WHERE due_at <= CAST(unixepoch('subsec') * 1000 AS INTEGER) ORDER BY due_at LIMIT ?",
+      "plan": "SCAN trash; USE TEMP B-TREE FOR ORDER BY"
+    },
+    {
+      "sql": "INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT slug, latest_version + 1, ?, ?, ?, ?, ?, ? FROM shares WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+      "plan": "SEARCH shares USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH trash EXISTS USING INDEX sqlite_autoindex_trash_1 (body_key=?)"
+    },
+    {
+      "sql": "UPDATE shares SET latest_version = latest_version + 1, title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags), expires_at = CASE WHEN ? = 1 THEN ? WHEN expiry_set = 0 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?), updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
+      "plan": "SEARCH shares USING INDEX sqlite_autoindex_shares_1 (slug=?); SCALAR SUBQUERY 1; SEARCH versions USING COVERING INDEX sqlite_autoindex_versions_1 (body_key=?)"
+    },
+    {
+      "sql": "INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ? FROM versions WHERE slug = ? AND n <= (SELECT latest_version FROM shares WHERE slug = ?) - 20",
+      "plan": "SEARCH versions USING INDEX sqlite_autoindex_versions_2 (slug=? AND n<?); SCALAR SUBQUERY 1; SEARCH shares USING INDEX sqlite_autoindex_shares_1 (slug=?)"
+    },
+    {
+      "sql": "DELETE FROM versions WHERE slug = ? AND n <= (SELECT latest_version FROM shares WHERE slug = ?) - 20",
+      "plan": "SEARCH versions USING COVERING INDEX sqlite_autoindex_versions_2 (slug=? AND n<?); SCALAR SUBQUERY 1; SEARCH shares USING INDEX sqlite_autoindex_shares_1 (slug=?)"
+    },
+    {
+      "sql": "UPDATE shares SET title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags), expires_at = CASE WHEN ? = 1 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?), updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+      "plan": "SEARCH shares USING INDEX sqlite_autoindex_shares_1 (slug=?)"
+    },
+    {
+      "sql": "UPDATE shares SET public = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+      "plan": "SEARCH shares USING INDEX sqlite_autoindex_shares_1 (slug=?)"
+    }
+  ]
+}

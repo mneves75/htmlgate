@@ -36,4 +36,28 @@ describe("versions of a Share", () => {
       expect(r.text).not.toContain(`key-${slug}`);
     }
   });
+
+  test("the Share check decides first: a failed versions read is still a 404 for a Share that is not the Author's", async () => {
+    const i = await startInstance();
+    const own = await i.api("POST", "/api/shares", { html: PAGE, title: "Own" });
+    expect(own.status).toBe(201);
+    const now = Date.now();
+    i.fake.sqlite.prepare(`INSERT INTO shares (slug, author, title, description, tags, public, latest_version, created_at, updated_at,
+      changed_by, changed_at, deleted_at, expires_at, expiry_set) VALUES ('foreign00002', 'other@example.com', 't', NULL, '{}', 0, 1, ?, ?, 'tok', ?, NULL, NULL, 0)`).run(now, now, now);
+    // The versions read fails at once; the Share lookup answers 20 ms later, so the failure comes first.
+    type Stmt = { sql: string; bind: (...v: unknown[]) => Stmt; all: () => Promise<unknown>; first: () => Promise<unknown>; run: () => Promise<unknown> };
+    const raw = i.fake.db as unknown as { prepare: (sql: string) => Stmt; batch: (s: Stmt[]) => Promise<unknown> };
+    const faulty = (s: Stmt): Stmt => ({
+      ...s,
+      bind: (...v) => faulty(s.bind(...v)),
+      all: () => (s.sql.startsWith("SELECT v.n, v.kind, v.size") ? Promise.reject(new Error("versions read failed")) : s.all()),
+      first: () => (s.sql.includes("FROM shares d LEFT JOIN tokens t") ? new Promise((r) => setTimeout(r, 20)).then(() => s.first()) : s.first()),
+    });
+    i.env.DB = { prepare: (sql: string) => faulty(raw.prepare(sql)), batch: (ss: Stmt[]) => raw.batch(ss) } as unknown as D1Database;
+    const foreign = await i.api("GET", "/api/shares/foreign00002/versions");
+    expect({ status: foreign.status, code: foreign.json?.error?.code }).toEqual({ status: 404, code: "not_found" });
+    // Positive control: the Author's own Share with the same failure is a server error, as before.
+    const mine = await i.api("GET", `/api/shares/${own.json.slug}/versions`);
+    expect(mine.status).toBe(500);
+  });
 });

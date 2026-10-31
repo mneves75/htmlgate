@@ -8,7 +8,8 @@ p50 44.4 ms. Raw data: `docs/perf/raw/`.
 
 ## L2 edge, landing (htmlgate.com), A/A
 
-Each URL twice (arm 0 and arm 1, interleaved request by request), 30 new-connection and 30 warm-connection samples
+Each URL twice (arm 0 and arm 1): new-connection requests interleaved one by one, warm ones in alternating blocks of
+five on one connection; 30 new-connection and 30 warm-connection samples
 per arm, 250 ms apart, 1,056 requests. Every warm response was `cf-cache-status: HIT`.
 
 | path | new conn p50 / p95 (arm 0, arm 1) ms | warm p50 / p95 (arm 0, arm 1) ms |

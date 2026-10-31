@@ -28,12 +28,20 @@ describe("D1 round trips per route", () => {
   test("every route measured has a ceiling, and none is over it", async () => {
     const { rows } = await measureRoutes();
     const over: string[] = [];
+    const unbudgeted: string[] = [];
     for (const r of rows) {
       const limit = budgets[r.key];
-      if (typeof limit !== "number") continue;
+      if (typeof limit !== "number") {
+        unbudgeted.push(r.key);
+        continue;
+      }
       if (r.d1Waves > limit) over.push(`${r.key}: ${r.d1Waves} waves, ceiling ${limit}\n  ${r.sql.join("\n  ")}`);
     }
+    expect(unbudgeted).toEqual([]);
     expect(over).toEqual([]);
+    // A Viewer's home reads nothing at all, not even in the background.
+    const viewer = rows.find((r) => r.key === "GET / (Viewer)")!;
+    expect({ critical: viewer.d1Calls, background: viewer.background }).toEqual({ critical: 0, background: 0 });
     const measured = new Set(rows.map((r) => r.key));
     const missing = Object.keys(budgets).filter((k) => k !== "note" && k !== "baseline" && !measured.has(k));
     expect(missing).toEqual([]);

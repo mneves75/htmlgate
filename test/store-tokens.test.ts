@@ -39,4 +39,20 @@ describe("useToken", () => {
     expect(await store.useToken("nope", 5_000_000)).toBeNull();
     expect(lastUsed("bbbbbbbbbbbb")).toBeNull();
   });
+
+  test("when the database refuses the write, an unknown or revoked token is still no token and a live one fails", async () => {
+    const { fake, store } = setup();
+    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000);
+    await store.createToken("bbbbbbbbbbbb", "a@example.com", "old", "d2", 1_000);
+    await store.revokeToken("a@example.com", "bbbbbbbbbbbb", 2_000);
+    const raw = fake.db as unknown as { prepare: (sql: string) => { sql: string }; batch: (s: { sql: string }[]) => Promise<unknown> };
+    const readOnly = {
+      prepare: (sql: string) => raw.prepare(sql),
+      batch: (ss: { sql: string }[]) => (ss.some((s) => s.sql.startsWith("UPDATE")) ? Promise.reject(new Error("read-only")) : raw.batch(ss)),
+    } as unknown as D1Database;
+    const s = new Store(readOnly, fake.bucket);
+    expect(await s.useToken("nope", 5_000_000)).toBeNull();
+    expect(await s.useToken("d2", 5_000_000)).toBeNull();
+    await expect(s.useToken("d1", 5_000_000)).rejects.toThrow("read-only");
+  });
 });

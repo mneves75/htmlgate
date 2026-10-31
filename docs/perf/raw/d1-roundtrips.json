@@ -156,8 +156,8 @@
       "sql": [
         "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
         "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
-        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
-        "all: SELECT v.n, v.kind, v.size, v.created_at, v.token_id, t.name AS token_name FROM versions v JOIN shares d ON d.slug = v.slug AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) LEFT JOIN tokens t ON t.id = v.token_id WHERE v.slug = ? ORDER BY v.n DESC"
+        "all: SELECT v.n, v.kind, v.size, v.created_at, v.token_id, t.name AS token_name FROM versions v JOIN shares d ON d.slug = v.slug AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) LEFT JOIN tokens t ON t.id = v.token_id WHERE v.slug = ? ORDER BY v.n DESC",
+        "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
       ]
     },
     {

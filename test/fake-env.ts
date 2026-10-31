@@ -9,7 +9,7 @@ export interface FakeStatement {
   sql: string;
   values: SQLInputValue[];
   bind: (...values: SQLInputValue[]) => FakeStatement;
-  run: () => Promise<{ meta: { changes: number } }>;
+  run: () => Promise<{ results: unknown[]; meta: { changes: number } }>;
   all: <T = unknown>() => Promise<{ results: T[] }>;
   first: <T = unknown>() => Promise<T | null>;
 }
@@ -29,7 +29,12 @@ export function fakeEnv(opts: { before?: string; through?: string; seed?: (sqlit
   const prepare = (sql: string, values: SQLInputValue[] = []): FakeStatement => ({
     sql, values,
     bind: (...bound) => prepare(sql, bound),
-    run: async () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } }),
+    // As on D1, a statement that returns rows carries them in `results`, inside a batch too.
+    run: async () => {
+      const st = sqlite.prepare(sql);
+      if (st.columns().length) return { results: st.all(...values), meta: { changes: 0 } };
+      return { results: [], meta: { changes: Number(st.run(...values).changes) } };
+    },
     all: async <T>() => ({ results: sqlite.prepare(sql).all(...values) as T[] }),
     first: async <T>() => (sqlite.prepare(sql).get(...values) as T | undefined) ?? null,
   });

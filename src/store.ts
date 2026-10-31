@@ -162,19 +162,18 @@ export class Store {
 
   // Tokens
 
-  async tokenByDigest(digest: string): Promise<TokenRow | null> {
-    return this.db
-      .prepare("SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL")
-      .bind(digest)
-      .first<TokenRow>();
-  }
-
-  /** Records use at most once a minute, so routine reads write no rows. */
-  async touchToken(id: string, now: number): Promise<void> {
-    await this.db
-      .prepare("UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)")
-      .bind(now, id, now - 60_000)
-      .run();
+  /**
+   * The live token with this digest, its use recorded at most once a minute (so routine reads write no rows). One
+   * batch, so one round trip: each is ~170 ms from Brazil to a D1 in North America (docs/perf/BASELINE.md).
+   */
+  async useToken(digest: string, now: number): Promise<TokenRow | null> {
+    const [found] = await this.db.batch<TokenRow>([
+      this.db.prepare("SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL").bind(digest),
+      this.db
+        .prepare("UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL")
+        .bind(now, digest, now - 60_000),
+    ]);
+    return found?.results[0] ?? null;
   }
 
   async createToken(id: string, author: string, name: string, digest: string, now: number): Promise<void> {

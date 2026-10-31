@@ -11,13 +11,13 @@ Simulated latency per call: 20 ms. Table sizes: shares 44, versions 48, tokens 1
 | GET /p/<slug> (Public page) | 200 | 1 | 1 | 0 | 1 |
 | GET /p/<slug>/raw (Public body) | 200 | 1 | 1 | 1 | 0 |
 | GET /p/<missing> (not found) | 404 | 1 | 1 | 0 | 0 |
-| GET /api/shares (list) | 200 | 4 | 4 | 0 | 0 |
-| GET /api/shares/<slug> | 200 | 3 | 3 | 0 | 0 |
-| GET /api/shares/<slug>/versions | 200 | 4 | 4 | 0 | 0 |
-| POST /api/shares (publish html) | 201 | 5 | 5 | 1 | 1 |
-| PUT /api/shares/<slug> (new Version) | 200 | 6 | 6 | 1 | 1 |
-| PATCH /api/shares/<slug> | 200 | 5 | 5 | 0 | 1 |
-| POST /api/shares/<slug>/visibility | 200 | 5 | 5 | 0 | 1 |
+| GET /api/shares (list) | 200 | 3 | 3 | 0 | 0 |
+| GET /api/shares/<slug> | 200 | 2 | 2 | 0 | 0 |
+| GET /api/shares/<slug>/versions | 200 | 3 | 3 | 0 | 0 |
+| POST /api/shares (publish html) | 201 | 4 | 4 | 1 | 1 |
+| PUT /api/shares/<slug> (new Version) | 200 | 5 | 5 | 1 | 1 |
+| PATCH /api/shares/<slug> | 200 | 4 | 4 | 0 | 1 |
+| POST /api/shares/<slug>/visibility | 200 | 4 | 4 | 0 | 1 |
 
 | statement | plan |
 |---|---|
@@ -30,7 +30,7 @@ Simulated latency per call: 20 ms. Table sizes: shares 44, versions 48, tokens 1
 | `SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind FROM shares d JOIN versions v ON v.slug = d.slug WHER…` | SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH v USING INDEX sqlite_autoindex_versions_2 (slug=?) |
 | `SELECT v.n, v.kind, v.body_key FROM shares d JOIN versions v ON v.slug = d.slug AND v.n = COALESCE(?, d.latest_version) WHERE d.slug = ? AND d.author = ? AND d.…` | SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH v USING INDEX sqlite_autoindex_versions_2 (slug=? AND n=?) |
 | `SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL` | SEARCH tokens USING INDEX sqlite_autoindex_tokens_2 (digest=?) |
-| `UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)` | SEARCH tokens USING INDEX sqlite_autoindex_tokens_1 (id=?) |
+| `UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL` | SEARCH tokens USING INDEX sqlite_autoindex_tokens_2 (digest=?) |
 | `SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS IN…` | SEARCH d USING INDEX shares_by_author (author=? AND deleted_at=?) |
 | `SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.chan…` | SEARCH d USING INDEX shares_by_author (author=? AND deleted_at=?); SEARCH t USING INDEX sqlite_autoindex_tokens_1 (id=?) LEFT-JOIN; USE TEMP B-TREE FOR LAST TERM OF ORDER BY |
 | `SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.chan…` | SEARCH d USING INDEX sqlite_autoindex_shares_1 (slug=?); SEARCH t USING INDEX sqlite_autoindex_tokens_1 (id=?) LEFT-JOIN |

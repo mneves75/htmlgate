@@ -9,6 +9,7 @@
   },
   "rows": [
     {
+      "key": "GET /",
       "route": "GET / (Author home)",
       "status": 200,
       "d1Waves": 2,
@@ -21,6 +22,7 @@
       ]
     },
     {
+      "key": "GET / (Viewer)",
       "route": "GET / (Viewer)",
       "status": 200,
       "d1Waves": 0,
@@ -30,6 +32,7 @@
       "sql": []
     },
     {
+      "key": "GET /metrics",
       "route": "GET /metrics",
       "status": 200,
       "d1Waves": 2,
@@ -42,6 +45,7 @@
       ]
     },
     {
+      "key": "GET /tokens",
       "route": "GET /tokens",
       "status": 200,
       "d1Waves": 1,
@@ -53,6 +57,7 @@
       ]
     },
     {
+      "key": "GET /s/<slug>",
       "route": "GET /s/<slug> (Gated page)",
       "status": 200,
       "d1Waves": 1,
@@ -64,6 +69,7 @@
       ]
     },
     {
+      "key": "GET /s/<slug>/raw",
       "route": "GET /s/<slug>/raw (Gated body)",
       "status": 200,
       "d1Waves": 1,
@@ -75,6 +81,7 @@
       ]
     },
     {
+      "key": "GET /p/<slug>",
       "route": "GET /p/<slug> (Public page)",
       "status": 200,
       "d1Waves": 1,
@@ -86,6 +93,7 @@
       ]
     },
     {
+      "key": "GET /p/<slug>/raw",
       "route": "GET /p/<slug>/raw (Public body)",
       "status": 200,
       "d1Waves": 1,
@@ -97,6 +105,7 @@
       ]
     },
     {
+      "key": "GET /p/<missing>",
       "route": "GET /p/<missing> (not found)",
       "status": 404,
       "d1Waves": 1,
@@ -108,56 +117,60 @@
       ]
     },
     {
+      "key": "GET /api/shares",
       "route": "GET /api/shares (list)",
-      "status": 200,
-      "d1Waves": 4,
-      "d1Calls": 4,
-      "r2Waves": 0,
-      "background": 0,
-      "sql": [
-        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
-        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
-        "first: SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
-        "all: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ? OFFSET ?"
-      ]
-    },
-    {
-      "route": "GET /api/shares/<slug>",
       "status": 200,
       "d1Waves": 3,
       "d1Calls": 3,
       "r2Waves": 0,
       "background": 0,
       "sql": [
-        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
-        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
+        "first: SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "all: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ? OFFSET ?"
+      ]
+    },
+    {
+      "key": "GET /api/shares/<slug>",
+      "route": "GET /api/shares/<slug>",
+      "status": 200,
+      "d1Waves": 2,
+      "d1Calls": 2,
+      "r2Waves": 0,
+      "background": 0,
+      "sql": [
+        "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
         "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
       ]
     },
     {
+      "key": "GET /api/shares/<slug>/versions",
       "route": "GET /api/shares/<slug>/versions",
       "status": 200,
-      "d1Waves": 4,
-      "d1Calls": 4,
+      "d1Waves": 3,
+      "d1Calls": 3,
       "r2Waves": 0,
       "background": 0,
       "sql": [
-        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
-        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
         "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
         "all: SELECT v.n, v.kind, v.size, v.created_at, v.token_id, t.name AS token_name FROM versions v JOIN shares d ON d.slug = v.slug AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) LEFT JOIN tokens t ON t.id = v.token_id WHERE v.slug = ? ORDER BY v.n DESC"
       ]
     },
     {
+      "key": "POST /api/shares",
       "route": "POST /api/shares (publish html)",
       "status": 201,
-      "d1Waves": 5,
-      "d1Calls": 5,
+      "d1Waves": 4,
+      "d1Calls": 4,
       "r2Waves": 1,
       "background": 1,
       "sql": [
-        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
-        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
         "run: INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER) + ? WHERE (SELECT COALESCE(SUM(size), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?",
         "batch: INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT ?, 1, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
         "batch: INSERT INTO shares (slug, author, title, description, tags, public, latest_version, created_at, updated_at, changed_by, changed_at, expires_at, expiry_set) SELECT ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM versions WHERE body_key = ?)",
@@ -166,15 +179,16 @@
       ]
     },
     {
+      "key": "PUT /api/shares/<slug>",
       "route": "PUT /api/shares/<slug> (new Version)",
       "status": 200,
-      "d1Waves": 6,
-      "d1Calls": 6,
+      "d1Waves": 5,
+      "d1Calls": 5,
       "r2Waves": 1,
       "background": 1,
       "sql": [
-        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
-        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
         "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
         "run: INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER) + ? WHERE (SELECT COALESCE(SUM(size), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?",
         "batch: INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT slug, latest_version + 1, ?, ?, ?, ?, ?, ? FROM shares WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) AND EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
@@ -186,30 +200,32 @@
       ]
     },
     {
+      "key": "PATCH /api/shares/<slug>",
       "route": "PATCH /api/shares/<slug>",
       "status": 200,
-      "d1Waves": 5,
-      "d1Calls": 5,
+      "d1Waves": 4,
+      "d1Calls": 4,
       "r2Waves": 0,
       "background": 1,
       "sql": [
-        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
-        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
         "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
         "run: UPDATE shares SET title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags), expires_at = CASE WHEN ? = 1 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?), updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
         "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
       ]
     },
     {
+      "key": "POST /api/shares/<slug>/visibility",
       "route": "POST /api/shares/<slug>/visibility",
       "status": 200,
-      "d1Waves": 5,
-      "d1Calls": 5,
+      "d1Waves": 4,
+      "d1Calls": 4,
       "r2Waves": 0,
       "background": 1,
       "sql": [
-        "first: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
-        "run: UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+        "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
+        "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
         "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
         "run: UPDATE shares SET public = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
         "first: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.slug = ? AND d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))"
@@ -254,8 +270,8 @@
       "plan": "SEARCH tokens USING INDEX sqlite_autoindex_tokens_2 (digest=?)"
     },
     {
-      "sql": "UPDATE tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
-      "plan": "SEARCH tokens USING INDEX sqlite_autoindex_tokens_1 (id=?)"
+      "sql": "UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
+      "plan": "SEARCH tokens USING INDEX sqlite_autoindex_tokens_2 (digest=?)"
     },
     {
       "sql": "SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",

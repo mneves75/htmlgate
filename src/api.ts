@@ -100,9 +100,7 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
 async function authenticate(req: Request, store: Store): Promise<TokenRow | null> {
   const m = /^Bearer (\S+)$/.exec(req.headers.get("authorization") ?? "");
   if (!m || !TOKEN.test(m[1]!)) return null;
-  const row = await store.tokenByDigest(await sha256Hex(m[1]!));
-  if (row) await store.touchToken(row.id, Date.now());
-  return row;
+  return store.useToken(await sha256Hex(m[1]!), Date.now());
 }
 
 function onboard(url: URL, cfg: Config): Response {

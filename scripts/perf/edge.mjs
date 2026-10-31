@@ -6,6 +6,9 @@
 //   node scripts/perf/edge.mjs --base https://htmlgate.com --paths /,/en/ [--n 30] [--gap 300] [--out file.json]
 //   node scripts/perf/edge.mjs --base A --base B ...    interleaves A and B request by request (ABAB);
 //                                                       the same URL twice is the A/A noise run
+//   --base 'https://host|<worker>=<version-id>'          pins that arm to one Worker Version with the
+//                                                       Cloudflare-Workers-Version-Overrides header (every request,
+//                                                       warm ones included); two arms may not pin the same Version
 //
 // Traffic is tagged (User-Agent htmlgate-perf/1), paced (--gap ms between requests) and capped (--cap, default 1500):
 // the run stops before the cap rather than send more. It sends GET only, never a write, and no Sec-Fetch-Dest, so
@@ -18,12 +21,12 @@ const run = promisify(execFile);
 const UA = "htmlgate-perf/1 (+https://github.com/mneves75/htmlgate/tree/main/scripts/perf)";
 const FORMAT = '%{json}\\n%header{cf-cache-status}|%header{cf-ray}|%header{age}\\n';
 
-function args(argv) {
+export function args(argv) {
   const out = { bases: [], paths: [], n: 30, gap: 300, cap: 1500, out: undefined };
   for (let i = 0; i < argv.length; i += 2) {
     const [k, v] = [argv[i], argv[i + 1]];
     if (v === undefined) throw new Error(`${k} needs a value`);
-    if (k === "--base") out.bases.push(v.replace(/\/$/, ""));
+    if (k === "--base") out.bases.push(parseBase(v));
     else if (k === "--paths") out.paths.push(...v.split(","));
     else if (k === "--n") out.n = positive(k, v);
     else if (k === "--gap") out.gap = Number(v);
@@ -32,7 +35,28 @@ function args(argv) {
     else throw new Error(`unknown option ${k}`);
   }
   if (!out.bases.length || !out.paths.length) throw new Error("say --base and --paths");
+  const pinned = out.bases.filter((b) => b.override).map((b) => b.override);
+  if (pinned.length && pinned.length !== out.bases.length) throw new Error("pin every arm to a Version, or none");
+  if (new Set(pinned).size !== pinned.length) throw new Error("two arms pin the same Version: that is an A/A run, say it without pins");
   return out;
+}
+
+/** `https://host` or `https://host|worker=version-id`. */
+export function parseBase(v) {
+  const [url, pin] = v.split("|");
+  const out = { url: url.replace(/\/$/, ""), override: undefined };
+  if (pin === undefined) return out;
+  const m = /^([a-z0-9-]+)=([0-9a-f-]{36})$/.exec(pin);
+  if (!m) throw new Error(`a Version pin is <worker>=<version-id>, not ${pin}`);
+  out.override = `${m[1]}="${m[2]}"`;
+  return out;
+}
+
+/** The curl options every request of an arm carries. */
+export function armOptions(base) {
+  const a = ["-sS", "-A", UA, "-H", "accept-encoding: br, gzip", "-o", "/dev/null", "-w", FORMAT];
+  if (base.override) a.push("-H", `cloudflare-workers-version-overrides: ${base.override}`);
+  return a;
 }
 function positive(name, v) {
   const n = Number(v);
@@ -43,9 +67,9 @@ function positive(name, v) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** One curl process: `urls` on one connection when there are several. Returns one sample per URL. */
-async function curl(urls) {
-  const a = ["-sS", "-A", UA, "-H", "accept-encoding: br, gzip", "-o", "/dev/null", "-w", FORMAT];
-  for (const [i, u] of urls.entries()) a.push(...(i ? ["--next", "-sS", "-A", UA, "-H", "accept-encoding: br, gzip", "-o", "/dev/null", "-w", FORMAT] : []), u);
+async function curl(base, urls) {
+  const a = [];
+  for (const [i, u] of urls.entries()) a.push(...(i ? ["--next"] : []), ...armOptions(base), u);
   const { stdout } = await run("curl", a, { maxBuffer: 1 << 24 });
   const lines = stdout.trim().split("\n");
   const samples = [];
@@ -83,12 +107,13 @@ async function main() {
   const results = [];
   const started = new Date().toISOString();
   for (const path of o.paths) {
-    const byBase = Object.fromEntries(o.bases.map((b, i) => [`${i}:${b}`, { cold: [], warm: [] }]));
+    const key = (i, b) => `${i}:${b.url}${b.override ? `|${b.override}` : ""}`;
+    const byBase = Object.fromEntries(o.bases.map((b, i) => [key(i, b), { cold: [], warm: [] }]));
     // New connections, interleaved base by base.
     for (let r = 0; r < o.n; r++) {
       for (const [i, b] of o.bases.entries()) {
         take(1);
-        byBase[`${i}:${b}`].cold.push(...(await curl([b + path])));
+        byBase[key(i, b)].cold.push(...(await curl(b, [b.url + path])));
         await sleep(o.gap);
       }
     }
@@ -98,8 +123,8 @@ async function main() {
       for (const [i, b] of (block % 2 ? [...o.bases.entries()].reverse() : [...o.bases.entries()])) {
         const k = Math.min(5, o.n - block * 5);
         take(k + 1);
-        const s = await curl(Array(k + 1).fill(b + path));
-        byBase[`${i}:${b}`].warm.push(...s.slice(1));
+        const s = await curl(b, Array(k + 1).fill(b.url + path));
+        byBase[key(i, b)].warm.push(...s.slice(1));
         await sleep(o.gap * (k + 1));
       }
     }

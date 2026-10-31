@@ -1,8 +1,8 @@
 # Performance and cost pass: plan
 
 Date 2026-10-31. Branch `perf/cost-latency-pass` from `97823b7`. Vantage point: this Mac in Brazil (Cloudflare
-answers from BEL, GIG and MAO; recorded per request). Status: **draft for review; nothing in `src/`, `site/` or
-config has changed.**
+answers from BEL, GIG and MAO; recorded per request). Status: **reviewed (round 1, REVIEW.md) and executed: W1–W3 done,
+W4 rejected.**
 
 ## Targets and what is assumed
 
@@ -90,7 +90,8 @@ protects against runaway cost, not for cents. If the owner's numbers say otherwi
 ## Findings (ranked by impact × confidence / effort)
 
 Round trips are from `docs/perf/raw/d1-roundtrips.md` (counter, not timing). One D1 wave from Brazil costs
-**≈ 170 ms at warm p50**, measured live (BASELINE.md: `/p/<missing>` 213 ms vs `/api/onboard` 43 ms).
+**≈ 176 ms at warm p50**, a route-level estimate from live medians (BASELINE.md: `/p/<missing>` 219 ms vs
+`/api/onboard` 43 ms).
 
 | # | Finding | Evidence | Impact | Confidence | Effort |
 |---|---|---|---|---|---|
@@ -111,30 +112,29 @@ not load). Evidence: `grep -rnE "font-face|woff" src site` finds only a MIME tab
 
 Each is one commit, measured alone, reverted alone. No schema change is proposed in this round.
 
-**W1 — `touchToken` in the background (F1).** `authenticate` gets `ctx` and sends `touchToken` with
-`ctx.waitUntil(... .catch(log))`. Expected: every API route −1 D1 wave. Measured by the counter (local) and, live,
-by the owner's CLI timings if a token is provided. Behaviour kept: identity still comes from the token read on
-the critical path; only the "last used" timestamp is recorded after the answer. Test that fails without it: the
-counter's guard (`GET /api/shares/<slug>` ≤ 2 waves) plus the existing `last_used_at` tests. Rollback: revert
-the commit; no data involved.
+**W1 — find and record a token's use in one round trip (F1). Done, `eded613`.** Planned as `touchToken` in
+`ctx.waitUntil`; reviewer finding 1 showed that changes what `GET /api/tokens` returns and hides a failed update.
+Built instead as `Store.useToken`: one `db.batch` of the SELECT and the once-a-minute UPDATE (keyed by digest, still
+skipping revoked tokens). Synchronous, one transaction, same observable behaviour. Every API route −1 wave.
+Tests: `test/store-tokens.test.ts`, the route ceilings in `test/roundtrips.test.ts`. Rollback: revert; no data.
 
-**W2 — Author home and /metrics in one wave (F2).** `Promise.all` of `recentShares` and `viewsBySlug` (both
+**W2 — Author home and /metrics in one wave (F2). Done, `7dce9e2`.** `Promise.all` of `recentShares` and `viewsBySlug` (both
 reads, independent results). Expected −1 wave on each. Guard: counter ceiling 1 wave. Rollback: revert.
 Option considered: one `db.batch` (one round trip, one transaction); `Promise.all` keeps the store's methods as
 they are and reaches the same one wave. Choice: `Promise.all`; strongest rejected alternative: a combined SQL
 statement (couples two unrelated queries).
 
-**W3 — API list and versions in one wave (F3).** List: `db.batch([count, page])`, one transaction so the total
-and the page agree. Versions: one statement joining the live-Share check (the `versions` query already joins
-`shares` with the live condition, `src/store.ts:426`), or `Promise.all`; the existing 404 behaviour must hold.
-Guard: counter ceilings. Equivalence test: same rows, order and totals before and after on a seeded database.
+**W3 — API list and versions in one wave (F3). Done, `974b3e6`.** List: `db.batch([count, page])`: one round
+trip, one transaction. The two statements still read the clock separately, so a Share expiring between them can
+make the total and the page disagree for that instant; the window shrank from a round trip to microseconds
+(reviewer finding 7; the earlier "agree" claim is withdrawn). Versions: the author-filtered `mustShare` runs
+alongside the read (`Promise.all`), because the versions query alone has no author filter (finding 2). Tests:
+`test/store-list.test.ts` (360 queries against an SQL oracle), `test/api-versions-owner.test.ts`.
 
-**W4 — Landing `run_worker_first` narrowed (F7), measurement first.** Only if the A/B shows a gain above A/A
-noise. It moves headers for unmatched assets into `site/public/_headers` (supported for Workers static assets;
-host-matched rules allowed) and keeps the Worker first for HTML paths (www redirect, page counts, `/app`).
-Unknowns to settle before building: whether asset requests on `www` (no redirect without the Worker) and the
-`x-robots-tag` on workers.dev are acceptable through `_headers` host rules. If the gain is within noise:
-rejected with data.
+**W4 — Landing `run_worker_first` narrowed (F7). Rejected.** Asset-first routing would stop the www→apex 301
+on asset URLs and the `404` page counts for unknown paths (reviewer finding 5): a behaviour change, not an
+optimisation. The ceiling on the gain is small: cached landing assets answer ≈ 11 ms above the 33 ms RTT floor
+(BASELINE.md, GIG warm p50 43–45 ms), and that includes Cloudflare's own edge time, not only the Worker.
 
 Not proposed: D1 read replication (no replica in South America; reads already go to one region), Smart
 Placement (one D1 wave per page after W1–W3; placement would move the Worker away from the user and every
@@ -169,7 +169,7 @@ response would cross the ocean anyway), Workers Cache or any Instance caching (s
 ## Baseline summary
 
 See [BASELINE.md](BASELINE.md). Landing: every warm response is a cache HIT; warm p50 45–64 ms against a 33 ms
-RTT floor. Instance: one D1 wave ≈ 170 ms; API reads take 3–4 waves, writes 5–6, Author pages 2.
+RTT floor. Instance: one D1 wave ≈ 176 ms (estimate); API reads take 3–4 waves, writes 5–6, Author pages 2.
 
 ## Budgets
 

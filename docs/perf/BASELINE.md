@@ -40,24 +40,26 @@ Only routes that need neither a sign-in nor a token, 600 ms apart, 396 requests.
 | /p/zzzzzzzzzzzz | Worker + one D1 read (missing Share) | 538, 540 | 232 / 489, 213 / 388 |
 | /f/zzzz | Worker only (malformed ticket, no D1) | 166, 163 | 43 / 75, 41 / 63 |
 
-**Measured cost of one D1 round trip from Brazil: ≈ 170 ms at warm p50** (213.1 − 42.6, both arms pooled), with a
-wide spread (IQR 105–235 ms on the D1 route against 9–21 ms on the Worker-only routes). This is the floor every
-uncached Instance request pays per sequential D1 wave.
+**Estimated cost of one D1 round trip from Brazil: ≈ 176 ms at warm p50** (219.2 − 42.9 ms, interpolated medians,
+both arms pooled; ≈ 180 ms on GIG alone, `node scripts/perf/summarize.mjs <run> --colo GIG`). It is a route-level
+estimate: two routes measured in the same session, one with a single D1 read and one with none, not an isolated
+D1 intervention. The D1 route's spread is wide (warm p25–p75 171–406 ms against 37–61 ms on the Worker-only routes).
+Corrected after reviewer finding 8; the first draft said 170 ms from floor-index medians.
 
 ## Round trips per route (counter)
 
 From `docs/perf/raw/d1-roundtrips.md` (20 ms simulated per call; waves = sequential D1 calls on the critical path):
 
-| route | D1 waves | est. D1 time from Brazil (× 170 ms) |
+| route | D1 waves | est. D1 time from Brazil (× 176 ms) |
 |---|---|---|
-| GET / (Author home) | 2 | ≈ 340 ms |
-| GET /metrics | 2 | ≈ 340 ms |
-| GET /tokens, /s/<slug>, /p/<slug>, raw bodies | 1 (+1 R2 for bodies) | ≈ 170 ms |
-| GET /api/shares/<slug> | 3 | ≈ 510 ms |
-| GET /api/shares (list), …/versions | 4 | ≈ 680 ms |
-| POST /api/shares (publish) | 5 (+1 R2) | ≈ 850 ms |
-| PUT /api/shares/<slug> (Version) | 6 (+1 R2) | ≈ 1,020 ms |
-| PATCH, visibility | 5 | ≈ 850 ms |
+| GET / (Author home) | 2 | ≈ 350 ms |
+| GET /metrics | 2 | ≈ 350 ms |
+| GET /tokens, /s/<slug>, /p/<slug>, raw bodies | 1 (+1 R2 for bodies) | ≈ 176 ms |
+| GET /api/shares/<slug> | 3 | ≈ 530 ms |
+| GET /api/shares (list), …/versions | 4 | ≈ 700 ms |
+| POST /api/shares (publish) | 5 (+1 R2) | ≈ 880 ms |
+| PUT /api/shares/<slug> (Version) | 6 (+1 R2) | ≈ 1,060 ms |
+| PATCH, visibility | 5 | ≈ 880 ms |
 
 The "est." column multiplies a counter by a live median: an estimate, not a measurement.
 

@@ -54,17 +54,21 @@ function instrument(rawDb: RawDb, rawBucket: RawBucket, calls: Call[]) {
   return { db: db as unknown as D1Database, bucket: bucket as unknown as R2Bucket };
 }
 
-/** Waves: calls taken by start time; one that starts after every call of the current wave ended opens the next. */
+/**
+ * Waves: the longest chain of calls each of which started only after the one before it had ended, which is what a
+ * request waits for. Overlapping calls share a wave; an independent call that overlaps a dependent chain does not
+ * hide the chain. Calls that merely happen to run one after the other count as sequential, so this is an upper
+ * bound: it can only make a ceiling stricter.
+ */
 export function waves(calls: Call[]): number {
-  let n = 0;
-  let open = -Infinity;
-  for (const c of [...calls].sort((a, b) => a.start - b.start)) {
-    if (c.start >= open) {
-      n++;
-      open = c.end;
-    } else open = Math.max(open, c.end);
+  const sorted = [...calls].sort((a, b) => a.start - b.start);
+  const depth: number[] = [];
+  for (const [i, c] of sorted.entries()) {
+    let before = 0;
+    for (let j = 0; j < i; j++) if (sorted[j]!.end <= c.start) before = Math.max(before, depth[j]!);
+    depth.push(before + 1);
   }
-  return n;
+  return Math.max(0, ...depth);
 }
 
 function must(ok: boolean, what: string) {
@@ -114,34 +118,34 @@ export async function measureRoutes() {
     call(path, { method, headers: { authorization: `Bearer ${i.token}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
 
   const NAV = { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate" };
-  // [budget key, label, request]
-  const routes: [string, string, () => Promise<Response>][] = [
-    ["GET /", "GET / (Author home)", () => call("/", { as: AUTHOR, headers: NAV })],
-    ["GET / (Viewer)", "GET / (Viewer)", () => call("/", { as: VIEWER, headers: NAV })],
-    ["GET /metrics", "GET /metrics", () => call("/metrics", { as: AUTHOR, headers: NAV })],
-    ["GET /tokens", "GET /tokens", () => call("/tokens", { as: AUTHOR, headers: NAV })],
-    ["GET /s/<slug>", "GET /s/<slug> (Gated page)", () => call(`/s/${slug}`, { as: AUTHOR, headers: NAV })],
-    ["GET /s/<slug>/raw", "GET /s/<slug>/raw (Gated body)", () => call(`/s/${slug}/raw`, { as: AUTHOR })],
-    ["GET /p/<slug>", "GET /p/<slug> (Public page)", () => call(`/p/${pslug}`, { headers: NAV })],
-    ["GET /p/<slug>/raw", "GET /p/<slug>/raw (Public body)", () => call(`/p/${pslug}/raw`)],
-    ["GET /p/<missing>", "GET /p/<missing> (not found)", () => call("/p/zzzzzzzzzzzz", { headers: NAV })],
-    ["GET /api/shares", "GET /api/shares (list)", () => api("GET", "/api/shares")],
-    ["GET /api/shares/<slug>", "GET /api/shares/<slug>", () => api("GET", `/api/shares/${slug}`)],
-    ["GET /api/shares/<slug>/versions", "GET /api/shares/<slug>/versions", () => api("GET", `/api/shares/${slug}/versions`)],
-    ["POST /api/shares", "POST /api/shares (publish html)", () => api("POST", "/api/shares", { html: PAGE, title: "New" })],
-    ["PUT /api/shares/<slug>", "PUT /api/shares/<slug> (new Version)", () => api("PUT", `/api/shares/${slug}`, { html: PAGE + "x" })],
-    ["PATCH /api/shares/<slug>", "PATCH /api/shares/<slug>", () => api("PATCH", `/api/shares/${slug}`, { title: "Renamed" })],
-    ["POST /api/shares/<slug>/visibility", "POST /api/shares/<slug>/visibility", () => api("POST", `/api/shares/${pslug}/visibility`, { public: true })],
+  // [budget key, label, request, the status it must answer]: a route that fails faster is not a faster route.
+  const routes: [string, string, () => Promise<Response>, number][] = [
+    ["GET /", "GET / (Author home)", () => call("/", { as: AUTHOR, headers: NAV }), 200],
+    ["GET / (Viewer)", "GET / (Viewer)", () => call("/", { as: VIEWER, headers: NAV }), 200],
+    ["GET /metrics", "GET /metrics", () => call("/metrics", { as: AUTHOR, headers: NAV }), 200],
+    ["GET /tokens", "GET /tokens", () => call("/tokens", { as: AUTHOR, headers: NAV }), 200],
+    ["GET /s/<slug>", "GET /s/<slug> (Gated page)", () => call(`/s/${slug}`, { as: AUTHOR, headers: NAV }), 200],
+    ["GET /s/<slug>/raw", "GET /s/<slug>/raw (Gated body)", () => call(`/s/${slug}/raw`, { as: AUTHOR }), 200],
+    ["GET /p/<slug>", "GET /p/<slug> (Public page)", () => call(`/p/${pslug}`, { headers: NAV }), 200],
+    ["GET /p/<slug>/raw", "GET /p/<slug>/raw (Public body)", () => call(`/p/${pslug}/raw`), 200],
+    ["GET /p/<missing>", "GET /p/<missing> (not found)", () => call("/p/zzzzzzzzzzzz", { headers: NAV }), 404],
+    ["GET /api/shares", "GET /api/shares (list)", () => api("GET", "/api/shares"), 200],
+    ["GET /api/shares/<slug>", "GET /api/shares/<slug>", () => api("GET", `/api/shares/${slug}`), 200],
+    ["GET /api/shares/<slug>/versions", "GET /api/shares/<slug>/versions", () => api("GET", `/api/shares/${slug}/versions`), 200],
+    ["POST /api/shares", "POST /api/shares (publish html)", () => api("POST", "/api/shares", { html: PAGE, title: "New" }), 201],
+    ["PUT /api/shares/<slug>", "PUT /api/shares/<slug> (new Version)", () => api("PUT", `/api/shares/${slug}`, { html: PAGE + "x" }), 200],
+    ["PATCH /api/shares/<slug>", "PATCH /api/shares/<slug>", () => api("PATCH", `/api/shares/${slug}`, { title: "Renamed" }), 200],
+    ["POST /api/shares/<slug>/visibility", "POST /api/shares/<slug>/visibility", () => api("POST", `/api/shares/${pslug}/visibility`, { public: true }), 200],
   ];
 
   const rows: RouteCount[] = [];
   const statements = new Set<string>();
-  for (const [key, route, go] of routes) {
+  for (const [key, route, go, expected] of routes) {
     // A token's last use is recorded at most once a minute; clearing it gives every route the same, worst case.
     i.fake.sqlite.prepare("UPDATE tokens SET last_used_at = NULL").run();
     calls.length = 0;
     const res = await go();
-    must(res.status < 500, `${route} answered ${res.status}`);
+    must(res.status === expected, `${route} answered ${res.status}, not ${expected}`);
     const critical = calls.filter((c) => c.end <= answered);
     const d1 = critical.filter((c) => c.kind === "d1");
     rows.push({

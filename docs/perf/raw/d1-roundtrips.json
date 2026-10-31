@@ -12,7 +12,7 @@
       "key": "GET /",
       "route": "GET / (Author home)",
       "status": 200,
-      "d1Waves": 2,
+      "d1Waves": 1,
       "d1Calls": 2,
       "r2Waves": 0,
       "background": 0,
@@ -35,7 +35,7 @@
       "key": "GET /metrics",
       "route": "GET /metrics",
       "status": 200,
-      "d1Waves": 2,
+      "d1Waves": 1,
       "d1Calls": 2,
       "r2Waves": 0,
       "background": 0,
@@ -120,15 +120,15 @@
       "key": "GET /api/shares",
       "route": "GET /api/shares (list)",
       "status": 200,
-      "d1Waves": 3,
-      "d1Calls": 3,
+      "d1Waves": 2,
+      "d1Calls": 2,
       "r2Waves": 0,
       "background": 0,
       "sql": [
         "batch: SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL",
         "batch: UPDATE tokens SET last_used_at = ? WHERE digest = ? AND (last_used_at IS NULL OR last_used_at < ?) AND revoked_at IS NULL",
-        "first: SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
-        "all: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ? OFFSET ?"
+        "batch: SELECT COUNT(*) AS n FROM shares d WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER))",
+        "batch: SELECT d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version, d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by WHERE d.author = ? AND d.deleted_at IS NULL AND (d.expires_at IS NULL OR d.expires_at > CAST(unixepoch('subsec') * 1000 AS INTEGER)) ORDER BY d.updated_at DESC, d.slug LIMIT ? OFFSET ?"
       ]
     },
     {
@@ -149,7 +149,7 @@
       "key": "GET /api/shares/<slug>/versions",
       "route": "GET /api/shares/<slug>/versions",
       "status": 200,
-      "d1Waves": 3,
+      "d1Waves": 2,
       "d1Calls": 3,
       "r2Waves": 0,
       "background": 0,

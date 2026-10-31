@@ -2,18 +2,18 @@ Simulated latency per call: 20 ms. Table sizes: shares 44, versions 48, tokens 1
 
 | route | status | D1 waves (critical) | D1 calls (critical) | R2 waves (critical) | background calls |
 |---|---|---|---|---|---|
-| GET / (Author home) | 200 | 2 | 2 | 0 | 0 |
+| GET / (Author home) | 200 | 1 | 2 | 0 | 0 |
 | GET / (Viewer) | 200 | 0 | 0 | 0 | 0 |
-| GET /metrics | 200 | 2 | 2 | 0 | 0 |
+| GET /metrics | 200 | 1 | 2 | 0 | 0 |
 | GET /tokens | 200 | 1 | 1 | 0 | 0 |
 | GET /s/<slug> (Gated page) | 200 | 1 | 1 | 0 | 1 |
 | GET /s/<slug>/raw (Gated body) | 200 | 1 | 1 | 1 | 0 |
 | GET /p/<slug> (Public page) | 200 | 1 | 1 | 0 | 1 |
 | GET /p/<slug>/raw (Public body) | 200 | 1 | 1 | 1 | 0 |
 | GET /p/<missing> (not found) | 404 | 1 | 1 | 0 | 0 |
-| GET /api/shares (list) | 200 | 3 | 3 | 0 | 0 |
+| GET /api/shares (list) | 200 | 2 | 2 | 0 | 0 |
 | GET /api/shares/<slug> | 200 | 2 | 2 | 0 | 0 |
-| GET /api/shares/<slug>/versions | 200 | 3 | 3 | 0 | 0 |
+| GET /api/shares/<slug>/versions | 200 | 2 | 3 | 0 | 0 |
 | POST /api/shares (publish html) | 201 | 4 | 4 | 1 | 1 |
 | PUT /api/shares/<slug> (new Version) | 200 | 5 | 5 | 1 | 1 |
 | PATCH /api/shares/<slug> | 200 | 4 | 4 | 0 | 1 |

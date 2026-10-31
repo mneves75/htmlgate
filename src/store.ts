@@ -386,13 +386,15 @@ export class Store {
       args.push(q.public ? 1 : 0);
     }
     const w = where.join(" AND ");
-    const total = (await this.db.prepare(`SELECT COUNT(*) AS n FROM shares d WHERE ${w}`).bind(...args).first<{ n: number }>())?.n ?? 0;
-    const rows = await this.db
-      .prepare(`SELECT ${SHARE_COLUMNS} FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by
-        WHERE ${w} ORDER BY d.${q.sort} DESC, d.slug LIMIT ? OFFSET ?`)
-      .bind(...args, q.pageSize, (q.page - 1) * q.pageSize)
-      .all<ShareRow>();
-    return { total, rows: rows.results };
+    // One batch: one round trip, and the total and the page are read in the same transaction.
+    const [count, rows] = await this.db.batch<{ n: number } & ShareRow>([
+      this.db.prepare(`SELECT COUNT(*) AS n FROM shares d WHERE ${w}`).bind(...args),
+      this.db
+        .prepare(`SELECT ${SHARE_COLUMNS} FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by
+          WHERE ${w} ORDER BY d.${q.sort} DESC, d.slug LIMIT ? OFFSET ?`)
+        .bind(...args, q.pageSize, (q.page - 1) * q.pageSize),
+    ]);
+    return { total: count?.results[0]?.n ?? 0, rows: (rows?.results ?? []) as ShareRow[] };
   }
 
   /**

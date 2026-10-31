@@ -2,6 +2,29 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.18] - 2026-10-31
+
+### Security
+
+- A Share's page now counts as viewed at most once a minute per network address (a new `VIEW_LIMIT` rate limit,
+  keyed on the address and the Share). Before, any client could inflate a Public Share's count, and cost a database
+  write, with every repeated request. The address keys Cloudflare's rate limiter and is never written; an Instance
+  without the limit counts nothing. Run `pnpm run setup` to add the binding.
+- The storage cap counts what a Version makes the Instance hold: its body plus, for a site, its file index in the
+  database, and never less than 20 KiB, which covers a Share's largest title, description and metadata. Before, a
+  site of empty files with long names, or a run of empty pages, grew the database outside the cap. On an Instance
+  near its cap, small Shares now use more of it.
+- `pnpm run token revoke-all` ends every way in at once: it revokes every token, replaces `TICKET_KEY` and revokes
+  every Access sign-in to the Instance, in that order. Each step is safe to repeat (docs/operator.md, "Stop a caller").
+- htmlgate.com publishes `/.well-known/security.txt`, pointing at private vulnerability reporting.
+- Local development: undici under miniflare goes to 7.30.1 (eight advisories), by a pnpm override until Wrangler
+  carries it past the release-age rule.
+
+### Added
+
+- `mfa` in `instance.json` (off by default): signing in to the Instance also asks for a second factor the Zero
+  Trust organization allows, once a day. Enrol an authenticator first (docs/operator.md, `instance.json`).
+
 ## [0.1.17] - 2026-10-31
 
 ### Changed

@@ -91,7 +91,7 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     }
   });
 
-  test("every anchor and replacement is the old one with the words renamed, but for nine listed entries; none became a no-op", () => {
+  test("every anchor and replacement is the old one with the words renamed, but for the listed entries; none became a no-op", () => {
     const differing = base.map((e, i) => [e, before[i]!] as const).filter(([a, b]) => JSON.stringify(a) !== JSON.stringify(b.map(rename)));
     // Words that are not our term: "drops the Share's other tags" (verb) and the /d/ -> /s/ path letter in four entries
     // and one that keeps the "d" prefix as an argument.
@@ -111,6 +111,11 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
       // The page-view counter hangs off the same `if`, so removing the line left an orphan `else if` and the site
       // module failed to load; the replacement now keeps the branch and drops only the header.
       "the landing preview is indexable",
+      // The Author's home sends its reads together (docs/perf/PLAN.md W2), so these anchors lost their `await` and
+      // the erased note now reads a result of that one round trip.
+      "a Viewer's home lists Shares",
+      "the erased note shows any text from the link",
+      "a link makes the home say a live Share was erased",
     ].sort((x, y) => after.findIndex((e) => e[0] === x) - after.findIndex((e) => e[0] === y)));
     for (const [a, b] of differing) {
       // The planted violation is the same one: the replacement still differs from the anchor, and the only change from
@@ -134,6 +139,28 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
         const get = 'if (req.method === "GET" && path === "/tokens") return html(200, tokensPage(visitor, await store.listTokens(cfg.author)));';
         expect(a[2], a[0]).toBe(rename(b[2]) + "\n    " + get);
         expect(a[3], a[0]).toBe(get);
+        continue;
+      }
+      if (a[0] === "a Viewer's home lists Shares") {
+        // Still the same violation: the Author check before the list read is removed.
+        expect(a[2], a[0]).toBe(rename(b[2]).replace("await ", ""));
+        expect(a[3], a[0]).toBe(rename(b[3]).replace("await ", ""));
+        continue;
+      }
+      if (a[0] === "the erased note shows any text from the link") {
+        // Still the same violation: the slug check on the link's text is removed, and only it.
+        expect(b[2]).toContain("SLUG.test(erased)");
+        expect(b[3]).not.toContain("SLUG.test(erased)");
+        expect(a[2], a[0]).toBe("const asked = isAuthor && erased !== null && SLUG.test(erased);");
+        expect(a[3], a[0]).toBe(a[2].replace(" && SLUG.test(erased)", ""));
+        continue;
+      }
+      if (a[0] === "a link makes the home say a live Share was erased") {
+        // Still the same violation: the note no longer depends on the Share being gone.
+        expect(b[2]).toContain("!(await store.eraseTarget(cfg.author, erased))");
+        expect(b[3]).not.toContain("eraseTarget");
+        expect(a[2], a[0]).toBe("asked && !target ? { erased } : undefined");
+        expect(a[3], a[0]).toBe("asked ? { erased } : undefined");
         continue;
       }
       expect(a[2].replaceAll('"s"', '"d"').replaceAll("/s/", "/d/").replaceAll("(s|p)", "(d|p)").replace("drops", "shares"), a[0]).toBe(rename(b[2]).replaceAll("shares the Share's", "shares the Share's"));

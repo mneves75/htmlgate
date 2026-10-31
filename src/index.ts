@@ -149,8 +149,14 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   if (path === "/" && req.method === "GET") {
     const erased = url.searchParams.get("erased");
     // The note only for a Share that is gone: a link cannot make the home say a live Share was erased.
-    const note = isAuthor && erased !== null && SLUG.test(erased) && !(await store.eraseTarget(cfg.author, erased)) ? { erased } : undefined;
-    return html(200, homePage(visitor, isAuthor ? await store.recentShares(cfg.author, HOME_SHARES) : null, note, isAuthor ? await store.viewsBySlug(dayFrom(Date.now(), -30)) : undefined));
+    const asked = isAuthor && erased !== null && SLUG.test(erased);
+    // Independent reads, sent together: one D1 round trip (~170 ms from Brazil) instead of one each.
+    const [target, shares, views] = await Promise.all([
+      asked ? store.eraseTarget(cfg.author, erased) : null,
+      isAuthor ? store.recentShares(cfg.author, HOME_SHARES) : null,
+      isAuthor ? store.viewsBySlug(dayFrom(Date.now(), -30)) : undefined,
+    ]);
+    return html(200, homePage(visitor, shares, asked && !target ? { erased } : undefined, views));
   }
 
   if (view && req.method === "GET") {
@@ -183,7 +189,8 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
     // The Author only, like the token page: how often each of this Instance's Shares was opened.
     if (!isAuthor) return lost();
     if (req.method !== "GET") return lost();
-    return html(200, metricsPage(visitor, (await store.recentShares(cfg.author, METRICS_SHARES)).shares, await store.viewsBySlug(dayFrom(Date.now(), -30))));
+    const [recent, views] = await Promise.all([store.recentShares(cfg.author, METRICS_SHARES), store.viewsBySlug(dayFrom(Date.now(), -30))]);
+    return html(200, metricsPage(visitor, recent.shares, views));
   }
 
   if (path === "/tokens" || path.startsWith("/tokens/")) {

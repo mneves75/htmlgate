@@ -2,6 +2,25 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.17] - 2026-10-31
+
+### Changed
+
+- Fewer sequential trips to the database, each about 176 ms from Brazil to a D1 in North America (a route-level
+  estimate, `docs/perf/BASELINE.md`): every API request finds its token and records its use in one round trip
+  instead of two; the Author's home and `/metrics` send their reads together (2 trips to 1); the Share list reads
+  its total and page in one batch, and a Share's Versions are read alongside the Share check (4 trips to 2 each,
+  with the token change). Publishing, a new Version, edits and visibility changes each make one trip fewer.
+  Behaviour is unchanged, failure paths included: a Share that is not the Author's is still a 404 when a read
+  fails, and an unknown or revoked token is still a 401 when the database refuses writes.
+
+### Added
+
+- `docs/perf/`: the measurement harness and its results. `scripts/perf/edge.mjs` measures time to first byte from
+  where it runs (new and warm connections, A/A or Version-pinned A/B); `scripts/perf/roundtrips.ts` counts the
+  database round trips on each route's critical path, and `test/roundtrips.test.ts` holds every route to its
+  ceiling in `docs/perf/budgets.json`.
+
 ## [0.1.16] - 2026-10-20
 
 ### Fixed

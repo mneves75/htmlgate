@@ -2,9 +2,9 @@ class Htmlgate < Formula
   desc "Publish HTML pages and sites to your own htmlgate Instance and get a URL"
   homepage "https://github.com/mneves75/htmlgate"
   # This formula must stay in the tap's Formula/ directory to resolve its source archive.
-  url "file://#{Pathname(__FILE__).realpath.dirname}/sources/1fdd24399659db1206bf8bb7c22076052d2d515de8750d28fb2706aa3b8b83aa.tar"
-  sha256 "1fdd24399659db1206bf8bb7c22076052d2d515de8750d28fb2706aa3b8b83aa"
-  version "0.1.16"
+  url "file://#{Pathname(__FILE__).realpath.dirname}/sources/9b6234978c214f13dcc5dc47c0cc12b313e203cd7c089e96114b6d037b6fefa5.tar"
+  sha256 "9b6234978c214f13dcc5dc47c0cc12b313e203cd7c089e96114b6d037b6fefa5"
+  version "0.1.17"
   revision 1
   license "MIT"
 

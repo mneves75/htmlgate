@@ -178,6 +178,7 @@ pnpm run mutate     # requires an assertion to catch each violation; runner fail
 pnpm run bench      # every page's load time in headless Chrome, the landing's included; fails at 50 ms p95
 HTMLGATE_TOKEN=hg_... pnpm run bench --live https://<instance-host>   # the same for a deployed Instance's public pages
 HTMLGATE_TOKEN=hg_... pnpm run smoke https://<instance-host>   # live checks on a deployed Instance
+node scripts/perf/edge.mjs --base https://<host> --paths /   # time to first byte from here; see docs/perf/
 ```
 
 Every gate runs locally. GitHub Actions has not completed a run of the release workflow yet, so a local run is the release evidence.

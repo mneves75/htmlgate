@@ -12,5 +12,5 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "site/src", "test", "scripts/bench.ts"]
+  "include": ["src", "site/src", "test", "scripts/bench.ts", "scripts/perf"]
 }

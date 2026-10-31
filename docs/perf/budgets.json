@@ -1,0 +1,27 @@
+{
+  "status": "draft, freezes after reviewer round 1 and the owner's answer",
+  "derivedFrom": "docs/perf/BASELINE.md (2026-10-31)",
+  "passFail": {
+    "landingCacheHitWarmTtfbP50Ms": { "limit": 50, "scope": "htmlgate.com assets and pages, warm connection, from Brazil, GIG colo", "note": "baseline: assets 45-51 pass, HTML 47-64 mixed; the floor is one ~33 ms RTT" },
+    "landingNewConnectionTtfbP50Ms": { "limit": "baseline + 12 ms (A/A noise)", "scope": "every sitemap URL" },
+    "instancePublicTtfbWarmP50Ms": { "limit": "baseline + A/A noise", "scope": "/api/onboard (≈43), /p/<missing> (≈213)" },
+    "d1WavesPerRoute": {
+      "note": "counter, critical path only; ceilings after W1-W3, baseline in parentheses",
+      "GET /": 1, "GET /metrics": 1, "GET /tokens": 1, "GET /s/<slug>": 1, "GET /p/<slug>": 1,
+      "GET /api/shares/<slug>": 2, "GET /api/shares": 2, "GET /api/shares/<slug>/versions": 2,
+      "POST /api/shares": 4, "PUT /api/shares/<slug>": 5, "PATCH /api/shares/<slug>": 4, "POST /api/shares/<slug>/visibility": 4,
+      "baseline": { "GET /": 2, "GET /metrics": 2, "GET /api/shares/<slug>": 3, "GET /api/shares": 4, "GET /api/shares/<slug>/versions": 4, "POST /api/shares": 5, "PUT /api/shares/<slug>": 6, "PATCH /api/shares/<slug>": 5, "POST /api/shares/<slug>/visibility": 5 }
+    },
+    "bytesPerPage": "no page above baseline by more than 1% or 1 KB",
+    "requestsPerPage": "no increase",
+    "labPageLoadP95Ms": { "limit": 50, "tool": "pnpm run bench (existing)" }
+  },
+  "diagnostic": {
+    "serverTimeP95Ms": 50,
+    "cpuP95Ms": 10,
+    "sequentialD1RoundTripsOnCriticalPath": "at most one on pages; API routes as above"
+  },
+  "deferred": {
+    "fieldP75": { "LCP_s": 2.0, "INP_ms": 150, "CLS": 0.05, "why": "no RUM (CSP blocks the beacon) and no CrUX data for this origin; check after the owner decides on RUM" }
+  }
+}

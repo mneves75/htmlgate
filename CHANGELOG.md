@@ -2,6 +2,16 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Agent instructions: `docs/agents/issue-tracker.md` no longer blames a commitless parent repository (the
+  parent directory is no longer a Git repository); research worktrees are still made by hand under
+  `.scratch/wt/`. A new `.claude/settings.json` refuses force-adding ignored files and removing the CLI's
+  `LICENSE`, asks before a live site deploy, a production `setup` and edits to `docs/perf/budgets.json`, and
+  adds a Stop gate on `pnpm run check`.
+
 ## [0.1.18] - 2026-10-31
 
 ### Security

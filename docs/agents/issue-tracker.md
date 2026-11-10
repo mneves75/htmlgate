@@ -42,7 +42,7 @@ gh issue close <n> -R $R
 
 ## Research branches
 
-Create the worktree by hand. The harness's own worktree isolation resolves HEAD from the parent `PROJETOS` directory, which is a separate, commitless Git repo, and fails here.
+Create the worktree by hand under `.scratch/wt/`, as below.
 
 ```sh
 git worktree add .scratch/wt/<slug> -b research/<slug> main

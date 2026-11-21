@@ -8,7 +8,7 @@
 // Usage: pnpm run setup [--config instance.json] [--rotate-ticket-key]
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, fsyncSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,7 +60,7 @@ export function readInstance(path) {
   if (typeof mfa !== "boolean") throw new Error("mfa must be true or false (default false).");
   const author = raw.authorEmail.trim().toLowerCase();
   const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];
-  return { name: raw.name, author, allowlist, domain, language, expiryDays, mfa };
+  return { name: raw.name, author, allowlist, domain, language, expiryDays, mfa, ...(raw.bootstrapStorage === undefined ? {} : { bootstrapStorage: raw.bootstrapStorage }) };
 }
 
 /** The settings the deployed Worker reads (src/config.ts). */
@@ -136,6 +136,7 @@ export function checkSameAccount(wranglerWho, cfWho, env) {
       : "cf's login reaches no account.");
   }
   if (c[0].id !== mine.id) throw new Error(`Wrangler would use the account "${mine.name}" and cf the account "${c[0].name}". Log both in to the same account.`);
+  if (typeof mine.id !== "string" || !mine.id) throw new Error("The tools did not identify the shared Cloudflare account.");
   return mine.id;
 }
 
@@ -144,9 +145,10 @@ export const bodiesBucket = (inst) => `${inst.name}-bodies`;
 
 // `open: false` deploys a Worker that answers at no hostname; only the gated deploy opens it, at the domain if there is
 // one and otherwise at workers.dev. With a domain, workers.dev stays off: it has no WAF and no Always Use HTTPS.
-export function workerConfig(inst, db, { open, vars }) {
+export function workerConfig(inst, db, { open, vars, accountId }) {
   return {
     name: inst.name,
+    ...(accountId === undefined ? {} : { account_id: accountId }),
     main: "../src/index.ts",
     compatibility_date: "2026-09-29",
     workers_dev: open && !inst.domain,
@@ -226,7 +228,7 @@ function listBuckets() {
 }
 
 /** A database name alone is not ownership. Inspect the active deployment, including gradual rollouts. */
-function checkOwnership(inst, db, workers, apps) {
+export function checkOwnership(inst, db, workers, apps, { requireAppAudience = false } = {}) {
   const named = (items, name, what) => {
     if (items.some((item) => !item || typeof item.name !== "string" || !item.name || typeof item.id !== "string" || !item.id)
       || new Set(items.map((item) => item.id)).size !== items.length) throw new Error(`Malformed or ambiguous ${what} list; cannot establish Instance ownership.`);
@@ -248,6 +250,7 @@ function checkOwnership(inst, db, workers, apps) {
     if (app) throw new Error("An Access application exists without its Worker; cannot establish Instance ownership.");
     return { worker, app };
   }
+  if (requireAppAudience && (typeof app?.aud !== "string" || !app.aud)) throw new Error("Missing Access application audience; cannot establish Instance ownership.");
   if (!db?.uuid) throw new Error(`Worker ${inst.name} exists without this Instance's database; pick another name.`);
   // Exact Worker destinations override account-wide policies; preview-only destinations have their own scope.
   const attached = apps.filter((a) => Array.isArray(a.destinations) && a.destinations.some((d) => d?.type === "worker" && d.worker_id === worker.id));
@@ -279,8 +282,83 @@ function checkOwnership(inst, db, workers, apps) {
       if (marker?.type !== "plain_text" || marker.text !== inst.name
         || bindings.some((b) => ["ACCESS_TEAM_URL", "ACCESS_AUD", "AUTHOR_EMAIL", "ALLOWLIST"].includes(b.name))) throw new Error("Worker is not a marked closed htmlgate bootstrap; cannot establish Instance ownership.");
     }
+    if (requireAppAudience) {
+      const audience = one("ACCESS_AUD");
+      if (audience?.type !== "plain_text" || audience.text !== app.aud) throw new Error("Active Worker audience does not match its Access application.");
+    }
   }
   return { worker, app };
+}
+
+const databaseName = (inst) => `${inst.name}-db`;
+const isDatabaseId = (id) => typeof id === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id);
+
+export function findDatabase(inst) {
+  const list = JSON.parse(sh(WRANGLER, ["d1", "list", "--json"]));
+  if (!Array.isArray(list) || list.some((d) => !d || typeof d.name !== "string" || !isDatabaseId(d.uuid))) throw new Error("Malformed database list.");
+  const matches = list.filter((d) => d.name === databaseName(inst));
+  if (matches.length > 1) throw new Error("Ambiguous Instance database name.");
+  return matches[0];
+}
+
+const bucketIdentity = (bucket) => ({ createdAt: bucket?.creation_date, jurisdiction: bucket?.jurisdiction ?? "default" });
+const validBucketIdentity = (bucket) => typeof bucket?.createdAt === "string" && Number.isFinite(Date.parse(bucket.createdAt))
+  && bucket.jurisdiction === "default";
+const sameBucket = (a, b) => a.createdAt === b.createdAt && a.jurisdiction === b.jurisdiction;
+
+function checkBucketPrivacy(bucket) {
+  const managed = cf("r2", "buckets", "domains", "managed", "list", "--bucket-name", bucket);
+  const custom = cf("r2", "buckets", "domains", "custom", "list", "--bucket-name", bucket);
+  if (managed?.enabled !== false || !Array.isArray(custom?.domains) || custom.domains.some((d) => !d || d.enabled !== false)) throw new Error("The reused R2 bucket is public or its privacy is unknown. Disable every public domain before setup.");
+}
+
+function checkStorageProof(proof, accountId, db, bucket, source) {
+  if (!proof || proof.accountId !== accountId || !(Object.hasOwn(proof, "databaseId") || Object.hasOwn(proof, "bucket"))) {
+    throw new Error(`Invalid bootstrap storage ${source} for this account.`);
+  }
+  if (Object.hasOwn(proof, "databaseId") && (!isDatabaseId(proof.databaseId) || proof.databaseId !== db?.uuid)) {
+    throw new Error(`The database does not match the bootstrap storage ${source}.`);
+  }
+  if (Object.hasOwn(proof, "bucket") && (!validBucketIdentity(proof.bucket) || !sameBucket(proof.bucket, bucketIdentity(bucket)))) {
+    throw new Error(`The R2 bucket does not match the bootstrap storage ${source}.`);
+  }
+}
+
+function readBootstrapReceipt(file) {
+  let fd;
+  try {
+    fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || (stat.mode & 0o077)) throw new Error("expected a private regular file (0600)");
+    return JSON.parse(readFileSync(fd, "utf8"));
+  } catch (e) {
+    if (e.code !== "ENOENT") throw new Error(`Cannot read bootstrap storage receipt: ${e.message}`);
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
+function writeBootstrapReceipt(file, proof) {
+  const temp = `${file}.${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    writeFileSync(temp, JSON.stringify(proof, null, 2) + "\n", { flag: "wx", mode: 0o600, flush: true });
+    renameSync(temp, file);
+    const dir = openSync(dirname(file), "r");
+    try { fsyncSync(dir); } finally { closeSync(dir); }
+  } catch (e) {
+    rmSync(temp, { force: true });
+    throw new Error(`Cannot save bootstrap storage receipt: ${e.message}. Before retrying, verify which resources were created and pin their identities in bootstrapStorage.`);
+  }
+}
+
+function createStorageResource(name, ...args) {
+  const out = sh("cf", [...args, "--name", name]);
+  let resource;
+  try { resource = JSON.parse(out); } catch { /* A successful exit alone does not identify the resource. */ }
+  if (resource?.name !== name) {
+    throw new Error(`Cloudflare did not identify the created resource ${name}. Check the account and pin its identity in bootstrapStorage before retrying.`);
+  }
+  return resource;
 }
 
 // Wrangler runs here without a terminal, so it would replace an existing DNS record or move another
@@ -419,9 +497,10 @@ function ensureTicketKey(config, rotate) {
 
 /** Sets TICKET_KEY to 32 new random bytes, ending every open ticket. Also `pnpm run token revoke-all`. */
 export function putTicketKey(config) {
-  execFileSync(WRANGLER, ["secret", "put", "TICKET_KEY", "-c", config], {
-    cwd: ROOT, input: randomBytes(32).toString("base64url"), stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, CI: "1" },
+  const out = execFileSync(WRANGLER, ["secret", "put", "TICKET_KEY", "-c", config], {
+    cwd: ROOT, input: randomBytes(32).toString("base64url"), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, CI: "1" },
   });
+  if (!out.includes("Success! Uploaded secret TICKET_KEY")) throw new Error("Wrangler did not confirm that it uploaded the ticket key.");
 }
 
 async function main() {
@@ -432,7 +511,7 @@ async function main() {
   step("checking that the source is committed");
   checkCleanTree();
   step("checking the Cloudflare logins");
-  checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env);
+  const accountId = checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env);
 
   const orgs = cf("zero-trust", "organizations", "list");
   const org = Array.isArray(orgs) ? orgs[0] : orgs;
@@ -446,15 +525,8 @@ async function main() {
   }
 
   step("finding or creating the database");
-  const dbName = `${inst.name}-db`;
-  const findDb = () => {
-    const list = JSON.parse(sh(WRANGLER, ["d1", "list", "--json"]));
-    if (!Array.isArray(list) || list.some((d) => !d || typeof d.name !== "string" || typeof d.uuid !== "string" || !d.uuid)) throw new Error("Malformed database list.");
-    const matches = list.filter((d) => d.name === dbName);
-    if (matches.length > 1) throw new Error("Ambiguous Instance database name.");
-    return matches[0];
-  };
-  let db = findDb();
+  const dbName = databaseName(inst);
+  let db = findDatabase(inst);
   const freshDb = !db;
   step("checking existing Instance ownership before any remote write");
   const owned = checkOwnership(inst, db, listWorkers(cf), listApplications());
@@ -464,20 +536,36 @@ async function main() {
   const bucket = bodiesBucket(inst);
   try {
     const buckets = listBuckets();
-    const matches = buckets.filter((b) => b.name === bucket);
-    if (matches.length > 1) throw new Error("Ambiguous R2 bucket name.");
-    if (matches.length) {
-      const managed = cf("r2", "buckets", "domains", "managed", "list", "--bucket-name", bucket);
-      const custom = cf("r2", "buckets", "domains", "custom", "list", "--bucket-name", bucket);
-      if (managed?.enabled !== false || !Array.isArray(custom?.domains) || custom.domains.some((d) => !d || d.enabled !== false)) throw new Error("The reused R2 bucket is public or its privacy is unknown. Disable every public domain before setup.");
+    const existingBucket = buckets.find((b) => b.name === bucket);
+    if (existingBucket) checkBucketPrivacy(bucket);
+    if (owned.worker && !existingBucket) throw new Error("The Instance's active Worker has no R2 bucket; check its storage before setup.");
+
+    const receiptFile = join(dirname(generatedConfig(inst)), `${inst.name}.bootstrap.json`);
+    const receipt = readBootstrapReceipt(receiptFile);
+    if (receipt !== undefined) checkStorageProof(receipt, accountId, db, existingBucket, "receipt");
+    if (!owned.worker) {
+      const adoption = inst.bootstrapStorage;
+      if (adoption !== undefined) checkStorageProof(adoption, accountId, db, existingBucket, "adoption");
+      const proof = { accountId, databaseId: adoption?.databaseId ?? receipt?.databaseId, bucket: adoption?.bucket ?? receipt?.bucket };
+      if ((db && !proof.databaseId) || (existingBucket && !proof.bucket)) {
+        throw new Error("Cannot establish bootstrap storage ownership from a name alone. Pick another Instance name or verify and pin the existing resources in bootstrapStorage.");
+      }
+      mkdirSync(dirname(receiptFile), { recursive: true, mode: 0o700 });
+      if (adoption !== undefined) writeBootstrapReceipt(receiptFile, proof);
+      if (freshDb) {
+        db = createStorageResource(dbName, "d1", "create");
+        if (!isDatabaseId(db.uuid)) throw new Error("Cloudflare did not return the created database ID. Verify it and pin it in bootstrapStorage before retrying.");
+        proof.databaseId = db.uuid;
+        writeBootstrapReceipt(receiptFile, proof);
+      }
+      if (!existingBucket) {
+        const created = bucketIdentity(createStorageResource(bucket, "r2", "buckets", "create"));
+        if (!validBucketIdentity(created)) throw new Error("Cloudflare did not return the created R2 bucket identity. Verify it and pin it in bootstrapStorage before retrying.");
+        proof.bucket = created;
+        writeBootstrapReceipt(receiptFile, proof);
+        checkBucketPrivacy(bucket);
+      }
     }
-    if (freshDb) {
-      sh(WRANGLER, ["d1", "create", dbName]);
-      db = findDb();
-    }
-    if (!db?.uuid) throw new Error(`Could not find the database ${dbName} after creating it.`);
-    db = { name: dbName, uuid: db.uuid };
-    if (!matches.length) sh(WRANGLER, ["r2", "bucket", "create", bucket]);
   } catch (e) {
     if (!r2NotEnabled(e.message)) throw e;
     throw new Error("R2 is not enabled on this account. In the Cloudflare dashboard open Storage & databases, R2, Overview, and "
@@ -486,7 +574,8 @@ async function main() {
 
   step("applying migrations");
   const config = generatedConfig(inst);
-  writeConfig(inst, db, { open: false, vars: {} });
+  const existingAudience = owned.app?.aud;
+  writeConfig(inst, db, { open: Boolean(existingAudience), vars: existingAudience ? instanceVars(inst, teamUrl, existingAudience) : {}, accountId });
   sh(WRANGLER, ["d1", "migrations", "apply", dbName, "--remote", "-c", config]);
 
   const findWorker = () => listWorkers(cf).find((w) => w.name === inst.name);
@@ -515,6 +604,7 @@ async function main() {
   writeConfig(inst, db, {
     open: true,
     vars: instanceVars(inst, teamUrl, app.aud),
+    accountId,
   });
   const urls = deploymentUrls(inst, sh(WRANGLER, ["deploy", "-c", config]));
 

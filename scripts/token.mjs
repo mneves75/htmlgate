@@ -6,10 +6,10 @@
 // --local acts on a `wrangler dev` database instead of the deployed one (used by the tests).
 import { createHash, randomInt } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cf, checkSameAccount, generatedConfig, listApplications, putTicketKey, readInstance, sh, wranglerWho } from "./setup.mjs";
+import { bodiesBucket, cf, checkOwnership, checkSameAccount, findDatabase, generatedConfig, listApplications, listWorkers, putTicketKey, readInstance, wranglerWho } from "./setup.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
@@ -32,17 +32,21 @@ export function parseArgs(argv) {
   return { cmd: rest[0], arg: rest[1], flags };
 }
 
-function d1(sql, inst, flags) {
+function d1(sql, inst, flags, targetConfig) {
   const args = ["d1", "execute", flags.local ? "htmlgate-dev" : `${inst.name}-db`, "--json", "--command", sql];
   if (flags.local) args.push("--local", "--persist-to", flags.persistTo, "-c", join(ROOT, "wrangler.jsonc"));
-  else args.push("--remote", "-c", generatedConfig(inst));
+  else args.push("--remote", "-c", targetConfig ?? generatedConfig(inst));
   const out = execFileSync(WRANGLER, args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CI: "1" } });
-  return JSON.parse(out)[0]?.results ?? [];
+  const receipt = JSON.parse(out);
+  if (!Array.isArray(receipt) || receipt.length !== 1 || receipt[0]?.success !== true || !Array.isArray(receipt[0].results)) {
+    throw new Error("Wrangler did not confirm the database operation.");
+  }
+  return receipt[0].results;
 }
 
 /**
- * Ends every way in, for a lost laptop or a leaked token. First it checks that Wrangler and cf act on the same account,
- * because cf finds the Access application by name and a name is not an account. Then every Access sign-in to the
+ * Ends every way in, for a lost laptop or a leaked token. First it verifies that Wrangler and cf target the deployed
+ * Instance on the same account. Then every Access sign-in to the
  * Instance, so a stolen session cannot make a token while the rest runs; then every token; then every open ticket (a new
  * TICKET_KEY). A failed step stops the rest; each step is safe to repeat, so the fix is to run the command again. A
  * local database has only tokens.
@@ -63,14 +67,28 @@ export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTi
   if (local) say("--local: the ticket key and Access sign-ins belong to a deployed Instance and were not touched.");
 }
 
-/** Ends every Access session for the Instance's application, so everyone signs in again. */
-function revokeSessions(inst) {
-  const name = `htmlgate: ${inst.name}`;
-  const apps = listApplications().filter((a) => a.name === name);
-  if (apps.length !== 1) throw new Error(`expected one Access application named "${name}", found ${apps.length}`);
+function revocationTarget(inst, accountId) {
+  const db = findDatabase(inst);
+  const { worker, app } = checkOwnership(inst, db, listWorkers(cf), listApplications(), { requireAppAudience: true });
+  if (!worker || !app) throw new Error("Could not establish ownership of a deployed Instance and its Access application.");
+
+  const generated = JSON.parse(readFileSync(generatedConfig(inst), "utf8").replace(/^\/\/[^\n]*\n/, ""));
+  const database = generated?.d1_databases;
+  const buckets = generated?.r2_buckets;
+  if (generated?.name !== worker.name || (Object.hasOwn(generated, "account_id") && generated.account_id !== accountId)
+    || !Array.isArray(database) || database.length !== 1 || database[0]?.binding !== "DB" || database[0].database_id !== db.uuid || database[0].database_name !== db.name
+    || !Array.isArray(buckets) || buckets.length !== 1 || buckets[0]?.binding !== "BODIES" || buckets[0].bucket_name !== bodiesBucket(inst)
+    || generated.vars?.ACCESS_AUD !== app.aud || (Object.hasOwn(generated.vars, "HTMLGATE_INSTANCE") && generated.vars.HTMLGATE_INSTANCE !== inst.name)) {
+    throw new Error("The generated configuration does not match the verified Instance target. Check the config and run setup before retrying.");
+  }
+  // Pin only the verified target fields so setup cannot replace the generated config between revocation steps.
+  return { appId: app.id, config: { account_id: accountId, name: worker.name, d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid }] } };
+}
+
+function revokeSessions(appId) {
   // Without --force cf asks, gets no answer, prints "Aborted." and still exits 0.
-  const out = sh("cf", ["zero-trust", "access", "applications", "revoke-tokens", apps[0].id, "--force"]);
-  if (/aborted/i.test(out)) throw new Error("cf did not revoke the sessions");
+  const result = cf("zero-trust", "access", "applications", "revoke-tokens", appId, "--force");
+  if (!result || typeof result !== "object" || Array.isArray(result) || result.success === false) throw new Error("cf did not confirm the session revocation");
   return "revoked; everyone signs in again";
 }
 
@@ -98,15 +116,34 @@ function main() {
     }
   } else if (cmd === "revoke") {
     if (!arg || !/^[0-9a-f]{12}$/.test(arg)) throw new Error("Give the token id (12 hex characters) from `pnpm run token list`.");
-    d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE id = '${arg}' AND revoked_at IS NULL`, inst, flags);
-    console.log(`Token ${arg} revoked.`);
+    const changed = d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE id = '${arg}' AND revoked_at IS NULL RETURNING id`, inst, flags);
+    if (changed[0]?.id === arg) console.log(`Token ${arg} revoked.`);
+    else if (d1(`SELECT id FROM tokens WHERE id = '${arg}' AND revoked_at IS NOT NULL`, inst, flags)[0]?.id === arg) {
+      console.log(`Token ${arg} was already revoked.`);
+    } else throw new Error(`No token ${arg} exists.`);
   } else if (cmd === "revoke-all") {
-    revokeAll({
-      checkAccount: () => (checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env), "Wrangler and cf use the same one"),
-      revokeTokens: () => `${d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL RETURNING id`, inst, flags).length} revoked`,
-      rotateTicketKey: () => (putTicketKey(generatedConfig(inst)), "replaced; every open ticket has ended"),
-      revokeSessions: () => revokeSessions(inst),
-    }, { local: flags.local, say: (line) => console.log(line) });
+    let directory, targetConfig, appId;
+    try {
+      revokeAll({
+        checkAccount: () => {
+          const accountId = checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env);
+          const target = revocationTarget(inst, accountId);
+          appId = target.appId;
+          directory = mkdtempSync(join(dirname(generatedConfig(inst)), ".revoke-"));
+          targetConfig = join(directory, "wrangler.json");
+          writeFileSync(targetConfig, JSON.stringify(target.config), { mode: 0o600 });
+          return "Wrangler and cf target the verified Instance";
+        },
+        revokeTokens: () => {
+          const rows = d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL RETURNING id`, inst, flags, targetConfig);
+          return `${rows.length} revoked`;
+        },
+        rotateTicketKey: () => (putTicketKey(targetConfig), "replaced; every open ticket has ended"),
+        revokeSessions: () => revokeSessions(appId),
+      }, { local: flags.local, say: (line) => console.log(line) });
+    } finally {
+      if (directory) rmSync(directory, { recursive: true, force: true });
+    }
   } else {
     throw new Error("Usage: pnpm run token create <name> | list | revoke <id> | revoke-all");
   }

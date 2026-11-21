@@ -8,15 +8,35 @@
   "newTestPolicy": {
     "minimumCognitiveComplexity": 6,
     "regexException": true,
-    "pruneLedger": []
+    "pruneLedger": [
+      {
+        "removed": "test/version.test.ts — src/version.ts carries the package version",
+        "category": "duplicate implementation assertion",
+        "keeper": "test/version.test.ts — a viewer page carries it in the bar, not over the Share",
+        "equivalence": "The keeper renders the same imported VERSION and compares it with the version read from package.json. The home, token, and not-found rendering assertions check the same invariant in their surfaces.",
+        "baselinePassed": 10,
+        "afterPassed": 9
+      },
+      {
+        "removed": "test/token-revoke-all.test.ts — the command's account step is setup's own check of Wrangler's and cf's logins",
+        "category": "implementation assertion",
+        "keeper": "test/setup-ownership.test.ts — revoke-all refuses a different provider account before any provider write",
+        "equivalence": "The keeper runs the actual command with differing provider accounts and requires a failure with zero writes. The existing mutation is re-anchored to this behavior."
+      }
+    ]
   },
   "checks": {
     "frozenInstall": "pass",
-    "typecheck": "pending",
-    "focused": "pending",
+    "typecheck": "pass on implementation before version bump",
+    "focused": {
+      "sharing": {"passed": 9},
+      "operatorAndReleaseTools": {"passed": 31, "skippedByFilter": 168},
+      "mockedOperatorAndRevocation": {"passed": 139},
+      "localStorageStatus": "pass on empty and populated D1 with seven migrations"
+    },
     "integration": "pending",
     "browser": "pending",
-    "mutations": "pending",
+    "mutations": {"uniqueAnchors": 247, "execution": "pending"},
     "benchmark": "pending",
     "independentVerification": "pending",
     "releaseArtifact": "pending",

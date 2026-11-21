@@ -12,8 +12,11 @@
 ## Progress
 
 - Started from verified `origin/main` at `1b13090` on `hardening/operator-and-sharing`.
-- Installed frozen dependencies offline under the `.nvmrc` toolchain. Three implementation tracks are in progress.
+- Installed frozen dependencies offline under the `.nvmrc` toolchain.
 - CI now reads the Node version from `.nvmrc`. Updated README publication, concurrency, and erasure guidance.
+- Setup now verifies bootstrap storage identity. Revocation checks provider targets and reports what was confirmed. Mocked Operator flows and local D1 revocation passed.
+- The Operator guide records safe recovery and teardown. The storage report passed against empty and populated local D1.
+- The Public link, bilingual erasure wording, and CLI audience checks passed focused tests. Added Gated Site navigation to the local benchmark.
 
 ## Verification boundaries
 

@@ -5,10 +5,14 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      benchmark_only:
-        description: Benchmark preflight on an untagged candidate
-        type: boolean
-        default: false
+      mode:
+        description: Full tagged release, or preflight on an untagged candidate
+        type: choice
+        default: release
+        options:
+          - release
+          - benchmark
+          - candidate
 
 permissions:
   contents: read
@@ -19,7 +23,7 @@ concurrency:
 
 jobs:
   validate:
-    name: ${{ inputs.benchmark_only && 'benchmark-preflight' || 'validate' }}
+    name: ${{ inputs.mode == 'benchmark' && 'benchmark-preflight' || inputs.mode == 'candidate' && 'candidate-preflight' || 'validate' }}
     runs-on: macos-15
     timeout-minutes: 180
     defaults:
@@ -63,10 +67,10 @@ jobs:
       - name: Check all mutation anchors
         run: pnpm run mutate --check | tee .scratch/ci-evidence/anchors.log
       - name: Full typecheck and integration tests
-        if: ${{ ! inputs.benchmark_only }}
+        if: ${{ inputs.mode != 'benchmark' && inputs.mode != 'candidate' }}
         run: pnpm run check 2>&1 | tee .scratch/ci-evidence/check.log
       - name: Full uninterrupted mutation gate
-        if: ${{ ! inputs.benchmark_only }}
+        if: ${{ inputs.mode != 'benchmark' }}
         run: pnpm run mutate 2>&1 | tee .scratch/ci-evidence/mutate.log
       - name: Confirm restoration and rebuild the CLI
         if: ${{ !cancelled() }}
@@ -80,7 +84,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ inputs.benchmark_only && 'benchmark-preflight' || 'release-validation' }}-${{ github.sha }}
+          name: ${{ inputs.mode == 'benchmark' && 'benchmark-preflight' || inputs.mode == 'candidate' && 'candidate-preflight' || 'release-validation' }}-${{ github.sha }}
           path: .scratch/ci-evidence/*.log
           include-hidden-files: true
           if-no-files-found: error

@@ -8,11 +8,11 @@ Agent-first HTML hosting that you run in your own Cloudflare account. A Publishe
 - **A Share can be a site.** Publish a zip or a folder with an `index.html` at its top, and the Share opens there; its pages load their CSS, scripts, images and data by relative links. The zip is checked whole before anything is stored (paths, links, sizes, checksums), and each file is read from it with one ranged R2 read.
 - **Every Share expires.** 30 days after its latest publish by default (`expiryDays` in `instance.json`; 0 means never). A Publisher can set a date, or never, and that date then stays. From its expiry a Share answers as missing everywhere, and the hourly cleanup deletes its bodies for good.
 - **One Instance per person.** You deploy your own copy, an Instance, into your own Cloudflare account. Nobody else holds your credentials. The words used here are defined in [GLOSSARY.md](GLOSSARY.md).
-- **Every Share starts gated.** Only people you name on the Allowlist can open it, after signing in through Cloudflare Access. You make one Share public with an explicit call, and you can gate it again. Gating it again takes effect on the next request.
+- **Every Share starts gated.** Only people on the Instance Allowlist can open it after signing in through Cloudflare Access. Making a Share public opens all its retained Versions, including earlier Gated drafts, and later Versions stay public until you gate the Share again. To publish only the intended Version, publish it as a fresh Share first. Gating takes effect on the next request. Copies that people already downloaded can remain with them.
 - **The Worker is the gate.** Access runs the sign-in page. The Worker still verifies the signed Access token on every request and checks your Allowlist itself, so a removed person loses access on their next request. A missing setting refuses everything.
 - **Share HTML is isolated.** It is served under a `Content-Security-Policy: sandbox` header with no `allow-same-origin`, so a Share's scripts run in an opaque origin, even when the Share is opened directly. They cannot read the Viewer's cookies or act as the Viewer. They can still send what the Share itself contains to another site, so the isolation protects the Viewer, not the Share's own content.
 - **A Gated site's files come by ticket.** A Share's own requests never carry the Access cookie, because the sandbox gives it an opaque origin; so a site's CSS or images could not load through Access. When the Worker has verified a signed-in person, it frames the site under a ticket: an hour-long, sealed permission to read that one Version's files, naming the person without showing who it is. Every file request checks the seal, the hour, that the person is still on the Allowlist and that the Share is still live.
-- **The Author can erase a Share for good.** From the Share's page (Erase), or by its link on the home, even a Share already deleted: every Version, its record and its bodies go at once. It is for a request to erase someone's data. Tokens cannot erase; deleting with the API or the CLI only hides a Share until it expires.
+- **The Author can erase a Share for good.** From the Share's page (Erase), or by its link on the home, the Author can erase even a Share already deleted. The links stop working as soon as the Instance removes its Versions and record. The Instance queues physical deletion of the bodies and retries cleanup, with no guaranteed deadline. Tokens can only hide a Share through the API or CLI. See [retention and erasure](docs/privacy.md).
 - **A refused Share looks missing.** A Gated Share, a deleted Share, an expired Share and a slug that never existed answer the same way.
 - **HTTPS only.** Over plain http an Instance answers no API request and no change (`403 https_required`, so a token sent in clear fails loudly instead of working), and sends a page visit to its https address. Every answer carries `Strict-Transport-Security`. Plain http stays open only on `localhost`, `127.0.0.1` and `[::1]`, for `wrangler dev`.
 
@@ -89,8 +89,8 @@ htmlgate login https://html.example.com               # your domain, or <name>.<
 htmlgate publish page.html --title "My page"
 htmlgate publish ./dist --title "My site"             # a folder with an index.html; dotfiles stay behind
 htmlgate publish site.zip --expires 7d                 # a zip; the Share expires in 7 days (or a date, or never)
-htmlgate publish page.html --upsert --metadata pr=42   # one stable URL per pull request
-htmlgate public <slug>                                 # anyone with the link; `htmlgate gate <slug>` undoes it
+htmlgate publish page.html --upsert --metadata pr=42   # reuse the matching Share when the Publisher runs serially
+htmlgate public <slug>                                 # anyone with the link can open every kept Version
 ```
 
 With several Instances, put `api_url = "https://..."` in a project's `.htmlgate/config` to choose one there. In CI, set `HTMLGATE_URL` and `HTMLGATE_TOKEN` instead of signing in. [packages/cli/README.md](packages/cli/README.md) lists every command, flag and exit code. The full list of API requests is at `GET /api/onboard` on your Instance. Agents can use the Publisher skill in [skills/htmlgate/SKILL.md](skills/htmlgate/SKILL.md).
@@ -103,6 +103,10 @@ print that link (`/p/<slug>`); a link copied from the address bar while signed i
 sits behind Cloudflare Access and therefore never previews. That is the point of the gate, not a defect: to preview,
 make the Share public. The card carries `noindex`, so a preview is not an invitation for search engines to list it,
 and `robots.txt` lets a crawler read `/p/` (and nothing else on the Instance) so unfurlers can find the tags at all.
+
+Use **Public link** on the Author's signed-in view to open the current Version at its shareable address. Once public,
+every retained Version is available from the Version list. For concurrent Publishers, use an existing `--slug` or
+serialize first publication. `--upsert` looks up a match before publishing and concurrent first writes can create duplicates.
 
 A consumer caches a card per URL. To make it fetch again, change a parameter other than `v` (`?x=2`), because `v`
 selects a Version and an unknown Version answers not-found.

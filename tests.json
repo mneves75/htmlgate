@@ -1,0 +1,26 @@
+{
+  "baseline": "1b13090ff24a7d101dc1f15de1599abc26ed57fe",
+  "toolchain": {
+    "node": "26.12.1",
+    "pnpm": "12.9.1",
+    "cccc": "1.8.0"
+  },
+  "newTestPolicy": {
+    "minimumCognitiveComplexity": 6,
+    "regexException": true,
+    "pruneLedger": []
+  },
+  "checks": {
+    "frozenInstall": "pass",
+    "typecheck": "pending",
+    "focused": "pending",
+    "integration": "pending",
+    "browser": "pending",
+    "mutations": "pending",
+    "benchmark": "pending",
+    "independentVerification": "pending",
+    "releaseArtifact": "pending",
+    "remoteMain": "pending",
+    "remoteTag": "pending"
+  }
+}

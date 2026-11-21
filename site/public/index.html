@@ -125,10 +125,10 @@
 <p>Tudo isso sem pagar um centavo ao htmlgate. Onde a Cloudflare pode cobrar, a gente conta logo abaixo, sem esconder nada.</p>
 </div>
 <ul class="directory">
-<li><div><h3>Fechado por padrão</h3><p>Todo Share nasce visível só pra quem está na sua lista, depois de entrar pelo Cloudflare Access. Quer abrir um pro mundo? <code>htmlgate public</code>. Mudou de ideia? <code>htmlgate gate</code> fecha de novo a partir do próximo acesso.</p></div></li>
+<li><div><h3>Fechado por padrão</h3><p>Todo Share nasce visível só pra quem está na sua lista, depois de entrar pelo Cloudflare Access. <code>htmlgate public</code> abre todas as Versões guardadas e as novas enquanto o Share estiver público. <code>htmlgate gate</code> fecha os links públicos a partir do próximo pedido.</p></div></li>
 <li><div><h3>Na sua conta, com as suas chaves</h3><p>Você instala na sua própria conta Cloudflare. Ninguém mais guarda as suas credenciais, nem quem escreveu o htmlgate.</p></div></li>
 <li><div><h3>HTML do agente na caixa de areia</h3><p>Cada Share roda isolado, numa origem opaca. O script dele não lê os cookies de quem abre e não age em nome dessa pessoa.</p></div></li>
-<li><div><h3>Saiu da lista, perdeu o acesso</h3><p>O Worker confere a sua lista em todo pedido. Quem sai dela perde o acesso no pedido seguinte.</p></div></li>
+<li><div><h3>Remova o acesso restrito</h3><p>O Worker confere a lista de acesso em todo pedido restrito. Quem sai da lista perde o acesso restrito no pedido seguinte. Qualquer pessoa com um link público ainda pode abri-lo.</p></div></li>
 <li><div><h3>Feito pra agente usar</h3><p>CLI com <code>--output json</code>, códigos de saída documentados e uma skill pronta que ensina o seu agente a publicar sozinho.</p></div></li>
 <li><div><h3>Histórico de versões</h3><p>Cada atualização com <code>--slug</code> vira uma versão nova na mesma URL. As 20 mais recentes ficam guardadas, cada uma com o seu link.</p></div></li>
 </ul>
@@ -145,7 +145,7 @@
 <dl class="facts">
 <div class="free"><dt>htmlgate</dt><dd><strong>R$ 0</strong>. Código aberto, com licença MIT.</dd></div>
 <div><dt>Workers</dt><dd>O plano gratuito deve dar conta, mas ainda não testamos. A versão 0.1 roda no plano pago.</dd></div>
-<div><dt>R2, onde ficam os arquivos</dt><dd>Você ativa a assinatura uma vez no painel. Vêm 10 GB-mês grátis; passou disso, a Cloudflare cobra armazenamento e operações. O htmlgate para em 5 GB por padrão.</dd></div>
+<div><dt>R2, onde ficam os arquivos</dt><dd>Você ativa a assinatura uma vez no painel. Vêm 10 GB-mês grátis; passou disso, a Cloudflare cobra armazenamento e operações. Por padrão, o htmlgate limita as publicações a 5 GB de armazenamento contabilizado.</dd></div>
 <div><dt>Links públicos</dt><dd>Cada acesso a um link público roda na sua conta: requisições ao Worker, consultas ao D1 e leituras no R2. O limite de armazenamento não conta acessos. O guia do operador mostra a regra de limite de taxa e o alerta de fatura; a instalação não cria nenhum dos dois.</dd></div>
 <div><dt>Zero Trust, o login</dt><dd>Tem plano gratuito, mas a Cloudflare pede os dados de pagamento mesmo assim.</dd></div>
 </dl>
@@ -209,7 +209,7 @@ htmlgate login https://sua-instancia.example.com</code></pre>
 
 <footer>
 <div class="wrap">
-<p>htmlgate. <span class="version">0.1.18</span></p>
+<p>htmlgate. <span class="version">0.1.19</span></p>
 <nav aria-label="Rodapé">
 <a href="/privacidade/">Privacidade</a>
 <a href="/en/" hreflang="en-US" lang="en-US">English</a>

@@ -60,7 +60,7 @@ const en = {
   publishExample: `htmlgate publish page.html --title "My page"`,
   whoTitle: "Who can open a Share",
   gatedMeans: "People on your Allowlist, after signing in. Every Share starts here, and a new Version never changes it.",
-  publicMeans: "Anyone with its <code>/p/</code> link. Only an explicit call from a Publisher makes a Share public, and another gates it again.",
+  publicMeans: "Anyone with a <code>/p/</code> link can open any retained Version. New Versions are public while the Share stays public.",
   requestsListed: "Every request is listed at",
   viewerTitle: "You're signed in",
   viewerLead: "Open a Share with the link its Author sent you. This Instance keeps no list of Shares, so there is nothing to browse here.",
@@ -109,6 +109,7 @@ const en = {
   updatedAt: "Updated ",
   expiresAt: "Expires ",
   openTab: "Open in a new tab",
+  publicLink: "Public link",
   older: (n: number, latest: number) => `You are viewing v${n}. The latest is v${latest}.`,
   showLatest: "Show the latest",
   notFound: "Not found",
@@ -117,16 +118,16 @@ const en = {
   backToShares: "Back to your Shares",
   goHome: "Go to the home page",
   erase: "Erase",
-  eraseAsk: (title: string) => `Erase <strong>${title}</strong> for good? Every Version and the Share itself are deleted, and its links stop working. This cannot be undone.`,
+  eraseAsk: (title: string) => `Erase <strong>${title}</strong> for good? Its links stop working immediately and its records are removed. Stored files are deleted separately. You cannot undo this in htmlgate.`,
   eraseConfirm: "Erase for good",
   eraseCheck: "Erase this Share?",
   eraseStart: "Review and erase",
   keep: "Keep it",
   eraseTitle: "Erase a Share for good",
-  eraseLead: "For a request to erase someone's data. Erasing deletes every Version and the Share's record, even for a Share already deleted, and cannot be undone. Deleting with the API or the CLI only hides a Share.",
+  eraseLead: "Erasure removes the Share and its Version records, including for Shares hidden by an API or CLI delete. Stored files are deleted separately.",
   eraseField: "Share link or slug",
   eraseHint: "Paste the Share's link, or its 12-character slug.",
-  erased: (slug: string) => `Erased <code>${slug}</code> for good: its Versions and its record are deleted.`,
+  erased: (slug: string) => `<code>${slug}</code> is no longer available. Erasure removes the Share and its Version records immediately. Stored files are deleted separately, with retries during hourly cleanup.`,
   eraseErrors: {
     refused: "Refused: this change did not come from this Instance's own page.",
     "too-large": "That form is too large. Paste one Share's link or slug.",
@@ -167,7 +168,7 @@ const ptBR: typeof en = {
   publishExample: `htmlgate publish pagina.html --title "Minha página"`,
   whoTitle: "Quem pode abrir um Share",
   gatedMeans: "Quem está na sua lista de acesso, depois de entrar. Todo Share nasce assim, e uma nova Versão não muda isso.",
-  publicMeans: "Qualquer pessoa com o link <code>/p/</code>. Só um pedido explícito de um publicador torna um Share público, e outro o fecha de novo.",
+  publicMeans: "Qualquer pessoa com um link <code>/p/</code> pode abrir qualquer Versão guardada. As novas Versões ficam públicas enquanto o Share estiver público.",
   requestsListed: "Todos os pedidos estão listados em",
   viewerTitle: "Você entrou",
   viewerLead: "Abra um Share pelo link que o autor mandou. Esta Instância não mostra uma lista de Shares, então não há nada para navegar aqui.",
@@ -215,6 +216,7 @@ const ptBR: typeof en = {
   updatedAt: "Atualizado em ",
   expiresAt: "Expira em ",
   openTab: "Abrir em nova aba",
+  publicLink: "Link público",
   older: (n: number, latest: number) => `Você está vendo a v${n}. A mais recente é a v${latest}.`,
   showLatest: "Ver a mais recente",
   notFound: "Não encontrado",
@@ -223,16 +225,16 @@ const ptBR: typeof en = {
   backToShares: "Voltar aos seus Shares",
   goHome: "Ir para o início",
   erase: "Eliminar",
-  eraseAsk: (title: string) => `Eliminar <strong>${title}</strong> de vez? Todas as Versões e o próprio Share são apagados, e os links param de funcionar. Não dá para desfazer.`,
+  eraseAsk: (title: string) => `Eliminar <strong>${title}</strong> de vez? Os links param de funcionar imediatamente e os registros são removidos. A exclusão dos arquivos armazenados ocorre separadamente. Não dá para desfazer no htmlgate.`,
   eraseConfirm: "Eliminar de vez",
   eraseCheck: "Eliminar este Share?",
   eraseStart: "Revisar e eliminar",
   keep: "Manter",
   eraseTitle: "Eliminar um Share de vez",
-  eraseLead: "Para um pedido de eliminação dos dados de alguém. Eliminar apaga todas as Versões e o registro do Share, mesmo de um Share já apagado, e não dá para desfazer. Apagar pela API ou pela CLI só esconde o Share.",
+  eraseLead: "A eliminação remove o Share e os registros das Versões, inclusive de Shares ocultados pela API ou pela CLI. A exclusão dos arquivos armazenados ocorre separadamente.",
   eraseField: "Link ou slug do Share",
   eraseHint: "Cole o link do Share, ou o slug de 12 caracteres.",
-  erased: (slug: string) => `<code>${slug}</code> eliminado de vez: as Versões e o registro foram apagados.`,
+  erased: (slug: string) => `<code>${slug}</code> não está mais disponível. A eliminação remove imediatamente o Share e os registros das Versões. A exclusão dos arquivos armazenados ocorre separadamente, com novas tentativas na limpeza a cada hora.`,
   eraseErrors: {
     refused: "Recusado: este pedido não veio da página desta Instância.",
     "too-large": "Formulário grande demais. Cole o link ou o slug de um Share.",
@@ -884,6 +886,7 @@ ${d.expires_at === null ? "" : timeTag(d.expires_at, t.expiresAt)}
 <nav aria-label="${t.versions}"><ul>${items}</ul></nav>
 </details>
 <a class="open" href="${raw}" target="_blank" rel="noopener">${t.openTab}</a>
+${erase && d.public === 1 ? `<a class="open" href="/p/${d.slug}${shown === latest ? "" : `?v=${shown}`}">${t.publicLink}</a>` : ""}
 <span class="ver">v${VERSION}</span>
 ${erase ? `<details class="confirm">
 <summary>${t.erase}</summary>

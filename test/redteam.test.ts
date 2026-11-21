@@ -19,7 +19,7 @@ beforeAll(async () => {
 
 /** The erased note as it names one slug (src/pages.ts, en and pt-BR). The home always carries the "Erase a Share
  * for good" panel, so a probe must look for the slug-tied note and not the bare phrase. */
-const erasedNote = (s: string) => new RegExp(`Erased <code>${s}</code> for good|<code>${s}</code> eliminado de vez`);
+const erasedNote = (s: string) => new RegExp(`<code>${s}</code> (?:is no longer available|não está mais disponível)`);
 
 /** A form POST from the Instance's own page, the way a person sends one (same-origin Origin header). */
 async function formPost(path: string, fields: Record<string, string>) {

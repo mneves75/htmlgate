@@ -133,10 +133,10 @@ describe("docs/operator.md against the code", () => {
   test("the Time Travel commands it prints are accepted by the installed Wrangler (--help only, nothing remote)", () => {
     const r = spawnSync(join(REPO, "node_modules/.bin/wrangler"), ["d1", "time-travel", "restore", "--help"], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } });
     const help = r.stdout + r.stderr;
-    expect(help).toMatch(/--timestamp/);
+    expect(help).toMatch(/--bookmark/);
     expect(spawnSync(join(REPO, "node_modules/.bin/wrangler"), ["d1", "time-travel", "info", "--help"], { encoding: "utf8", env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "1" } }).stdout).toMatch(/info/);
     expect(section).toContain("time-travel info <name>-db");
-    expect(section).toContain("time-travel restore <name>-db --timestamp=<time>");
+    expect(section).toContain("time-travel restore <name>-db --bookmark=<approved-bookmark>");
   });
 
   test("setup never creates the rate limiting rule or the billing alert the landing says it does not create", () => {

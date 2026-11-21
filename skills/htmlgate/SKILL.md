@@ -49,7 +49,8 @@ Exit codes: 0 done, 2 not signed in or token refused, 3 forbidden, 4 not found, 
 
 ## Rules
 
-- **Make a Share public only when the user asks you to, for that Share.** Publishing a new Version never changes whether a Share is public. A Public Share's URL is `https://<instance-host>/p/<slug>`.
+- **Make a Share public only when the user asks you to, for that Share.** Explain first that every retained Version will open to anyone with its link and that later Versions will open too while the Share stays public. To share just the current content, publish a new Share without `--slug` or `--upsert`, then make that Share public. A Public Share's URL is `https://<instance-host>/p/<slug>`.
+- **Check the audience before updating an existing Share.** A Version added with `--slug`, `update --file` or `--upsert` inherits that Share's visibility. Coordinate concurrent publishers before an audience change. Metadata upsert looks up and writes in separate requests, so a concurrent change can leave duplicates or change the matched Share's audience before the write.
 - A page is at most 2 MiB; inline its CSS and data. When a page would need separate files (CSS, scripts, images, JSON), publish a site instead: a folder or zip with `index.html` at its top, at most 10 MiB zipped, 1,000 files, 5 MiB a file. Use relative links (`css/style.css`, never `/css/style.css`). A site cannot frame its own pages. Names starting with `.` in a folder are left out, so never rely on a dotfile. Links to other sites work, and opening them in a new tab works.
 - A Share's scripts can still send what the Share contains to another site. Never put in a Share anything the user would not want its viewers, or the sites its scripts call, to see.
 - A Share runs sandboxed: scripts run, but forms, `alert()` dialogs, downloads, cookies and storage are blocked. Build Shares that need none of them.

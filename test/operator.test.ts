@@ -536,8 +536,10 @@ describe("the token command", () => {
     expect(listed).toContain("ci laptop");
     expect(listed).not.toContain(token);
     const id = /^([0-9a-f]{12})/m.exec(listed)![1]!;
-    await tok("revoke", id);
+    expect((await tok("revoke", id)).stdout).toContain(`Token ${id} revoked.`);
     expect((await use()).status).toBe(401);
+    expect((await tok("revoke", id)).stdout).toContain(`Token ${id} was already revoked.`);
+    await expect(tok("revoke", "ffffffffffff")).rejects.toThrow(/No token ffffffffffff/);
   }, 120_000);
 
   test("list prints a stored name without its control or bidi characters, one line per token", async () => {

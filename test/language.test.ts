@@ -91,6 +91,7 @@ describe("a pt-BR Instance", () => {
     expect((await get(`/s/${d.slug}`, VIEWER)).body).toContain('<span class="state state-gated">Fechado</span>');
     await call("POST", `/api/shares/${d.slug}/visibility`, { public: true });
     expect((await get(`/p/${d.slug}`)).body).toContain('<span class="state state-public">Público</span>');
+    expect((await get(`/s/${d.slug}`, AUTHOR)).body).toContain(`href="/p/${d.slug}">Link público</a>`);
   });
 
   test("the token form's answers are in pt-BR, with unchanged statuses", async () => {

@@ -61,7 +61,7 @@ describe("the Author erases a Share for good", () => {
 
     const home = await i.call(`/?erased=${slug}`, { as: AUTHOR });
     expect(home.status).toBe(200);
-    expect(await home.text()).toContain(`Erased <code>${slug}</code> for good`);
+    expect(await home.text()).toContain(`<code>${slug}</code> is no longer available. Erasure removes the Share and its Version records immediately. Stored files are deleted separately`);
   });
 
   test("a Share already deleted, from the home's form, by its link", async () => {
@@ -163,7 +163,7 @@ describe("the Author erases a Share for good", () => {
     expect(await (await i.call(`/s/${slug}`, { as: AUTHOR })).text()).toContain("Eliminar de vez");
     expect(await (await i.call("/", { as: AUTHOR })).text()).toContain("Eliminar um Share de vez");
     expect((await erase(i, slug)).status).toBe(303);
-    expect(await (await i.call(`/?erased=${slug}`, { as: AUTHOR })).text()).toContain(`<code>${slug}</code> eliminado de vez`);
+    expect(await (await i.call(`/?erased=${slug}`, { as: AUTHOR })).text()).toContain(`<code>${slug}</code> não está mais disponível. A eliminação remove imediatamente o Share e os registros das Versões. A exclusão dos arquivos armazenados ocorre separadamente`);
   });
 });
 

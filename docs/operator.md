@@ -37,6 +37,24 @@ Before any remote write, an existing Worker's ownership must be unambiguous: the
 
 The file is git-ignored. Keep it out of commits: it holds email addresses.
 
+### Reusing pre-created storage
+
+For a new Instance, setup refuses to adopt a same-name database or bucket on the strength of its name. If you created either intentionally, verify its identity in the same Cloudflare account and add `bootstrapStorage` to the private Instance file. Include `accountId` and the fields for the resources you intend to reuse. `databaseId` is the D1 UUID. The `bucket` fields are its `creation_date` as `createdAt` and its `jurisdiction` as returned by `cf r2 buckets list`. Setup supports a private bucket in the default jurisdiction. An omitted jurisdiction in the provider listing means `default`.
+
+```json
+{
+  "bootstrapStorage": {
+    "accountId": "<account-id>",
+    "databaseId": "<database-uuid>",
+    "bucket": { "createdAt": "<creation-date>", "jurisdiction": "default" }
+  }
+}
+```
+
+Keep `.instance/<name>.bootstrap.json` private. Setup records the identities it receives from Cloudflare as it creates resources, so an interrupted run can resume. If a create succeeded without a saved receipt, identify the new resource independently and use `bootstrapStorage` to pin it before retrying. Run setup from one checkout at a time for an Instance. After setup completes, the deployed Worker and its Access application provide additional ownership evidence on reruns.
+
+On first setup, `cf` needs permission to create missing D1 and R2 resources. Wrangler still applies migrations and deploys the Worker. Use the same Cloudflare account for both tools.
+
 ## The order setup follows
 
 On the first run:
@@ -44,7 +62,7 @@ On the first run:
 0. It requires Git's top-level directory to be this project's directory, comparing canonical paths, then stops if `src`, `site`, `migrations`, `packages/cli/src` or `scripts` hold uncommitted changes: a deploy ships the working tree, so commit or restore them first. Use a Git clone or registered worktree; a downloaded copy inside another checkout is refused. Symlink aliases of the checkout work. The landing's `site:deploy` uses the same guard.
 1. It checks that Wrangler and `cf` act on one and the same account, and stops before writing anything if not. Wrangler deploys the Worker and `cf` sets up its Access application, so on two accounts the Worker would have no gate of its own. With several accounts on Wrangler's login, set `CLOUDFLARE_ACCOUNT_ID`. A `cf` login must reach only that one account; use a profile or token scoped to it (`cf auth create`, `cf auth activate`).
 2. If you set `domain`, it checks that the domain is free or already this Instance's, and stops before writing anything if not.
-3. It checks existing Instance ownership and discovers the database and R2 bucket before creating any resource. Bucket discovery follows ascending names until an empty page; malformed or non-advancing names, or a listing still returning buckets after 1,000 pages, stop setup before writes. A reused bucket must explicitly have its managed public domain disabled and a custom-domain list with every entry disabled. Unknown or public state stops setup before any resource creation; setup does not change bucket policies. After safety discovery, it creates any missing database and bucket, then applies migrations.
+3. It verifies ownership of existing resources and discovers storage before creating anything. Bucket discovery follows ascending names until an empty page. A malformed or non-advancing list, or a listing that still returns buckets after 1,000 pages, stops setup before writes. A reused bucket must explicitly have its managed public domain and every custom domain disabled. Setup creates any missing bootstrap resources, saves their identities, then applies migrations.
 4. It deploys the Worker with workers.dev off, no custom domain and only its Instance marker. Without gate settings it still refuses every gated request.
 5. It creates the Worker's `TICKET_KEY` secret: 32 random bytes, handed to Wrangler on stdin, never printed or written to disk. Later runs keep it.
 6. It creates the Access application for that Worker.
@@ -72,7 +90,7 @@ The token command refuses an Instance whose config does not exist yet: run setup
 
 | Task | How |
 |---|---|
-| Add or remove a person | Edit `allowlist`, run `pnpm run setup`. A removed person loses access on their next request. |
+| Add or remove a person | Edit `allowlist`, run `pnpm run setup`. A removed person loses Gated access on their next request after the update. |
 | Change the pages' language | Set `language` to `"en"` or `"pt-BR"`, run `pnpm run setup`. |
 | See what is published | Your home page at `/` lists your 50 most recently updated Shares, with each one's state, latest Version and last Publisher; `htmlgate list` lists them all. |
 | Create a token | The token page at `/tokens`, or `pnpm run token create <name>`. It is shown once. |
@@ -90,17 +108,18 @@ The token command refuses an Instance whose config does not exist yet: run setup
 Delete, in this order:
 
 1. The Worker, so nothing answers at its hostname.
-2. The Access application.
+2. Both Access applications, `htmlgate: <name>` and `htmlgate: <name> robots`.
 3. The bucket and the database, which deletes every Share.
 
 If you set `domain`, check under Workers & Pages, Domains that the Custom Domain went with the Worker.
 
-Deleting the application first would leave the Worker without its gate for a moment. It would still refuse gated requests on its own, but there is no reason to have that moment.
+Check the active Cloudflare account in both Wrangler and `cf`. Verify the Worker no longer serves the Instance before removing its Access applications. Match each application's destination to this Instance before deleting its ID.
 
 ```sh
 pnpm exec wrangler delete --name <name>
-cf zero-trust access applications list          # find "htmlgate: <name>", note its id
-cf zero-trust access applications delete <id> --force
+cf zero-trust access applications list
+cf zero-trust access applications delete <main-app-id> --force
+cf zero-trust access applications delete <robots-app-id> --force
 pnpm exec wrangler r2 bucket delete <name>-bodies   # it must be empty first
 pnpm exec wrangler d1 delete <name>-db
 ```
@@ -154,13 +173,26 @@ node --input-type=module -e 'import { randomBytes } from "node:crypto"; process.
 
 Per-token revocation, Allowlist changes, Access session revocation and ticket-key rotation are also separate actions. `revoke-all` runs the three that end credentials one after another, not as one transaction; key rotation alone does not revoke Publisher tokens. Verify containment from the trusted device without logging credentials; review and revoke any other affected credentials. Token creation requires the Author's signed-in identity or the Operator's token command.
 
-**Backups and restore.** A restore rehearsal has not been performed on an Instance. Read Cloudflare's [Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) page before relying on it.
+The Operator's `token revoke <id>` distinguishes a newly revoked token from one already revoked. An unknown ID fails. For a deployed Instance, `token revoke-all` verifies that the two tools target the same account, that the Access application belongs to the Worker, and that the active deployment and generated config agree on the audience and storage. If ownership verification fails, confirm the target before retrying. Against `--local`, the command acts on local tokens only.
 
-- Obtain the Operator's approval before a restore: it overwrites D1 in place and cancels in-flight queries. Keep access contained throughout recovery, including Public Share, API and ticket paths, with only a trusted recovery path open. Access logout alone does not contain these paths.
-- The database has D1 Time Travel: any minute of the last 7 days on Workers Free, 30 on Paid. Before restoring, preserve the current recovery bookmark from `pnpm exec wrangler d1 time-travel info <name>-db --config .instance/<name>.wrangler.jsonc` in the private incident record. Select and approve the recovery point, then `pnpm exec wrangler d1 time-travel restore <name>-db --timestamp=<time> --config .instance/<name>.wrangler.jsonc` goes back. Keep the previous bookmark returned by the restore too.
-- The bucket has no backup. 0.1 sets up no versioning, replication or copy for it, so a body deleted from R2 is gone.
-- A restore therefore brings back rows, not bodies. A Share whose bodies the cleanup already deleted comes back as rows that answer 404 with `missing body` in the logs. Bodies published after the restore point lose their rows, stay in the bucket and are counted by nothing: 0.1 has no bucket sweep.
-- A restore also undoes what the database recorded since: revoked tokens can work again and erased Shares' rows can return. Before restoring, prepare a private list of prior token revocations and erasures from the incident records; the restored database is not a complete record of them. Before reopening, list tokens and reapply revocations with the same `pnpm run token ... --config` workflows above, and have the Author erase any returned Shares through the Instance's own pages. Verify that a previously revoked credential is denied and that erased content is absent from D1 and R2. Keep access contained if records or verification are incomplete.
+## Recovery
+
+Keep canonical originals outside the Instance: the HTML source or the static site's source and reproducible build. Recover lost content by republishing from those originals with `htmlgate publish <page.html|site.zip|folder>`. Publish as a new Gated Share when the old Share is missing, deleted or expired, and send the replacement link to the intended viewers. Use `--slug` only for a still-live Share whose audience and history you have verified. Honor earlier erasures and check the new Share's visibility and expiry before sharing its link.
+
+Setup creates no paired backup of D1 and R2. Cloudflare's [D1 Time Travel](https://developers.cloudflare.com/d1/reference/time-travel/) restores database rows for up to 7 days on Workers Free or 30 on Paid. It leaves the R2 bucket exactly as it was. Bodies that were already purged remain missing, and bodies uploaded after the rollback point may lose their Version or trash row. A live restore rehearsal has not been performed on an Instance.
+
+1. **Contain HTTP traffic.** Confirm the Cloudflare account, Worker, database UUID, bucket and all serving hostnames. Block the whole Instance before the Worker with a temporary WAF block on a Custom Domain. Disable any alternate ingress, including workers.dev on an Instance without a Custom Domain. Verify externally that the Instance is unreachable on every hostname, including Public Share, API and ticket URLs, and stop publishers and direct D1/R2 writers. Access logout leaves some of those paths open. If the Author later needs the Instance to erase a Share, open a narrowly restricted recovery path for the trusted Author only and close it again after erasure.
+2. **Pause scheduled cleanup separately.** Record the exact schedule, then remove the Worker's Cron Trigger in the Cloudflare dashboard. Verify that Trigger Events shows no configured schedule. Allow the full documented propagation window and enough time for any last scheduled invocation to finish. Cloudflare currently allows up to 15 minutes for each. Check Past Cron Events for invocation times and outcomes, and verify in-flight HTTP requests, background writes and uploads have completed or been stopped. Recheck the schedule before proceeding. A quiet error log by itself is insufficient. Keep the restore on hold if quiescence is uncertain, and avoid running setup during the pause because it restores the schedule. [Cron Trigger propagation](https://developers.cloudflare.com/workers/configuration/cron-triggers/) · [Workers duration limits](https://developers.cloudflare.com/workers/platform/limits/).
+3. **Record the pre-restore state.** Privately retain the known revoked token IDs, erasure slugs and times, and a D1/R2 inventory as described below. Save the current bookmark with `pnpm exec wrangler d1 time-travel info <name>-db --config .instance/<name>.wrangler.jsonc`. Obtain the Operator's approval of the exact database and recovery point. The restore overwrites D1 in place and cancels in-flight D1 queries. Run `pnpm exec wrangler d1 time-travel restore <name>-db --bookmark=<approved-bookmark> --config .instance/<name>.wrangler.jsonc` and record the previous-state bookmark returned by the command. It can undo the D1 restore. Any R2 deletion during recovery is irreversible through Time Travel.
+4. **Reconcile D1 and R2 before allowing cleanup.** Repeat the inventory and compare it with the pre-restore inventory. A Version missing its object has no recoverable served body without an original. Republish verified originals as needed. Stop on an R2 key found in both `versions` and `trash`, since cleanup could delete a referenced body. Investigate objects in neither table against the pre-restore inventory and approved retention or erasure records. Identify every missing or unmatched object and resolve it or keep the affected recovery offline. Decide any R2 deletion separately, rechecking exact keys and references while writes are paused.
+5. **Reapply revocations and erasures.** The restored database can make previously revoked tokens valid and erased Share rows visible again. Reapply token revocations using the controls above. If the original revocation list is incomplete, revoke all existing tokens before issuing replacements. Revoke affected Access sessions and rotate the ticket key as needed, then verify the scheduled trigger is still disabled. For each previously erased Share, confirm its records (including any legacy body) and all R2 objects under `bodies/<slug>/` are absent. Have the Author erase returned Share records through the Instance's own pages, and verify background cleanup completed. If the Share row is already absent but an object remains, review that exact object with the Operator before deleting it. Keep access contained if the erasure history or verification is incomplete.
+6. **Verify and reopen.** Verify from the restricted recovery path that expected Gated and Public Shares and their bodies work for the intended audience, denied credentials stay denied, and erased content is absent. Run the storage report below, restore the recorded cron schedule while HTTP is still contained, and observe a successful cleanup run. Recheck reconciliation and protective settings. Remove HTTP containment only after those checks pass, then confirm the same access outcomes externally. If you revert to the pre-restore bookmark, repeat reconciliation and these checks for that state too.
+
+### Read-only D1/R2 inventory
+
+Run with writers and scheduled cleanup stopped so the two inventories describe a stable state. In the intended Instance's D1, read `SELECT body_key, size FROM versions ORDER BY body_key` and `SELECT body_key, size, due_at FROM trash ORDER BY body_key` with `pnpm exec wrangler d1 execute <name>-db --remote --config .instance/<name>.wrangler.jsonc --json --command "<SELECT>"`. For large results, page by the last `body_key` in each table. List bucket object metadata with `cf r2 objects list --bucket-name <name>-bodies`. Follow each returned cursor with `--cursor` until the listing is complete. Use the same account for both and keep object keys and inventory output private.
+
+Compare by key. Every Version should have an R2 object of its recorded size. A `trash` row can represent an upload reservation or a deletion in progress, so its object can be absent. An object with no Version or trash row is untracked. The aggregate storage report cannot detect any of these discrepancies.
 
 ## Sites and tickets
 
@@ -188,8 +220,8 @@ htmlgate requires R2, and keeps it. The question was whether an Instance could r
 
 - Each Version's body is one private object in the `<name>-bodies` bucket: a page's HTML, or a site's zip exactly as published, whose file index (path, offset, sizes) is in the Version's row. Nothing in the bucket is public. Every read goes through the Worker, so the gate and the sandbox header always apply.
 - **Expiry.** Every hour the Worker purges up to 150 expired Shares: their bodies are queued in `trash` and their Versions deleted in one transaction, and the Share's row is kept, marked deleted. It then deletes up to 500 due bodies from the bucket. A run stays under Workers Free's 50 D1 queries; what is left waits for the next hour, and failed cleanup is retried on later runs. Backlog or failures can delay physical deletion beyond an hour; there is no guaranteed deletion deadline. An expired Share answers as missing from the moment it expires, whether or not the cleanup has run.
-- Every body in the bucket that no Version points at is listed in the database's `trash` table: bodies that left the 20-Version window, and uploads not yet claimed by their publish. They are deleted from the bucket after a request, with retries on later writes, and count toward the storage cap until they are gone.
-- **What the cap counts.** Each Version counts its body plus, for a site, its file index (stored in the database beside it), and never less than 20 KiB, which covers the most a Share's title, description and metadata can hold. So a site of empty files with long names, or a run of empty pages, cannot grow the database past the cap. A body that left its Version (the `trash` table) counts its own size.
+- The database's `trash` table tracks bodies that left the 20-Version window and uploads not yet claimed by their publish. The Worker attempts to delete due bodies after writes and during hourly cleanup. They count toward the storage cap while their rows remain. Use the [inventory](#read-only-d1r2-inventory) to detect untracked objects.
+- **What the cap counts.** Each Version counts its body plus, for a site, its file index in D1, with a 20 KiB minimum. The cap also counts the `trash` ledger, including reservations. Expired Share rows can remain after their Versions are removed and no longer contribute to the publish cap. Monitor their count and physical D1 usage separately.
 - **The storage cap includes active upload reservations.** A publish reserves room before it uploads, in the same database statement that checks the cap, so concurrent publishes with unexpired reservations cannot pass it together. Reservation creation, claim, and cleanup use the database's execution-time clock; a delayed write cannot claim a body after expiry.
 - **The one-hour reservation limit:** an upload that finishes after its reservation expires can temporarily put the bucket over the cap. Its write is refused, the body is re-ledgered, and cleanup retries its deletion. If the Worker stops before re-ledgering, that object can remain untracked and no longer count toward the cap. 0.1 has no bucket sweep for it.
 - **The old `versions_d1_legacy` table** holds bodies from before bodies moved to R2; it is empty on a fresh Instance. Nothing reads it. Drop it when you no longer need it:
@@ -197,6 +229,16 @@ htmlgate requires R2, and keeps it. The question was whether an Instance could r
   ```sh
   pnpm exec wrangler d1 execute <name>-db --remote --command "DROP TABLE versions_d1_legacy"
   ```
+
+To check the tracked storage and cleanup backlog, run this read-only aggregate query on the intended Instance:
+
+```sh
+pnpm exec wrangler d1 execute <name>-db --remote --config .instance/<name>.wrangler.jsonc --command="$(cat scripts/storage-status.sql)" --json
+```
+
+`tracked_bytes` is the sum of `version_bytes` and `trash_bytes`, including upload reservations. It is the amount charged against the Instance's publish cap. Check D1 and R2 usage in Cloudflare for physical storage. `retained_expired_share_count` includes `expired_tombstone_count` (deleted rows with no Versions) and `due_expired_share_count` (expired Shares still holding Versions). `due_trash_count` excludes reservations with a future due time. Each `oldest_due_*_at_ms` is a Unix timestamp in milliseconds, or `null` when that queue is empty. Compare it with `measured_at_ms` to see how long the oldest item has waited. The report contains only counts, sizes and timestamps.
+
+Keep the equals sign in `--command=...` so Wrangler reads the leading SQL comment as part of the query. Wrangler sends a remote `--file` through its import workflow, which can interrupt access and returns import metadata.
 
 ## Speed
 
@@ -209,4 +251,4 @@ A page costs one D1 query; a Share's body costs one D1 query and one R2 read. Bo
 - Measured on a deployed Instance (D1 and R2 in eastern North America, no read replicas) from Brazil on 2026-10-08, median time to first byte: about 167 ms for a page with one D1 query, about 327 ms for a Share's body (the R2 read adds about 160 ms). A viewer page loads both. Locally (`pnpm run bench`) the same pages take 10 to 40 ms, which is the Worker's own cost.
 - **Placing the Worker next to its database does not help.** With `placement.region` set to `aws:us-east-1` (the Worker ran in IAD), the body got 47 ms faster and every one-query page 45 to 55 ms slower; a viewer visit was the same.
 - The Workers Cache API cannot cache bodies: it is not available to a Worker behind Cloudflare Access. D1 read replicas would let a re-gated Share stay public on a lagging replica, so htmlgate does not use them.
-- To serve visitors in one region faster, create the Instance's database and bucket near them before the first setup, which then reuses them: `pnpm exec wrangler d1 create <name>-db --location <hint>` (`weur`, `eeur`, `enam`, `wnam`, `apac`, `oc`) and `pnpm exec wrangler r2 bucket create <name>-bodies --location <hint>`. D1 has no South American location.
+- To serve visitors in one region faster, create the Instance's database and bucket near them before the first setup. Use `pnpm exec wrangler d1 create <name>-db --location <hint>` (`weur`, `eeur`, `enam`, `wnam`, `apac`, `oc`) and `pnpm exec wrangler r2 bucket create <name>-bodies --location <hint>`, then explicitly [pin the resources](#reusing-pre-created-storage). D1 has no South American location.

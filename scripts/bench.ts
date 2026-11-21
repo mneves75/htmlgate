@@ -84,13 +84,12 @@ function sampleSite(): Uint8Array {
   return writeZip([{ path: "index.html", data: new TextEncoder().encode(html) }, { path: "css/report.css", data: new TextEncoder().encode(css) }]);
 }
 
-/** Publishes the sample site as a Public Share and returns its slug. */
-async function publishSite(base: string, token: string): Promise<string> {
+/** Publishes the sample site and returns its slug. */
+async function publishSite(base: string, token: string, makePublic: boolean): Promise<string> {
   const headers = { authorization: `Bearer ${token}` };
   const r = await send(`${base}/api/shares?title=Weekly%20report`, { method: "POST", headers: { ...headers, "content-type": "application/zip" }, redirect: "manual", body: sampleSite() });
   const slug = await createdSlug(r, "publish site");
-  const v = await send(`${base}/api/shares/${slug}/visibility`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, redirect: "manual", body: JSON.stringify({ public: true }) });
-  if (!v.ok) throw new Error(`visibility: HTTP ${v.status}`);
+  if (makePublic) await makeSharePublic(base, token, slug);
   return slug;
 }
 
@@ -105,11 +104,16 @@ async function publish(base: string, token: string, makePublic: boolean, created
   const r = await send(`${base}/api/shares`, { method: "POST", headers, redirect: "manual", body: JSON.stringify({ html: sampleShare(), title: "Weekly report" }) });
   const slug = await createdSlug(r, "publish");
   created(slug);
-  if (makePublic) {
-    const v = await send(`${base}/api/shares/${slug}/visibility`, { method: "POST", headers, redirect: "manual", body: JSON.stringify({ public: true }) });
-    if (!v.ok) throw new Error(`visibility: HTTP ${v.status}`);
-  }
+  if (makePublic) await makeSharePublic(base, token, slug);
   return slug;
+}
+
+async function makeSharePublic(base: string, token: string, slug: string): Promise<void> {
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const response = await send(`${base}/api/shares/${slug}/visibility`, {
+    method: "POST", headers, redirect: "manual", body: JSON.stringify({ public: true }),
+  });
+  if (!response.ok) throw new Error(`visibility: HTTP ${response.status}`);
 }
 
 /**
@@ -189,9 +193,10 @@ async function instancePages(): Promise<number> {
     if (!token) throw new Error(`no token from the token page (HTTP ${page.status})`);
     const gated = await publish(base, token, false);
     const open = await publish(base, token, true);
-    const site = await publishSite(base, token);
+    const site = await publishSite(base, token, true);
+    const gatedSite = await publishSite(base, token, false);
     // The Author's home lists up to 50 Shares: measure it full, and let the metrics report count them.
-    for (let i = 0; i < 48; i++) await publish(base, token, false);
+    for (let i = 0; i < 46; i++) await publish(base, token, false);
     return await measure(base, [
       ["home", "/", 200],
       ["tokens", "/tokens", 200],
@@ -201,6 +206,7 @@ async function instancePages(): Promise<number> {
       ["viewer (public, with its frame)", `/p/${open}`, 200],
       ["raw (public)", `/p/${open}/raw`, 200],
       ["site (public, index and stylesheet)", `/p/${site}/1/`, 200],
+      ["site (gated, viewer and stylesheet)", `/s/${gatedSite}`, 200],
       ["not found", "/s/AAAAAAAAAAAA", 404],
     ], { "cf-access-jwt-assertion": jwt }, "wrangler dev --local");
   } finally {

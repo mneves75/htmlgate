@@ -125,10 +125,10 @@
 <p>Each piece below is something you would otherwise build, secure and keep running yourself. The price for all of it is in the next section.</p>
 </div>
 <ul class="directory">
-<li><div><h3>Gated by default</h3><p>Every Share starts visible only to the people on your list, after they sign in through Cloudflare Access. Want one open to the world? <code>htmlgate public</code>. Changed your mind? <code>htmlgate gate</code> closes it again from the next request.</p></div></li>
+<li><div><h3>Gated by default</h3><p>Every Share starts visible only to the people on your list, after they sign in through Cloudflare Access. <code>htmlgate public</code> opens every retained Version and any new Versions while the Share stays public. <code>htmlgate gate</code> closes its public links from the next request.</p></div></li>
 <li><div><h3>Your account, your keys</h3><p>You install it in your own Cloudflare account. Nobody else holds your credentials, including the person who wrote htmlgate.</p></div></li>
 <li><div><h3>Agent HTML in a sandbox</h3><p>Every Share runs isolated, in an opaque origin. Its scripts cannot read the Viewer's cookies or act as the Viewer.</p></div></li>
-<li><div><h3>Off the list, out the door</h3><p>The Worker checks your list on every request. Remove someone and they lose access on their next one.</p></div></li>
+<li><div><h3>Remove gated access</h3><p>The Worker checks the Allowlist on every gated request. Removing someone blocks their next gated request. Anyone with a public link can still open it.</p></div></li>
 <li><div><h3>Built for agents</h3><p>A CLI with <code>--output json</code>, documented exit codes, and a ready-made skill that teaches your agent to publish on its own.</p></div></li>
 <li><div><h3>Version history</h3><p>Every update with <code>--slug</code> becomes a new Version at the same URL. The latest 20 are kept, each with its own link.</p></div></li>
 </ul>
@@ -145,7 +145,7 @@
 <dl class="facts">
 <div class="free"><dt>htmlgate</dt><dd><strong>$0</strong>. Open source, under the MIT licence.</dd></div>
 <div><dt>Workers</dt><dd>The free plan should be enough, but it is untested. Version 0.1 runs on the paid plan.</dd></div>
-<div><dt>R2, where the files live</dt><dd>You turn on the subscription once in the dashboard. It includes 10 GB-month free; past that, Cloudflare bills storage and operations. htmlgate stops at 5 GB by default.</dd></div>
+<div><dt>R2, where the files live</dt><dd>You turn on the subscription once in the dashboard. It includes 10 GB-month free; past that, Cloudflare bills storage and operations. By default, htmlgate limits publishing to 5 GB of tracked storage.</dd></div>
 <div><dt>Public links</dt><dd>Every visit to a public link runs on your account: Worker requests, D1 queries and R2 reads. The storage cap does not count visits. The operator guide shows the rate limiting rule and the billing alert; setup creates neither.</dd></div>
 <div><dt>Zero Trust, the sign-in</dt><dd>It has a free plan, and Cloudflare still asks for payment details.</dd></div>
 </dl>
@@ -209,7 +209,7 @@ htmlgate login https://your-instance.example.com</code></pre>
 
 <footer>
 <div class="wrap">
-<p>htmlgate. <span class="version">0.1.18</span></p>
+<p>htmlgate. <span class="version">0.1.19</span></p>
 <nav aria-label="Footer">
 <a href="/en/privacy/">Privacy</a>
 <a href="/" hreflang="pt-BR" lang="pt-BR">Português</a>

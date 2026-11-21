@@ -179,12 +179,21 @@ describe("public Shares", () => {
 });
 
 describe("the redesigned pages", () => {
-  test("the viewer shows whether the Share is gated or public", async () => {
+  test("the viewer shows whether the Share is gated or public; the Author can open the public link", async () => {
     const d = await newShare();
-    expect((await as(VIEWER, `/s/${d.slug}`)).body).toMatch(/<span class="state state-gated">Gated<\/span>/);
+    const gated = await as(AUTHOR, `/s/${d.slug}`);
+    expect(gated.body).toMatch(/<span class="state state-gated">Gated<\/span>/);
+    expect(gated.body).not.toContain("Public link");
+    await call("PUT", `/api/shares/${d.slug}`, { html: page("latest") });
     await call("POST", `/api/shares/${d.slug}/visibility`, { public: true });
-    expect((await get(`/p/${d.slug}`)).body).toMatch(/<span class="state state-public">Public<\/span>/);
-    expect((await as(VIEWER, `/s/${d.slug}`)).body).toMatch(/<span class="state state-public">Public<\/span>/);
+    const publicView = await get(`/p/${d.slug}`);
+    expect(publicView.body).toMatch(/<span class="state state-public">Public<\/span>/);
+    expect(publicView.body).not.toContain("Public link");
+    const viewer = await as(VIEWER, `/s/${d.slug}`);
+    expect(viewer.body).toMatch(/<span class="state state-public">Public<\/span>/);
+    expect(viewer.body).not.toContain("Public link");
+    expect((await as(AUTHOR, `/s/${d.slug}`)).body).toContain(`href="/p/${d.slug}">Public link</a>`);
+    expect((await as(AUTHOR, `/s/${d.slug}?v=1`)).body).toContain(`href="/p/${d.slug}?v=1">Public link</a>`);
   });
 
   test("the Author's home shows the htmlgate CLI's sign-in line for this Instance; a Viewer's does not", async () => {

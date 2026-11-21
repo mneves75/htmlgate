@@ -64,10 +64,15 @@ describe("the htmlgate CLI against an Instance", () => {
   });
 
   test("public and gate move the gate; list --public and --gated filter by it; url follows it", async () => {
+    const help = await cli("public", "--help");
+    expect(help.code, help.stderr).toBe(0);
+    expect(help.stdout).toContain("every retained Version and every later Version while it stays public");
+    expect(help.stdout).toContain("publish it as a new Share");
     const t = "pg-" + Math.random().toString(36).slice(2, 8);
     const { out } = await cli("publish", "page.html", "--title", "G", "--metadata", `t=${t}`);
     const pub = await cli("public", out.slug);
     expect(pub.code, pub.stderr).toBe(0);
+    expect(pub.stderr).toBe("");
     expect(pub.out).toMatchObject({ slug: out.slug, public: true, url: `${base}/p/${out.slug}` });
     expect((await fetch(`${base}/p/${out.slug}`)).status).toBe(200);
     expect((await cli("url", out.slug)).out.url).toBe(`${base}/p/${out.slug}`);

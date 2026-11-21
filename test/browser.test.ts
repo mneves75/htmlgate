@@ -83,6 +83,7 @@ describe("accessibility of every page, in light and dark", () => {
     expect(await violations(), "tokens with a new token").toEqual([]);
     const { json: d } = await call("POST", "/api/shares", { html: "<!doctype html><title>t</title><h1>Hello</h1>", title: "A Share with a fairly long title for the bar" });
     await call("PUT", `/api/shares/${d.slug}`, { html: "<!doctype html><title>t</title><h1>Two</h1>" });
+    expect((await call("POST", `/api/shares/${d.slug}/visibility`, { public: true })).status).toBe(200);
     // One navigation to the Share, so the metrics table has a row to audit rather than its empty state.
     await abIn(AUDIT, "open", `${base}/s/${d.slug}`);
     await settle(AUDIT);
@@ -142,6 +143,8 @@ describe("accessibility of every page, in light and dark", () => {
       expect(await violations(), `${label} at 390 px`).toEqual([]);
       expect(await abIn(AUDIT, "eval", "document.documentElement.scrollWidth <= window.innerWidth"), `${label} scrolls sideways`).toBe("true");
     }
+    await abIn(AUDIT, "find", "role", "link", "click", "--name", "Public link");
+    expect(await abIn(AUDIT, "get", "url")).toBe(`${base}/p/${d.slug}?v=1`);
     await abIn(AUDIT, "open", `${base}/s/${d.slug}`);
     await settle(AUDIT);
     await abIn(AUDIT, "click", "details.confirm summary");
@@ -208,9 +211,10 @@ describe("the token page in a real browser", () => {
     await ab("open", `${base}/s/${d.slug}`);
     await settle();
     await ab("click", "details.confirm summary");
-    await ab("wait", "--text", "cannot be undone");
+    await ab("wait", "--text", "You cannot undo this in htmlgate.");
     await ab("find", "role", "button", "click", "--name", "Erase for good");
-    await ab("wait", "--text", "for good: its Versions");
+    await ab("wait", "--text", "is no longer available");
+    expect(await ab("get", "text", '[role="status"]')).toContain("Stored files are deleted separately");
     expect(await ab("get", "url")).toBe(`${base}/?erased=${d.slug}`);
     expect((await call("GET", `/api/shares/${d.slug}`)).status).toBe(404);
   });
@@ -220,7 +224,7 @@ describe("the token page in a real browser", () => {
     const { json: d } = await call("POST", "/api/shares", { html: "<!doctype html><title>t</title><h1>Keep</h1>", title: "Keep me" });
     await ab("open", `${evilUrl}erase/${d.slug}`);
     // Any answer: refused, the question, or erased; so a missing check fails the assertion below, not this wait.
-    await ab("wait", "--fn", "/Refused|Erase this Share\\?|for good:/.test(document.body?.innerText ?? '')");
+    await ab("wait", "--fn", "/Refused|Erase this Share\\?|is no longer available/.test(document.body?.innerText ?? '')");
     expect(await ab("get", "text", "body")).toContain("Refused");
     expect((await call("GET", `/api/shares/${d.slug}`)).status).toBe(200);
   });

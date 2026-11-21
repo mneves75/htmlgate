@@ -21,6 +21,9 @@
 - Independent review identified bucket jurisdiction, provider acknowledgement, bulk count and remote D1 query issues. The code and runbook were corrected. All 260 focused Operator, revocation and version checks passed after the correction.
 - Bumped the candidate to `0.1.19` and regenerated the CLI release archive. Full candidate gates precede landing.
 - Full integration passed on `8209a59` with 1,390 tests and two tag-dependent skips. The benchmark preflight uses an isolated macOS runner while the local host is busy.
+- Candidate `c6b54ae` caught all 250 mutations and passed the 12-page CI benchmark. The Gated Site p95 was 89.9 ms against the runner's 150 ms budget. The local 50 ms benchmark remained inconclusive under heavy load.
+- Independent verification found that Wrangler parses a leading SQL comment as flags with the two-token spelling. The documented `--command=...` form returned the correct read-only aggregates on empty and populated synthetic D1.
+- A fresh Astra verifier reran all 30 frozen behavior checks after the correction and passed six additional checks. It independently validated the archive and the immutable candidate run.
 
 ## Verification boundaries
 

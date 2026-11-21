@@ -233,12 +233,12 @@ htmlgate requires R2, and keeps it. The question was whether an Instance could r
 To check the tracked storage and cleanup backlog, run this read-only aggregate query on the intended Instance:
 
 ```sh
-pnpm exec wrangler d1 execute <name>-db --remote --config .instance/<name>.wrangler.jsonc --command "$(cat scripts/storage-status.sql)" --json
+pnpm exec wrangler d1 execute <name>-db --remote --config .instance/<name>.wrangler.jsonc --command="$(cat scripts/storage-status.sql)" --json
 ```
 
 `tracked_bytes` is the sum of `version_bytes` and `trash_bytes`, including upload reservations. It is the amount charged against the Instance's publish cap. Check D1 and R2 usage in Cloudflare for physical storage. `retained_expired_share_count` includes `expired_tombstone_count` (deleted rows with no Versions) and `due_expired_share_count` (expired Shares still holding Versions). `due_trash_count` excludes reservations with a future due time. Each `oldest_due_*_at_ms` is a Unix timestamp in milliseconds, or `null` when that queue is empty. Compare it with `measured_at_ms` to see how long the oldest item has waited. The report contains only counts, sizes and timestamps.
 
-Keep `--command` for this query. Wrangler sends a remote `--file` through its import workflow, which can interrupt access and returns import metadata.
+Keep the equals sign in `--command=...` so Wrangler reads the leading SQL comment as part of the query. Wrangler sends a remote `--file` through its import workflow, which can interrupt access and returns import metadata.
 
 ## Speed
 

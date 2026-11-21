@@ -38,11 +38,14 @@
     },
     "integration": {"candidate": "8209a59", "passed": 1390, "files": 74, "tagDependentSkips": 2},
     "browser": {"passed": 10, "skippedByFilter": 57, "files": 3},
-    "mutations": {"uniqueAnchors": 250, "execution": "pending"},
-    "benchmark": {"status": "inconclusive", "hostLoad": 279.3, "budgetMs": 50, "gatedSiteP95Ms": 57.1},
-    "independentVerification": "pending",
-    "releaseArtifact": "pending",
-    "remoteMain": "pending",
-    "remoteTag": "pending"
+    "mutations": {"candidate": "c6b54ae", "uniqueAnchors": 250, "caught": 250, "run": 44926834212},
+    "benchmark": {
+      "local": {"status": "inconclusive", "hostLoad": 279.3, "budgetMs": 50, "gatedSiteP95Ms": 57.1},
+      "ci": {"status": "pass", "candidate": "c6b54ae", "run": 44926834212, "pages": 12, "budgetMs": 150, "gatedSiteP95Ms": 89.9}
+    },
+    "independentVerification": {"status": "pass", "model": "gpt-6.2-astra", "frozenBehaviorChecks": 30, "additionalChecks": 6, "storageReport": "pass on seven-migration local D1"},
+    "releaseArtifact": {"version": "0.1.19", "revision": 1, "candidateArchive": "pass", "sha256": "4dff69ef0b3cf02fd4dacf92383e9d912a78cb1b478f012a79f2399941d72e98"},
+    "remoteMain": {"mergeReceipt": "https://github.com/mneves75/htmlgate/pull/27", "taggedValidation": "https://github.com/mneves75/htmlgate/actions/workflows/release-validation.yml"},
+    "remoteTag": {"ref": "refs/tags/v0.1.19", "expectedTarget": "merge commit of PR 27"}
   }
 }

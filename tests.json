@@ -27,7 +27,8 @@
   },
   "checks": {
     "frozenInstall": "pass",
-    "typecheck": "pass on implementation before version bump",
+    "typecheck": {"status": "pass", "candidate": "8209a59"},
+    "dependencyAudit": "pass at high severity threshold",
     "focused": {
       "sharing": {"passed": 9},
       "operatorAndReleaseTools": {"passed": 31, "skippedByFilter": 168},
@@ -35,7 +36,7 @@
       "interactivePublicWarning": "pass in a pseudo-terminal against a loopback API fixture",
       "localStorageStatus": "pass on empty and populated D1 with seven migrations"
     },
-    "integration": "pending",
+    "integration": {"candidate": "8209a59", "passed": 1390, "files": 74, "tagDependentSkips": 2},
     "browser": {"passed": 10, "skippedByFilter": 57, "files": 3},
     "mutations": {"uniqueAnchors": 250, "execution": "pending"},
     "benchmark": {"status": "inconclusive", "hostLoad": 279.3, "budgetMs": 50, "gatedSiteP95Ms": 57.1},

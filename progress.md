@@ -20,6 +20,7 @@
 - Chromium passed the focused sharing, erasure and accessibility checks. The interactive CLI warning passed in a pseudo-terminal.
 - Independent review identified bucket jurisdiction, provider acknowledgement, bulk count and remote D1 query issues. The code and runbook were corrected. All 260 focused Operator, revocation and version checks passed after the correction.
 - Bumped the candidate to `0.1.19` and regenerated the CLI release archive. Full candidate gates precede landing.
+- Full integration passed on `8209a59` with 1,390 tests and two tag-dependent skips. The benchmark preflight uses an isolated macOS runner while the local host is busy.
 
 ## Verification boundaries
 

@@ -272,6 +272,9 @@ const MUTATIONS = [
   ["setup trusts a stale bootstrap receipt", "scripts/setup.mjs", 'if (receipt !== undefined) checkStorageProof(receipt, accountId, db, existingBucket, "receipt");', "void receipt;", "test/setup-ownership.test.ts"],
   ["revoke-all ignores the active Access audience", "scripts/token.mjs", "{ requireAppAudience: true }", "{ requireAppAudience: false }", "test/setup-ownership.test.ts"],
   ["single revocation reports unknown IDs as revoked", "scripts/token.mjs", 'else throw new Error(`No token ${arg} exists.`);', 'else console.log(`Token ${arg} revoked.`);', "test/operator.test.ts"],
+  ["Instance ownership ignores the bucket jurisdiction", "scripts/setup.mjs", 'jurisdiction === undefined || jurisdiction === "default";', 'true;', "test/setup-ownership.test.ts"],
+  ["revoke-all accepts an unexpected Access acknowledgement", "scripts/token.mjs", "Object.keys(result).length !== 0", "result.success === false", "test/setup-ownership.test.ts"],
+  ["revoke-all accepts a missing D1 change count", "scripts/token.mjs", "!Number.isSafeInteger(count) || count < 0", "false", "test/setup-ownership.test.ts"],
 ];
 
 const onlyAt = process.argv.indexOf("--only");

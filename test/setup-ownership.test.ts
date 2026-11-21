@@ -48,7 +48,7 @@ async function setup(change: Scenario = {}) {
     }));
     writeFileSync(join(dir, "scenario.json"), JSON.stringify({ workers: [worker], apps: [app], dbs: [{ name: `${NAME}-db`, uuid: DB }], deployment,
       versions: { serving: { resources: { bindings: [...bindings, audience] } } }, managed: { enabled: false }, custom: { domains: [] },
-      buckets: { buckets: [bucket] }, d1Result: [{ success: true, results: [{ id: "0123456789ab" }] }], accessResult: "{}",
+      buckets: { buckets: [bucket] }, d1Result: [{ success: true, results: [], meta: { changes: 1 } }], accessResult: "{}",
       ticketResult: "✨ Success! Uploaded secret TICKET_KEY", accessAccount: ACCOUNT,
       createdDb: { name: `${NAME}-db`, uuid: DB }, createdBucket: bucket, ...change }));
     writeFileSync(join(dir, "provider.mjs"), String.raw`
@@ -226,6 +226,7 @@ test.each([
   ["missing bindings", { versions: { serving: { resources: {} } } }],
   ["wrong database UUID", { versions: { serving: { resources: { bindings: [{ ...bindings[0], id: "foreign" }, bindings[1]] } } } }],
   ["wrong bucket", { versions: { serving: { resources: { bindings: [bindings[0], { ...bindings[1], bucket_name: "foreign" }] } } } }],
+  ["same bucket name in another jurisdiction", { versions: { serving: { resources: { bindings: [bindings[0], { ...bindings[1], jurisdiction: "eu" }] } } } }],
   ["duplicate DB binding", { versions: { serving: { resources: { bindings: [...bindings, bindings[0]] } } } }],
   ["wrong DB binding type", { versions: { serving: { resources: { bindings: [{ ...bindings[0], type: "plain_text" }, bindings[1]] } } } }],
   ["a second traffic-serving version is foreign", { deployment: { deployments: [{ versions: [{ version_id: "serving", percentage: 50 }, { version_id: "other", percentage: 50 }] }] }, versions: { serving: { resources: { bindings } }, other: { resources: { bindings: [bindings[0]] } } } }],
@@ -242,6 +243,7 @@ test.each([
   ["pre-marker Instance", {}],
   ["Access application on a later page", { lateApp: true }],
   ["marked Instance", { versions: { serving: { resources: { bindings: [...bindings, marker] } } } }],
+  ["explicit default bucket jurisdiction", { versions: { serving: { resources: { bindings: [bindings[0], { ...bindings[1], jurisdiction: "default" }] } } } }],
   ["interrupted closed bootstrap", { apps: [], versions: { serving: { resources: { bindings: [...bindings, marker] } } } }],
   ["first setup", { apps: [], workers: [], dbs: [], buckets: { buckets: [] } }],
   ["explicitly pre-created storage", { apps: [], workers: [], bootstrapStorage: storageProof }],
@@ -414,6 +416,7 @@ test.each([
   ["different generated account", { generated: { account_id: "foreign" } }],
   ["different generated database", { generated: { d1_databases: [{ binding: "DB", database_name: `${NAME}-db`, database_id: "foreign" }] } }],
   ["different generated bucket", { generated: { r2_buckets: [{ binding: "BODIES", bucket_name: "foreign" }] } }],
+  ["different generated bucket jurisdiction", { generated: { r2_buckets: [{ binding: "BODIES", bucket_name: bucket.name, jurisdiction: "eu" }] } }],
 ] as const)("revoke-all refuses %s before any provider write", async (_name, scenario) => {
   const r = await setup({ ...scenario, token: true });
   expect(r.writes).toEqual([]);
@@ -431,7 +434,9 @@ test("revoke-all uses the verified Access application and reports returned resul
 
 test.each([
   ["unconfirmed Access result", { accessResult: "Aborted." }, ["zero-trust"]],
+  ["unexpected Access acknowledgement", { accessResult: '{"error":"unconfirmed"}' }, ["zero-trust"]],
   ["unconfirmed D1 result", { d1Result: [{ success: false, results: [] }] }, ["zero-trust", "d1"]],
+  ["missing D1 changes count", { d1Result: [{ success: true, results: [] }] }, ["zero-trust", "d1"]],
   ["unconfirmed ticket result", { ticketResult: "" }, ["zero-trust", "d1", "secret"]],
 ] as const)("revoke-all stops after %s and reports the unconfirmed step", async (_name, scenario, commands) => {
   const r = await setup({ ...scenario, token: true });

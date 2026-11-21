@@ -362,14 +362,14 @@ describe("a confirmation precedes every erase a person can start", () => {
     const slug = await publish(i);
     const forged = await (await i.call(`/?erased=${slug}`, { as: AUTHOR })).text();
     // [finding, fixed] a link cannot make the home say a live Share was erased.
-    expect(forged).not.toContain("Erased <code>");
+    expect(forged).not.toContain("is no longer available");
     expect(residue(i, slug)).toMatchObject({ share: 1 });
     for (const bad of ["<script>alert(1)</script>", `${slug}x`, "short", "%3Cimg%20src%3Dx%3E"]) {
       const body = await (await i.call(`/?erased=${bad}`, { as: AUTHOR })).text();
-      expect(body, bad).not.toContain("Erased <code>");
+      expect(body, bad).not.toContain("is no longer available");
       expect(body, bad).not.toMatch(/<script>alert/);
     }
-    expect(await (await i.call(`/?erased=${slug}`, { as: VIEWER })).text()).not.toContain("Erased <code>");
+    expect(await (await i.call(`/?erased=${slug}`, { as: VIEWER })).text()).not.toContain("is no longer available");
   });
 
   test("a Share title is escaped in the Share page's question and the home's confirmation", async () => {
@@ -510,13 +510,13 @@ describe("the privacy notice against the code and docs/privacy.md", () => {
     // No false absolute: both notices name the public exception.
     expect(text(pt)).not.toContain("aberta só para quem está na lista de acesso dela");
     expect(text(en)).not.toContain("open only to the people on its Allowlist");
-    expect(text(pt)).toMatch(/a menos que o autor torne um Share público/);
-    expect(text(en)).toMatch(/unless the Author makes a Share public/);
+    expect(text(pt)).toMatch(/Quando um Share é público, qualquer pessoa com um link \/p\/ pode abrir qualquer Versão guardada/);
+    expect(text(en)).toMatch(/When a Share is public, anyone with a \/p\/ link can open any retained Version/);
   });
 
   test("[finding] the notice names the backups (D1 Time Travel, 7 or 30 days) that docs/privacy.md says outlive an erase", () => {
     expect(readFileSync("docs/privacy.md", "utf8")).toMatch(/Time Travel/);
-    expect(text(pt)).toMatch(/Time Travel do D1\) ainda permitem restaurar estados anteriores por 7 dias \(30 no plano pago\)/);
-    expect(text(en)).toMatch(/D1 Time Travel\) can still restore earlier states for 7 days \(30 on the paid plan\)/);
+    expect(text(pt)).toMatch(/Estados anteriores do banco podem ser recuperados pelo Time Travel do D1 por 7 dias \(30 no plano pago\)/);
+    expect(text(en)).toMatch(/Earlier database states remain recoverable through D1 Time Travel for 7 days \(30 on the paid plan\)/);
   });
 });

@@ -84,11 +84,18 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
     ["the view limit keys IPv6 by full address","src/index.ts","  if (!address.includes(\":\")) return address;","  return address;","test/views-limit.test.ts"],
     ["revoke-all ends Access sign-ins last","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Account\", checkAccount], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey], [\"Access sign-ins\", revokeSessions]]","test/token-revoke-all.test.ts"],
     ["revoke-all skips the account check","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
-    ["revoke-all's account step checks nothing","scripts/token.mjs","checkAccount: () => (checkSameAccount(wranglerWho(), cf(\"auth\", \"whoami\"), process.env), \"Wrangler and cf use the same one\")","checkAccount: () => \"Wrangler and cf use the same one\"","test/token-revoke-all.test.ts"],
+    ["revoke-all's account step checks nothing", "scripts/token.mjs", 'const accountId = checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env);', 'const accountId = "account-control";', "test/setup-ownership.test.ts"],
+    ["setup adopts unknown bootstrap storage", "scripts/setup.mjs", "if ((db && !proof.databaseId) || (existingBucket && !proof.bucket)) {", "if (false) {", "test/setup-ownership.test.ts"],
+    ["setup trusts a stale bootstrap receipt", "scripts/setup.mjs", 'if (receipt !== undefined) checkStorageProof(receipt, accountId, db, existingBucket, "receipt");', "void receipt;", "test/setup-ownership.test.ts"],
+    ["revoke-all ignores the active Access audience", "scripts/token.mjs", "{ requireAppAudience: true }", "{ requireAppAudience: false }", "test/setup-ownership.test.ts"],
+    ["single revocation reports unknown IDs as revoked", "scripts/token.mjs", 'else throw new Error(`No token ${arg} exists.`);', 'else console.log(`Token ${arg} revoked.`);', "test/operator.test.ts"],
+    ["Instance ownership ignores the bucket jurisdiction", "scripts/setup.mjs", 'jurisdiction === undefined || jurisdiction === "default";', 'true;', "test/setup-ownership.test.ts"],
+    ["revoke-all accepts an unexpected Access acknowledgement", "scripts/token.mjs", "Object.keys(result).length !== 0", "result.success === false", "test/setup-ownership.test.ts"],
+    ["revoke-all accepts a missing D1 change count", "scripts/token.mjs", "!Number.isSafeInteger(count) || count < 0", "false", "test/setup-ownership.test.ts"],
   ];
   const base = after.slice(0, before.length);
 
-  test("243 controls: the immutable 182-entry base plus explicitly listed release controls", () => {
+  test("the immutable 182-entry base plus explicitly listed release controls", () => {
     expect(before).toHaveLength(182);
     expect(createHash("sha256").update(history).digest("hex")).toBe("659fa0b319ae9a82381cabfc7c993557f8231ebd0f2853e0300e51375aa9732e");
     expect(after).toHaveLength(before.length + added.length);

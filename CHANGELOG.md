@@ -2,9 +2,19 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.19] - 2026-11-21
+
+### Security
+
+- First setup proves the identity of pre-created storage and records newly created resource identities for safe retries. Setup refuses ambiguous resources before migrations or deployment.
+- Emergency revocation verifies the account, Access application, active Worker and storage bindings before provider writes. Single-token revocation distinguishes a revoked token, an already revoked token and an unknown ID.
 
 ### Changed
+
+- The CLI explains that making a Share public opens its retained Versions and subsequent Versions while it stays public. The signed-in Author view links to the Public address of the Version shown.
+- English and pt-BR explain the scope of the Allowlist and the difference between immediate access removal and asynchronous physical erasure.
+- The Operator guide covers safe recovery, cron quiescence, inventory reconciliation, and both Access applications at teardown. Added a read-only storage and cleanup report.
+- CI uses the Node pin in `.nvmrc`. The local benchmark includes the Gated Site viewer and its stylesheet.
 
 - Agent instructions: `docs/agents/issue-tracker.md` no longer blames a commitless parent repository (the
   parent directory is no longer a Git repository); research worktrees are still made by hand under

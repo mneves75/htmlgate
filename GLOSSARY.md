@@ -17,11 +17,11 @@ A Version made of several files, published as a zip or a folder, that opens at i
 _Avoid_: Bundle, archive, app
 
 **Expiry**:
-When a Share stops being reachable and its bodies are deleted for good: by default the Instance's number of days after its latest publish, or a date a Publisher set.
+When a Share stops being reachable and becomes due for physical cleanup. By default, expiry uses the Instance's number of days after its latest publish. A Publisher can set a date.
 _Avoid_: TTL, retention, lifetime
 
 **Erase**:
-To delete a Share for good, at once: every Version, the Share's record and its bodies, whether or not it was deleted before. Only the Author can, signed in, on the Instance's own pages. Deleting only hides a Share.
+To remove the Share and all Version records immediately and queue physical deletion of their bodies. The signed-in Author can erase a Share from the Instance's own pages, even if it was deleted before. Deleting only hides a Share.
 _Avoid_: Purge, wipe, hard delete
 
 **Ticket**:
@@ -69,7 +69,7 @@ A Share that only a person on the Allowlist can open, after signing in. Every Sh
 _Avoid_: Private share, locked share
 
 **Public Share**:
-A Share that anyone holding its URL can open without signing in.
+A Share that anyone holding its URL can open without signing in. Public visibility applies to every retained Version and every later Version while the Share stays public.
 _Avoid_: Open share, unlisted share
 
 ## On pt-BR pages

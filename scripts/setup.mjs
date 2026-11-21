@@ -276,7 +276,7 @@ export function checkOwnership(inst, db, workers, apps, { requireAppAudience = f
     };
     const database = one("DB");
     const bodies = one("BODIES");
-    if (database?.type !== "d1" || database.id !== db.uuid || bodies?.type !== "r2_bucket" || bodies.bucket_name !== bodiesBucket(inst)) throw new Error("Active Worker bindings do not belong to this Instance.");
+    if (database?.type !== "d1" || database.id !== db.uuid || bodies?.type !== "r2_bucket" || bodies.bucket_name !== bodiesBucket(inst) || !isDefaultBucketJurisdiction(bodies.jurisdiction)) throw new Error("Active Worker bindings do not belong to this Instance.");
     if (!app) {
       const marker = one("HTMLGATE_INSTANCE");
       if (marker?.type !== "plain_text" || marker.text !== inst.name
@@ -301,7 +301,8 @@ export function findDatabase(inst) {
   return matches[0];
 }
 
-const bucketIdentity = (bucket) => ({ createdAt: bucket?.creation_date, jurisdiction: bucket?.jurisdiction ?? "default" });
+export const isDefaultBucketJurisdiction = (jurisdiction) => jurisdiction === undefined || jurisdiction === "default";
+const bucketIdentity = (bucket) => ({ createdAt: bucket?.creation_date, jurisdiction: bucket?.jurisdiction === undefined ? "default" : bucket.jurisdiction });
 const validBucketIdentity = (bucket) => typeof bucket?.createdAt === "string" && Number.isFinite(Date.parse(bucket.createdAt))
   && bucket.jurisdiction === "default";
 const sameBucket = (a, b) => a.createdAt === b.createdAt && a.jurisdiction === b.jurisdiction;

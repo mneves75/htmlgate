@@ -31,6 +31,8 @@ function detectAgent(env: NodeJS.ProcessEnv): string | null {
   return null;
 }
 
+const PUBLIC_SCOPE = "Making a Share public opens every retained Version and every later Version while it stays public. To share only the current content, publish it as a new Share.";
+
 const HELP = `htmlgate ${VERSION}: publish HTML to your htmlgate Instance and get a URL.
 
 Usage:
@@ -49,6 +51,8 @@ Usage:
   htmlgate versions <slug>
   htmlgate tokens list
   htmlgate tokens revoke <id>
+
+${PUBLIC_SCOPE}
 
 Global options: --output text|json, --help, --version
 Sign-in: \`htmlgate login\`, or $HTMLGATE_URL with $HTMLGATE_TOKEN. Exit codes: 2 auth, 3 forbidden,
@@ -330,7 +334,10 @@ async function main(): Promise<void> {
     }
     case "public":
     case "gate": {
-      const d = await (await connect(p)).setPublic(arg(args, 0, "the Share's slug"), cmd === "public");
+      const api = await connect(p);
+      const slug = arg(args, 0, "the Share's slug");
+      if (cmd === "public" && !json && process.stdin.isTTY && process.stderr.isTTY) process.stderr.write(PUBLIC_SCOPE + "\n");
+      const d = await api.setPublic(slug, cmd === "public");
       return emit(brief(d), () => `${d.public ? "public" : "gated"}: ${d.url}\n`);
     }
     case "versions": {

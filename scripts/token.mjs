@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bodiesBucket, cf, checkOwnership, checkSameAccount, findDatabase, generatedConfig, listApplications, listWorkers, putTicketKey, readInstance, wranglerWho } from "./setup.mjs";
+import { bodiesBucket, cf, checkOwnership, checkSameAccount, findDatabase, generatedConfig, isDefaultBucketJurisdiction, listApplications, listWorkers, putTicketKey, readInstance, wranglerWho } from "./setup.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
@@ -32,16 +32,16 @@ export function parseArgs(argv) {
   return { cmd: rest[0], arg: rest[1], flags };
 }
 
-function d1(sql, inst, flags, targetConfig) {
+function d1(sql, inst, flags, targetConfig, statements = 1) {
   const args = ["d1", "execute", flags.local ? "htmlgate-dev" : `${inst.name}-db`, "--json", "--command", sql];
   if (flags.local) args.push("--local", "--persist-to", flags.persistTo, "-c", join(ROOT, "wrangler.jsonc"));
   else args.push("--remote", "-c", targetConfig ?? generatedConfig(inst));
   const out = execFileSync(WRANGLER, args, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CI: "1" } });
   const receipt = JSON.parse(out);
-  if (!Array.isArray(receipt) || receipt.length !== 1 || receipt[0]?.success !== true || !Array.isArray(receipt[0].results)) {
+  if (!Array.isArray(receipt) || receipt.length !== statements || receipt.some((result) => result?.success !== true || !Array.isArray(result.results))) {
     throw new Error("Wrangler did not confirm the database operation.");
   }
-  return receipt[0].results;
+  return receipt.at(-1);
 }
 
 /**
@@ -77,7 +77,7 @@ function revocationTarget(inst, accountId) {
   const buckets = generated?.r2_buckets;
   if (generated?.name !== worker.name || (Object.hasOwn(generated, "account_id") && generated.account_id !== accountId)
     || !Array.isArray(database) || database.length !== 1 || database[0]?.binding !== "DB" || database[0].database_id !== db.uuid || database[0].database_name !== db.name
-    || !Array.isArray(buckets) || buckets.length !== 1 || buckets[0]?.binding !== "BODIES" || buckets[0].bucket_name !== bodiesBucket(inst)
+    || !Array.isArray(buckets) || buckets.length !== 1 || buckets[0]?.binding !== "BODIES" || buckets[0].bucket_name !== bodiesBucket(inst) || !isDefaultBucketJurisdiction(buckets[0].jurisdiction)
     || generated.vars?.ACCESS_AUD !== app.aud || (Object.hasOwn(generated.vars, "HTMLGATE_INSTANCE") && generated.vars.HTMLGATE_INSTANCE !== inst.name)) {
     throw new Error("The generated configuration does not match the verified Instance target. Check the config and run setup before retrying.");
   }
@@ -88,7 +88,8 @@ function revocationTarget(inst, accountId) {
 function revokeSessions(appId) {
   // Without --force cf asks, gets no answer, prints "Aborted." and still exits 0.
   const result = cf("zero-trust", "access", "applications", "revoke-tokens", appId, "--force");
-  if (!result || typeof result !== "object" || Array.isArray(result) || result.success === false) throw new Error("cf did not confirm the session revocation");
+  // cf prints the result of Cloudflare's successful response, an empty object.
+  if (!result || typeof result !== "object" || Array.isArray(result) || Object.keys(result).length !== 0) throw new Error("cf did not confirm the session revocation");
   return "revoked; everyone signs in again";
 }
 
@@ -108,7 +109,7 @@ function main() {
     console.error(`Token "${arg}" created. It is shown once; store it where your Publisher reads it.`);
     console.log(token);
   } else if (cmd === "list") {
-    for (const t of d1("SELECT id, name, created_at, last_used_at, revoked_at FROM tokens ORDER BY created_at DESC", inst, flags)) {
+    for (const t of d1("SELECT id, name, created_at, last_used_at, revoked_at FROM tokens ORDER BY created_at DESC", inst, flags).results) {
       const when = (ms) => (ms ? new Date(ms).toISOString().slice(0, 16) : "never");
       // A name stored by an older Worker may hold control or bidi characters; the terminal never gets them.
       const name = t.name.replace(/(?![\u200c\u200d])[\p{Cc}\p{Cf}]/gu, "");
@@ -116,9 +117,9 @@ function main() {
     }
   } else if (cmd === "revoke") {
     if (!arg || !/^[0-9a-f]{12}$/.test(arg)) throw new Error("Give the token id (12 hex characters) from `pnpm run token list`.");
-    const changed = d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE id = '${arg}' AND revoked_at IS NULL RETURNING id`, inst, flags);
+    const changed = d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE id = '${arg}' AND revoked_at IS NULL RETURNING id`, inst, flags).results;
     if (changed[0]?.id === arg) console.log(`Token ${arg} revoked.`);
-    else if (d1(`SELECT id FROM tokens WHERE id = '${arg}' AND revoked_at IS NOT NULL`, inst, flags)[0]?.id === arg) {
+    else if (d1(`SELECT id FROM tokens WHERE id = '${arg}' AND revoked_at IS NOT NULL`, inst, flags).results[0]?.id === arg) {
       console.log(`Token ${arg} was already revoked.`);
     } else throw new Error(`No token ${arg} exists.`);
   } else if (cmd === "revoke-all") {
@@ -135,8 +136,13 @@ function main() {
           return "Wrangler and cf target the verified Instance";
         },
         revokeTokens: () => {
-          const rows = d1(`UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL RETURNING id`, inst, flags, targetConfig);
-          return `${rows.length} revoked`;
+          const update = `UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL`;
+          // Wrangler's local JSON keeps only duration in meta. Its batch runs both statements on the same D1 connection.
+          const count = flags.local
+            ? d1(`${update}; SELECT changes() AS count`, inst, flags, targetConfig, 2).results[0]?.count
+            : d1(update, inst, flags, targetConfig).meta?.changes;
+          if (!Number.isSafeInteger(count) || count < 0) throw new Error("Wrangler did not confirm the number of revoked tokens.");
+          return `${count} revoked`;
         },
         rotateTicketKey: () => (putTicketKey(targetConfig), "replaced; every open ticket has ended"),
         revokeSessions: () => revokeSessions(appId),

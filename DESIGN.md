@@ -388,6 +388,8 @@ Each character sits on its own flap: a repeating cell-colored block one characte
 ### Share viewer bar
 A thin graphite strip, wrapping to two lines on phones, with the title clamped to two lines. The Versions menu is a `<details>` with a mono summary ("v3 of 7") and a graphite list; the current Version is yellow. The older-Version notice is a full-width yellow band directly under it.
 
+On the Author's signed-in view of a Public Share, the bar links to the public viewer for the Version being shown.
+
 ### Link cards
 A Public Share's link unfurls with the landing's 1600×900 poster (`site/public/media/htmlgate-15s.jpg`) and the Share's own title and description: one raster asset, one source, served by the Instance at `/p/<slug>/card.jpg` with an immutable cache. Per-Share artwork would mean a raster renderer in the Worker; it is not worth a runtime dependency for a thumbnail.
 

@@ -31,13 +31,14 @@
     "focused": {
       "sharing": {"passed": 9},
       "operatorAndReleaseTools": {"passed": 31, "skippedByFilter": 168},
-      "mockedOperatorAndRevocation": {"passed": 139},
+      "operatorAndRevocationAfterReview": {"passed": 260, "files": 4},
+      "interactivePublicWarning": "pass in a pseudo-terminal against a loopback API fixture",
       "localStorageStatus": "pass on empty and populated D1 with seven migrations"
     },
     "integration": "pending",
-    "browser": "pending",
-    "mutations": {"uniqueAnchors": 247, "execution": "pending"},
-    "benchmark": "pending",
+    "browser": {"passed": 10, "skippedByFilter": 57, "files": 3},
+    "mutations": {"uniqueAnchors": 250, "execution": "pending"},
+    "benchmark": {"status": "inconclusive", "hostLoad": 279.3, "budgetMs": 50, "gatedSiteP95Ms": 57.1},
     "independentVerification": "pending",
     "releaseArtifact": "pending",
     "remoteMain": "pending",

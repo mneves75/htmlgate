@@ -17,6 +17,9 @@
 - Setup now verifies bootstrap storage identity. Revocation checks provider targets and reports what was confirmed. Mocked Operator flows and local D1 revocation passed.
 - The Operator guide records safe recovery and teardown. The storage report passed against empty and populated local D1.
 - The Public link, bilingual erasure wording, and CLI audience checks passed focused tests. Added Gated Site navigation to the local benchmark.
+- Chromium passed the focused sharing, erasure and accessibility checks. The interactive CLI warning passed in a pseudo-terminal.
+- Independent review identified bucket jurisdiction, provider acknowledgement, bulk count and remote D1 query issues. The code and runbook were corrected. All 260 focused Operator, revocation and version checks passed after the correction.
+- Bumped the candidate to `0.1.19` and regenerated the CLI release archive. Full candidate gates precede landing.
 
 ## Verification boundaries
 

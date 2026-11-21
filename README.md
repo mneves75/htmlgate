@@ -43,6 +43,8 @@ pnpm run token create laptop             # prints a token once
 
 [docs/operator.md](docs/operator.md) explains each step, what it changes on your account, and how to change the Allowlist, update or remove an Instance. [docs/privacy.md](docs/privacy.md) lists what an Instance stores about people, where, and for how long, for the privacy notice you owe them.
 
+For pre-production checks, give staging a separate Instance file with `"staging": true` so setup leaves its scheduled cleanup off.
+
 ## Install with Homebrew
 
 Homebrew is the install path on macOS. Do not install both the Homebrew and npm versions.

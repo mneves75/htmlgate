@@ -28,3 +28,11 @@
 ## Verification boundaries
 
 Local checks use disposable synthetic data. Cloudflare accounts, backups, and live Shares are separate evidence for deployment and recovery. Test results and unresolved checks are recorded in `tests.json`.
+
+## Production release preparation
+
+- Production still serves `0.1.18` on the Instance and landing. Cloudflare reports no pending production migrations. The public `v0.1.19` tag identifies the build that passed tagged CI.
+- Cloudflare inventory found no staging Instance or staging D1 or R2 resource. The separate landing preview has workers.dev and preview URLs disabled.
+- Both staging setup controls failed against the previous code because setup installed the hourly cron. The `0.1.20` candidate accepts a staging setting and sends an empty schedule on the closed bootstrap, serving deploy and later updates. Existing Instances keep the default hourly cleanup.
+- The CLI release archive was rebuilt for `0.1.20`. Independent verification reproduced the archive bytes and exercised the setup command against a synthetic provider.
+- Live staging, production security acceptance, backup and restore evidence, and the application rollback rehearsal are pending. Release and staging shutdown depend on that live evidence.

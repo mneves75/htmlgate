@@ -21,7 +21,7 @@ const file = (name: string, body: unknown) => {
 describe("the instance file", () => {
   test("names the Author and the Allowlist; the Author is always on it; emails are lowercased", () => {
     const inst = readInstance(file("ok.json", { name: "my-bin", authorEmail: "Me@Example.com", allowlist: ["A@b.c"] }));
-    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30, mfa: false });
+    expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30, mfa: false, staging: false });
   });
 
   test("sets the Instance's language: English unless the file says pt-BR", () => {
@@ -54,6 +54,8 @@ describe("the instance file", () => {
     [{ name: "ok", authorEmail: "nope", allowlist: [] }, /authorEmail/],
     [{ name: "ok", authorEmail: "a@b.c", allowlist: ["*@b.c, x"] }, /allowlist/],
     [{ name: "ok", authorEmail: "a@b.c" }, /allowlist/],
+    [{ name: "ok", authorEmail: "a@b.c", allowlist: [], staging: "false" }, /staging/],
+    [{ name: "ok", authorEmail: "a@b.c", allowlist: [], staging: null }, /staging/],
   ])("refuses %j", (body, why) => {
     expect(() => readInstance(file("bad.json", body))).toThrow(why);
   });

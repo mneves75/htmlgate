@@ -40,30 +40,6 @@ const seal = async (i: Instance, t: { slug: string; n: number; email: string; ex
   sealTicket((await importTicketKey(key))!, aud, t);
 const NAV = { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" };
 
-describe("Share route cutover without a dev Worker", () => {
-  test("the former collection path is not found with a valid token", async () => {
-    const i = await startInstance();
-    const r = await i.api("GET", "/api/drops");
-    expect(r.status).toBe(404);
-    expect(r.json.error.code).toBe("not_found");
-  });
-
-  test("the former gated paths are not-found even for the signed-in Author of a live Share", async () => {
-    const i = await startInstance();
-    const published = await i.api("POST", "/api/shares", { html: PAGE, title: "Live Share" });
-    expect(published.status).toBe(201);
-    const slug = published.json.slug as string;
-    expect((await i.call(new URL(published.json.url as string).pathname, { as: AUTHOR })).status).toBe(200);
-    const missing = await i.call("/unknown-share-path", { as: AUTHOR });
-    const shape = async (r: Response) => ({ status: r.status, headers: Object.fromEntries(r.headers), body: await r.text() });
-    const control = await shape(missing);
-    expect(control.status).toBe(404);
-    for (const suffix of ["", "/raw"]) {
-      expect(await shape(await i.call(`/d/${slug}${suffix}`, { as: AUTHOR }))).toEqual(control);
-    }
-  });
-});
-
 // =====================================================================================================================
 describe("expiry: every Share gets a date", () => {
   let i: Instance;

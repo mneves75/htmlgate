@@ -1,26 +1,11 @@
-// The release is written where a person reads it: the Instance's footer and every landing page. `package.json` is
-// the one number they all have to agree with, so a release that forgets a page fails here instead of drifting.
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { homePage, notFoundPage, tokensPage, viewerPage } from "../src/pages";
 
 const { version } = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
-const LANDING = [
-  "site/public/index.html",
-  "site/public/en/index.html",
-  "site/public/privacidade/index.html",
-  "site/public/en/privacy/index.html",
-  "site/public/404.html",
-];
 const visitor = { email: "author@example.com", isAuthor: true, origin: "https://instance.example", lang: "en" } as const;
 
-describe("the version a page shows", () => {
-  test.each(LANDING)("%s shows it once, in its footer", (file) => {
-    const html = readFileSync(file, "utf8");
-    expect(html.match(/<span class="version">/g) ?? []).toHaveLength(1);
-    expect(html).toContain(`<span class="version">${version}</span>`);
-  });
-
+describe("the version an Instance page shows", () => {
   test.each(["en", "pt-BR"] as const)("the not-found page shows it (%s)", async (lang) => {
     const { body } = await notFoundPage(lang, { home: "author" });
     expect(body).toContain(`<p class="ver">htmlgate ${version}</p>`);

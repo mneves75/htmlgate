@@ -38,6 +38,12 @@ test("migration 0005 preserves every Share and Version from 0004 and replaces th
       .toEqual(["expires_at", "slug"]);
     expect(env.sqlite.prepare("SELECT sql FROM sqlite_master WHERE name = 'shares_by_expiry'").get()?.sql)
       .toMatch(/WHERE expires_at IS NOT NULL$/);
+    expect(env.sqlite.prepare("PRAGMA integrity_check").all()).toEqual([{ integrity_check: "ok" }]);
+    expect(env.sqlite.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    const plan = (sql: string, ...v: (string | number)[]) =>
+      (env.sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...v) as { detail: string }[]).map((r) => r.detail).join(" | ");
+    expect(plan("SELECT * FROM shares WHERE author = ? AND deleted_at IS NULL ORDER BY updated_at DESC", "author@example.com")).toContain("shares_by_author");
+    expect(plan("SELECT slug FROM shares WHERE expires_at <= ? ORDER BY expires_at, slug", 500)).toContain("shares_by_expiry");
   } finally {
     env.sqlite.close();
   }

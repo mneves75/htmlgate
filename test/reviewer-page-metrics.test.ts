@@ -91,6 +91,10 @@ describe("nothing about the visitor is stored", () => {
     expect(points).toEqual([{ indexes: ["/en/"], blobs: ["/en/", "200", "PT", "news.example.com"] }]);
     const flat = JSON.stringify(points);
     for (const secret of ["203.0.113.9", "Mozilla", "utm_source", "a@b.test", "LIS", "64496", "item?id", "alice"]) expect(flat).not.toContain(secret);
+    for (const selfReferer of [`${ORIGIN}/`, "https://www.htmlgate.com/"]) {
+      const own = await run(navigation("/privacidade/", { referer: selfReferer }));
+      expect(own.points[0]!.blobs![3]).toBe("");
+    }
   });
 });
 

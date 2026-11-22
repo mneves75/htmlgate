@@ -82,7 +82,7 @@ const page = pageAt < 0 ? 1 : Number(args[pageAt + 1]);
   if (bin !== 'cf') throw new Error('unexpected provider ' + bin);
   if (args[0] === 'auth') return json({ tokenValid: true, accounts: [{ id: s.accessAccount, name: s.accessAccount }] });
   if (args[0] === 'd1' && args[1] === 'create') { createdDb = true; return json(s.createdDb); }
-  if (args[1] === 'organizations') return json({ auth_domain: 'team.cloudflareaccess.com' });
+  if (args[1] === 'organization' && args[2] === 'get') return json({ auth_domain: 'team.cloudflareaccess.com' });
   if (args[0] === 'workers' && args[1] === 'list') return json(s.endlessWorkers || page === 1 ? (created ? [{ name: 'ownership-control', id: 'worker-control' }] : s.workers) : []);
   if (args[0] === 'workers' && args[1] === 'deployments') return json(s.deployment);
   if (args[2] === 'applications') {
@@ -314,7 +314,7 @@ test("a reused bucket with every custom domain explicitly disabled remains usabl
   expect(r.code, r.stdout + r.stderr).toBe(0);
   const privacy = r.calls.filter(c => c.args?.includes("domains")).map(c => c.args);
   expect(privacy).toEqual([
-    ["r2", "buckets", "domains", "managed", "list", "--bucket-name", `${NAME}-bodies`],
+    ["r2", "buckets", "domains", "managed", "get", `${NAME}-bodies`],
     ["r2", "buckets", "domains", "custom", "list", "--bucket-name", `${NAME}-bodies`],
   ]);
 });
@@ -373,7 +373,7 @@ test.each([false, true])("setup reuses a private bucket after a short first page
   const args = ["r2", "buckets", "list", "--per-page", "1000", "--order", "name", "--direction", "asc"];
   expect(lists.map(c => c.args)).toEqual([args, [...args, "--start-after", "alpha-bucket"], [...args, "--start-after", `${NAME}-bodies`]]);
   expect(r.calls.filter(c => c.args?.includes("domains")).map(c => c.args)).toEqual([
-    ["r2", "buckets", "domains", "managed", "list", "--bucket-name", `${NAME}-bodies`],
+    ["r2", "buckets", "domains", "managed", "get", `${NAME}-bodies`],
     ["r2", "buckets", "domains", "custom", "list", "--bucket-name", `${NAME}-bodies`],
   ]);
   expect(r.calls.indexOf(r.writes[0]!)).toBeGreaterThan(r.calls.indexOf(lists.at(-1)!));

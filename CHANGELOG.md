@@ -4,6 +4,14 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-11-22
+
+### Fixed
+
+- `pnpm run setup` now calls `cf zero-trust organization get` and `cf r2 buckets domains managed get <bucket>` to match Cloudflare's `cf` v1 CLI subcommand names.
+
+0.1.21 was tagged before deployment caught the `cf` CLI subcommand rename on the owner's machine.
+
 ## [0.1.21] - 2026-11-22
 
 ### Fixed

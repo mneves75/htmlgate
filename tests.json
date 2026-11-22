@@ -137,6 +137,54 @@
       "historicalBugReplaysCaught": 7,
       "realBugFoundAndFixed": "Store.dueNow same-millisecond conflict with Store.emptyTrash deleting re-ledgered R2 row",
       "formalTestsPassed": 10
+    },
+    "pr4PruneTests": {
+      "status": "passed",
+      "files": 71,
+      "testsPassed": 1349,
+      "pruned": [
+        {
+          "removed": "test/reviewer-share-gate-and-docs.test.ts + test/fixtures/pre-share-mutations.json",
+          "category": "The past + Implementation + Duplicate",
+          "keeper": "test/share-term.test.ts + scripts/mutate.mjs --check + test/mutation-gate.test.ts"
+        },
+        {
+          "removed": "test/reviewer-share-surface.test.ts",
+          "category": "The past",
+          "keeper": "test/share-term.test.ts + test/api.test.ts + test/viewer.test.ts + test/erase.test.ts"
+        },
+        {
+          "removed": "test/reviewer-share-migration.test.ts",
+          "category": "Duplicate",
+          "keeper": "test/store-share-upgrade.test.ts (folded EXPLAIN QUERY PLAN and PRAGMA integrity/foreign_key checks)"
+        },
+        {
+          "removed": "test/reviewer-beta10-inproc.test.ts (Share route cutover describe)",
+          "category": "The past",
+          "keeper": "test/share-term.test.ts + test/api.test.ts + test/viewer.test.ts"
+        },
+        {
+          "removed": "test/reviewer-hostname-logs.test.ts (main() regex, 4-anchor check, old CHANGELOG/doc phrasing, duplicate workerConfig/deploymentUrls)",
+          "category": "The implementation + The past + Duplicate",
+          "keeper": "test/operator.test.ts + surviving Wrangler schema & privacy-notice checks in test/reviewer-hostname-logs.test.ts"
+        },
+        {
+          "removed": "test/site-metrics.test.ts",
+          "category": "Duplicate (mocked ASSETS)",
+          "keeper": "test/reviewer-page-metrics.test.ts (real asset server + folded www referer check)"
+        },
+        {
+          "removed": "test/version.test.ts (5 static landing HTML checks)",
+          "category": "Duplicate",
+          "keeper": "scripts/lint.mjs version-in-sync + test/lint.test.ts"
+        },
+        {
+          "removed": "test/harness-failure.test.ts",
+          "category": "The implementation (mocked Node builtins testing test harness)",
+          "keeper": "test/harness.test.ts"
+        }
+      ],
+      "mutationAnchors": 250
     }
   }
 }

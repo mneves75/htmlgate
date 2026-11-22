@@ -1,5 +1,5 @@
 import type { Language } from "./config";
-import { VERSION } from "./version";
+import { VERSION } from "./version.ts";
 
 type SafeHtml = string & { readonly __brand: "SafeHtml" };
 

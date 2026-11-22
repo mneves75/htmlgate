@@ -4,6 +4,26 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-11-22
+
+### Fixed
+
+- `Store.dueNow()` advances `due_at` by 1 ms on a same-millisecond conflict with an existing `trash` row, preventing `Store.emptyTrash()` from dropping a freshly re-ledgered upload row and leaving an untracked R2 object behind (found by the new formal model checker and reproduced on real SQLite).
+- `scripts/site-deploy.mjs` paginates Cloudflare Access applications via `listApplications()` instead of reading only the first page.
+- `scripts/smoke.mjs` disables automatic redirects on authenticated archive downloads and card probes, and validates numeric environment overrides (`HTMLGATE_LIVE_GAP_MS`); `scripts/bench.ts` validates finite numeric arguments/environment overrides (`--runs`, `HTMLGATE_BENCH_BUDGET_MS`, `HTMLGATE_LIVE_GAP_MS`) and disables redirects on local token setup.
+- All Instance `Response` construction in `src/` routes through `src/http.ts` (`bytes()`, `copyResponse()`), enforcing the baseline security headers structurally.
+
+### Added
+
+- Repository invariant linter (`scripts/lint.mjs`, `pnpm run lint`, 9 AST rules plus version sync) and release version synchronizer (`scripts/sync-version.mjs`, `pnpm run version:sync`) wired into `pnpm run check` and CI, backed by negative tests (`test/lint.test.ts`).
+- Exhaustive BFS formal model checker (`formal/store-lifecycle.model.ts`, `formal/verify.ts`, `pnpm run verify:model`) and project-local verification skill (`.claude/skills/store-lifecycle-verification/SKILL.md`), verifying 104,068 reachable `Store` lifecycle states and `revokeAll` containment with 7 historical/discovered bug replays wired into `pnpm run check` and CI.
+- `init.sh` helper script for reproducible local check/lint/model-verification runs.
+
+### Changed
+
+- Encoded HTML escaping as a branded `SafeHtml` type in `src/pages.ts`, named key invariants (`MAX_UNBIASED_BYTE`, `fromCanonicalBase64url`, `RESERVATION_TTL_MS`, `hasLegacyD1BodiesTable()`), and removed redundant comments across `src/`, `site/src/`, `scripts/`, and `packages/cli/src/`.
+- Pruned historical pre-0.1.0 rename fixtures and duplicate mocked/source-regex tests after folding unique DB and asset-server assertions into surviving suites while preserving all 250 mutation anchors and every security, privacy, accessibility, license, and performance check.
+
 ## [0.1.20] - 2026-11-21
 
 ### Fixed

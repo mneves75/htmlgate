@@ -50,29 +50,46 @@ export function syncVersion(root = ROOT, targetVersion) {
   const pkgPath = join(root, "package.json");
   const pkgText = readFileSync(pkgPath, "utf8");
   const pkg = JSON.parse(pkgText);
+  if (typeof pkg?.version !== "string") {
+    throw new Error('package.json must contain a top-level string "version" field.');
+  }
   const version = targetVersion ?? pkg.version;
   if (typeof version !== "string" || !SEMVER.test(version)) {
     throw new Error(`Invalid version "${version}". Expected X.Y.Z or X.Y.Z-beta.N.`);
   }
-  const updated = [];
-  const rewrite = (rel, next) => {
-    const full = join(root, rel);
-    const current = readFileSync(full, "utf8");
-    if (current !== next) {
-      writeFileSync(full, next);
-      updated.push(rel);
+  const plan = [];
+  const stage = (rel, current, pattern, replacement, label) => {
+    const matches = current.match(pattern);
+    if (!matches || matches.length !== 1) {
+      throw new Error(`${rel} must contain exactly one ${label} (found ${matches?.length ?? 0}).`);
     }
+    const next = current.replace(pattern, replacement);
+    plan.push({ rel, full: join(root, rel), current, next });
   };
-  rewrite("package.json", pkgText.replace(/"version":\s*"[^"]+"/, `"version": "${version}"`));
-  const cliPath = join(root, "packages/cli/package.json");
-  rewrite("packages/cli/package.json", readFileSync(cliPath, "utf8").replace(/"version":\s*"[^"]+"/, `"version": "${version}"`));
-  const srcVersionPath = join(root, "src/version.ts");
-  rewrite("src/version.ts", readFileSync(srcVersionPath, "utf8").replace(/export const VERSION = "[^"]+";/, `export const VERSION = "${version}";`));
+  stage("package.json", pkgText, /"version":\s*"[^"]+"/g, `"version": "${version}"`, '"version" field');
+  const cliText = readFileSync(join(root, "packages/cli/package.json"), "utf8");
+  const cliPkg = JSON.parse(cliText);
+  if (typeof cliPkg?.version !== "string") {
+    throw new Error('packages/cli/package.json must contain a valid JSON string "version" field.');
+  }
+  stage("packages/cli/package.json", cliText, /"version":\s*"[^"]+"/g, `"version": "${version}"`, '"version" field');
+  const srcVersionText = readFileSync(join(root, "src/version.ts"), "utf8");
+  stage("src/version.ts", srcVersionText, /export const VERSION = "[^"]+";/g, `export const VERSION = "${version}";`, "VERSION export");
   for (const rel of LANDING_VERSION_FILES) {
     const html = readFileSync(join(root, rel), "utf8");
-    const count = (html.match(/<span class="version">[^<]+<\/span>/g) ?? []).length;
-    if (count !== 1) throw new Error(`${rel} must contain exactly one <span class="version"> tag (found ${count}).`);
-    rewrite(rel, html.replace(/<span class="version">[^<]+<\/span>/, `<span class="version">${version}</span>`));
+    stage(rel, html, /<span class="version">[^<]+<\/span>/g, `<span class="version">${version}</span>`, '<span class="version"> tag');
+  }
+  const formula = readFileSync(join(root, "Formula/htmlgate.rb"), "utf8");
+  const formulaMatches = formula.match(/^  version "[^"\r\n]+"$/gm);
+  if (!formulaMatches || formulaMatches.length !== 1) {
+    throw new Error(`Formula/htmlgate.rb must contain exactly one version line (found ${formulaMatches?.length ?? 0}).`);
+  }
+  const updated = [];
+  for (const item of plan) {
+    if (item.current !== item.next) {
+      writeFileSync(item.full, item.next);
+      updated.push(item.rel);
+    }
   }
   return { version, updated };
 }

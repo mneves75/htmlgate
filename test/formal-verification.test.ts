@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { checkRevokeAllModel, checkStoreModel } from "../formal/store-lifecycle.model";
-import { HISTORICAL_REVOKE_BUGS, HISTORICAL_STORE_BUGS, runFormalVerification } from "../formal/verify";
+import { detectCodeDeviationsFromSource, HISTORICAL_REVOKE_BUGS, HISTORICAL_STORE_BUGS, runFormalVerification } from "../formal/verify";
 import { fakeEnv } from "./fake-env";
 import { Store } from "../src/store";
 
@@ -75,5 +77,14 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
     await store.emptyTrash();
     expect(env.objects.has("bodies/S1/k1")).toBe(true);
     expect(env.rows("SELECT body_key FROM trash WHERE body_key = 'bodies/S1/k1'")).toEqual([{ body_key: "bodies/S1/k1" }]);
+  });
+
+  test("code-to-model conformance rejects src/store.ts when dueNow() drops the + 1 conflict bump", () => {
+    const storeSrc = readFileSync(join(process.cwd(), "src/store.ts"), "utf8");
+    const tokenSrc = readFileSync(join(process.cwd(), "scripts/token.mjs"), "utf8");
+    const brokenStore = storeSrc.replace("THEN excluded.due_at + 1 ELSE excluded.due_at END", "THEN excluded.due_at ELSE excluded.due_at END");
+    expect(brokenStore).not.toBe(storeSrc);
+    const findings = detectCodeDeviationsFromSource(brokenStore, tokenSrc);
+    expect(findings.map((f) => f.detectedVariant)).toContain("due-now-same-ms-race");
   });
 });

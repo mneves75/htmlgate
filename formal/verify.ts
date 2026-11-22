@@ -13,9 +13,7 @@ export interface ConformanceFinding {
   detail: string;
 }
 
-export function detectCodeDeviations(root = ROOT): ConformanceFinding[] {
-  const store = readFileSync(join(root, "src/store.ts"), "utf8");
-  const token = readFileSync(join(root, "scripts/token.mjs"), "utf8");
+export function detectCodeDeviationsFromSource(store: string, token: string): ConformanceFinding[] {
   const findings: ConformanceFinding[] = [];
 
   const expireBlock = store.slice(store.indexOf("async expire("), store.indexOf("async useToken("));
@@ -72,7 +70,7 @@ export function detectCodeDeviations(root = ROOT): ConformanceFinding[] {
   }
 
   const dueNowBlock = store.slice(store.indexOf("private async dueNow("), store.indexOf("private async commit("));
-  if (!dueNowBlock.includes("excluded.due_at = trash.due_at")) {
+  if (!/ON CONFLICT\s*\(\s*body_key\s*\)\s*DO UPDATE SET\s+due_at\s*=\s*CASE\s+WHEN\s+excluded\.due_at\s*=\s*trash\.due_at\s+THEN\s+excluded\.due_at\s*\+\s*1\s+ELSE\s+excluded\.due_at\s+END/.test(dueNowBlock)) {
     findings.push({
       codeFile: "src/store.ts",
       symbol: "Store.dueNow",
@@ -96,6 +94,12 @@ export function detectCodeDeviations(root = ROOT): ConformanceFinding[] {
   }
 
   return findings;
+}
+
+export function detectCodeDeviations(root = ROOT): ConformanceFinding[] {
+  const store = readFileSync(join(root, "src/store.ts"), "utf8");
+  const token = readFileSync(join(root, "scripts/token.mjs"), "utf8");
+  return detectCodeDeviationsFromSource(store, token);
 }
 
 export function formatResult(r: CheckResult): string {

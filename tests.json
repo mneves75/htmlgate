@@ -185,6 +185,31 @@
         }
       ],
       "mutationAnchors": 250
+    },
+    "pr5Release0121": {
+      "version": "0.1.21",
+      "status": "candidate_ready",
+      "cliArchiveSha256": "2137f1181022d64a727a8d73324898752ec483318b1a3e01dbe1023d62fb5e83",
+      "lintViolations": 0,
+      "formalStates": 104068,
+      "formalBugReplaysCaught": 7,
+      "typecheck": "pass",
+      "mutationAnchors": 250,
+      "dependencyAuditHigh": "pass",
+      "integration": {
+        "files": 71,
+        "passed": 1347,
+        "tagDependentSkips": 2,
+        "failed": 0
+      },
+      "benchmarkLocal": {
+        "status": "pass",
+        "budgetMs": 50,
+        "peakOneMinuteLoad": 28.2,
+        "maxP95Ms": 27.3,
+        "landingPtBrP95Ms": 9.2,
+        "landingEnUsP95Ms": 8.8
+      }
     }
   }
 }

@@ -30,9 +30,14 @@ const ASSETS = {
   },
 } as unknown as Fetcher;
 
-function env(points: AnalyticsEngineDataPoint[], binding: "ok" | "missing" = "ok") {
-  const PAGE_VIEWS: AnalyticsEngineDataset = { writeDataPoint: (p) => void points.push(p!) };
-  return { ASSETS, SITE_ORIGIN: ORIGIN, APP_URL: "https://app.htmlgate.com/", ...(binding === "ok" ? { PAGE_VIEWS } : {}) };
+function env(points: AnalyticsEngineDataPoint[], binding: "ok" | "missing" | "throwing" = "ok") {
+  const PAGE_VIEWS: AnalyticsEngineDataset = {
+    writeDataPoint: (p) => {
+      if (binding === "throwing") throw new Error("analytics unavailable");
+      points.push(p!);
+    },
+  };
+  return { ASSETS, SITE_ORIGIN: ORIGIN, APP_URL: "https://app.htmlgate.com/", ...(binding === "missing" ? {} : { PAGE_VIEWS }) };
 }
 
 /** A browser's top-level navigation, with what Cloudflare adds in front of the Worker. */
@@ -44,7 +49,7 @@ function navigation(path: string, headers: Record<string, string> = {}) {
   return req;
 }
 
-async function run(req: Request, binding: "ok" | "missing" = "ok") {
+async function run(req: Request, binding: "ok" | "missing" | "throwing" = "ok") {
   const points: AnalyticsEngineDataPoint[] = [];
   // A missing binding is a misconfigured deploy, which the Env type rules out; the cast lets the test build one.
   const res = await worker.fetch(req, env(points, binding) as Parameters<typeof worker.fetch>[1]);
@@ -117,9 +122,9 @@ describe("what is not a browser opening a page writes nothing", () => {
 });
 
 describe("counting never touches the response", () => {
-  test("with the binding missing (a misconfigured deploy), the page and its headers are unchanged", async () => {
+  test.each(["missing", "throwing"] as const)("with the binding %s, the page and its headers are unchanged", async (mode) => {
     const control = await run(navigation("/"));
-    const { res, body } = await run(navigation("/"), "missing");
+    const { res, body } = await run(navigation("/"), mode);
     expect(res.status).toBe(200);
     expect(body).toBe(control.body);
     for (const h of ["content-security-policy", "strict-transport-security", "x-content-type-options", "referrer-policy", "cache-control"]) {

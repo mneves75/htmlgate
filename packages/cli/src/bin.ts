@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// The htmlgate CLI: its grammar, output modes, agent detection and exit codes, parsed with node:util parseArgs.
 import { basename, extname } from "node:path";
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { InstanceApi, type Share, type Fields } from "./api.js";
@@ -16,7 +15,6 @@ for (const stream of [process.stdout, process.stderr]) {
   });
 }
 
-// Agent runners whose presence makes JSON the default output.
 const AGENT_ENV_VARS: ReadonlyArray<readonly [string, string]> = [
   ["CLAUDECODE", "claude-code"], ["CLAUDE_CODE", "claude-code"], ["CURSOR_AGENT", "cursor"], ["CODEX", "codex"],
   ["CODEX_AGENT", "codex"], ["OPENAI_CODEX", "codex"], ["OPENCODE", "opencode"], ["AIDER", "aider"], ["CLINE", "cline"],
@@ -59,14 +57,11 @@ Sign-in: \`htmlgate login\`, or $HTMLGATE_URL with $HTMLGATE_TOKEN. Exit codes: 
 4 not found, 5 limit, 6 too large, 7 bad arguments, 8 network or server.
 `;
 
-// Tokens are never printed, whatever path an error or a server message takes to the terminal.
 const redact = (s: string) => s.replace(/hg_[A-Za-z0-9]{40}/g, "hg_…");
 
 let json = detectAgent(process.env) !== null;
 
-// Text a server sent (a Share's title, say) must not reach the terminal as escape sequences or reorder it.
 const printable = (s: string) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "");
-// One field of a row: a newline or tab inside it would forge another row or column.
 const cell = (s: string) => s.replace(/[\t\n]/g, " ");
 
 function emit(payload: unknown, text: () => string): void {
@@ -81,7 +76,6 @@ function die(err: unknown): never {
     if (e.details) body.details = e.details;
     process.stderr.write(redact(JSON.stringify({ error: body })) + "\n");
   } else {
-    // A server writes the message: each part stays on its one line, so it cannot fake a hint or another error.
     let out = `error: ${cell(e.message)}  [${cell(e.code)}]\n`;
     if (e.hint) out += `hint:  ${cell(e.hint)}\n`;
     process.stderr.write(redact(printable(out)));
@@ -108,10 +102,8 @@ const OPTIONS = {
 type Command = keyof typeof OPTIONS;
 const isCommand = (s: string | undefined): s is Command => s !== undefined && Object.hasOwn(OPTIONS, s);
 
-/** Parses argv for one command; anything unknown is a usage error, exit 7. */
 function parse(argv: string[]) {
   const first = parseArgs({ args: argv, options: GLOBAL, strict: false, allowPositionals: true });
-  // Set before anything below can fail, so a usage error honours --output too.
   if (first.values.output === "json" || first.values.output === "text") json = first.values.output === "json";
   const name = first.positionals[0];
   if (first.values.version === true) return { cmd: "version" as const };
@@ -141,7 +133,6 @@ const defaultTitle = (file: string) => basename(file, extname(file)) || "untitle
 const brief = (d: Share) => ({ slug: d.slug, url: d.url, public: d.public });
 const minute = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace("T", " ");
 const expiresText = (at: number | null | undefined) => (typeof at === "number" ? minute(at) + " UTC" : "never");
-/** --expires, when given, as the API's expires_at. */
 const expiresOf = (v: Record<string, unknown>): { expires_at?: number | null } =>
   typeof v.expires === "string" ? { expires_at: parseExpires(v.expires, Date.now()) } : {};
 
@@ -149,14 +140,12 @@ async function connect(p: Paths): Promise<InstanceApi> {
   return (await signedIn(p)).api;
 }
 
-/** The Instance, token and where each came from, with a client for them. */
 async function signedIn(p: Paths) {
   const c = await resolve(p, process.env);
   return { ...c, api: new InstanceApi(c.api_url, c.token) };
 }
 
 async function login(p: Paths, args: string[], values: Record<string, unknown>) {
-  // Never from a project's .htmlgate/config: a cloned repository would collect the token through the check below.
   const envUrl = process.env.HTMLGATE_URL?.trim();
   const envToken = process.env.HTMLGATE_TOKEN?.trim();
   const raw = args[0] ?? envUrl;
@@ -165,7 +154,6 @@ async function login(p: Paths, args: string[], values: Record<string, unknown>) 
   await checkWritable(p);
   let token: string;
   if (values["token-stdin"] === true) token = await readStdin();
-  // The environment's token belongs to the Instance $HTMLGATE_URL names; never send it to another one.
   else if (envToken && envUrl && instanceOrigin(envUrl) === origin) token = envToken;
   else if (process.stdin.isTTY && process.stderr.isTTY) {
     process.stderr.write(`Create a token at ${origin}/tokens, then paste it here.\n`);
@@ -176,7 +164,6 @@ async function login(p: Paths, args: string[], values: Record<string, unknown>) 
     });
   }
   token = checkToken(token.trim());
-  // Ask the Instance before writing anything: a refused token leaves the old files as they were.
   await new InstanceApi(origin, token).listShares({ pageSize: 1 });
   await save(p, origin, token);
   emit({ api_url: origin, saved: p.store }, () => `Signed in to ${origin}. The token is in ${p.store}.\n`);
@@ -209,12 +196,9 @@ async function publish(p: Paths, args: string[], v: Record<string, unknown>) {
     target = found.data[0]?.slug;
     matched = target !== undefined;
   }
-  // A new Version of an existing Share changes only what it was given: the default title (the file name) would
-  // overwrite a title chosen earlier, and a matched upsert's match keys would replace the whole tag map.
   const given = str(v.title)?.trim();
   const fields: Fields = { ...(given ? { title: given } : {}), ...(description ? { description } : {}), ...expiry };
   const d = target ? await api.replace(target, content, matched ? fields : { ...fields, ...(hasMeta ? { metadata } : {}) }) : await api.publish(content, created);
-  // Scripts read the URL from the first line; a person at a terminal also sees when the Share expires.
   emit({ url: d.url, slug: d.slug, kind: content.kind, expires_at: d.expires_at, ...(matched !== undefined ? { matched } : {}) },
     () => d.url + "\n" + (process.stdout.isTTY ? `expires: ${expiresText(d.expires_at)}\n` : ""));
 }
@@ -232,7 +216,6 @@ async function update(p: Paths, args: string[], v: Record<string, unknown>) {
     throw new CliError("invalid_arg", "update needs --file, --title, --description, --metadata, --clear-metadata or --expires.");
   }
   const content = file ? (await loadPublishable(file)).content : undefined;
-  // A zip carries its fields in the query string, where an empty tag map cannot be said.
   if (content?.kind === "site" && v["clear-metadata"]) {
     throw new CliError("invalid_arg", "--clear-metadata cannot go with a site's --file.", { hint: "Run update --clear-metadata on its own first." });
   }

@@ -38,6 +38,14 @@ describe("Wrangler schema and privacy notice parity", () => {
     }
   });
 
+  test("main() takes its hostnames from deploymentUrls and probes every URL through gated()", () => {
+    const src = readFileSync("scripts/setup.mjs", "utf8");
+    const main = src.split("async function main()")[1]!;
+    expect(main).toContain("deploymentUrls(inst, sh(WRANGLER");
+    expect(main).not.toMatch(/\.workers\\\.dev/);
+    expect(main).toMatch(/for \(const u of urls\) results\.push\(await gated\(/);
+  });
+
   test("both privacy notices were re-dated together", () => {
     const months = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
     const en = readFileSync("site/public/en/privacy/index.html", "utf8").match(/Updated (\w+) (\d+), (\d{4})\./);

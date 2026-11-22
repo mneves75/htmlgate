@@ -36,6 +36,7 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 function countView(req: Request, url: URL, res: Response, site: URL, dataset: AnalyticsEngineDataset): void {
+  // Browsers send Sec-Purpose for speculative prefetch/prerender, which is not a real page view.
   if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return;
   if (!res.headers.get("content-type")?.startsWith("text/html")) return;
   try {

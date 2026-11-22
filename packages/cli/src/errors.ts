@@ -1,5 +1,3 @@
-// The error codes an htmlgate Instance and this CLI produce, and the exit code each one ends the process with.
-
 export class CliError extends Error {
   readonly code: string;
   readonly hint: string | undefined;
@@ -14,7 +12,6 @@ export class CliError extends Error {
   }
 }
 
-/** Process exit code for an error code. Stable: scripts switch on these. */
 export function exitCodeFor(code: string): number {
   switch (code) {
     case "unauthorized":

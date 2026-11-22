@@ -1,14 +1,11 @@
-// Reading a token without putting it on screen or in the shell history.
 import { CliError } from "./errors.js";
 
-/** All of stdin, for `login --token-stdin`. */
 export async function readStdin(): Promise<string> {
   let text = "";
   for await (const chunk of process.stdin) text += chunk;
   return text;
 }
 
-/** One line typed on a terminal, not echoed. Ctrl-C cancels. */
 export function readHidden(question: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const stdin = process.stdin;

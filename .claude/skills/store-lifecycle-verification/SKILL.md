@@ -13,7 +13,7 @@ Node 26 and TypeScript are already pinned in `.nvmrc` and `package.json`, with z
 
 ## Coverage record
 
-- **Sync commit:** `37e374b`
+- **Sync commit:** `37682bf`
 - **Covered files and symbols:**
   - `src/store.ts`: `Store.putBody`, `Store.dueNow`, `Store.commit`, `Store.createShare`, `Store.addVersion`, `Store.emptyTrash`, `Store.expire`, `Store.countView`, `Store.eraseShare`, `Store.eraseBodies`, `RESERVED`, `WROTE`, `live`.
   - `scripts/token.mjs`: `revokeAll`.
@@ -21,7 +21,7 @@ Node 26 and TypeScript are already pinned in `.nvmrc` and `package.json`, with z
 Check whether covered files changed since the sync commit before trusting a pass:
 
 ```sh
-git diff --stat 37e374b -- src/store.ts scripts/token.mjs
+git diff --stat 37682bf -- src/store.ts scripts/token.mjs
 ```
 
 Advance the sync commit above only after confirming that `formal/store-lifecycle.model.ts` and `formal/verify.ts` still accurately reflect every atomic boundary in `src/store.ts` and `scripts/token.mjs`.
@@ -50,10 +50,10 @@ pnpm run verify:model
 
 This runs both:
 1. Code-to-model conformance against `src/store.ts` and `scripts/token.mjs`, plus exhaustive BFS verification of all reachable states.
-2. `--replay-bugs`, proving all 6 historical bugs still fail with concrete counterexamples.
+2. `--replay-bugs`, proving all 7 historical and discovered bugs still fail with concrete counterexamples.
 
 ## Reading results and handling failures
 
-- On **PASS**, the command prints the reachable state count and transition count for each model and confirms all 6 historical bug replays were caught.
+- On **PASS**, the command prints the reachable state count and transition count for each model and confirms all 7 bug replays were caught.
 - On **FAIL**, read the numbered counterexample trace directly; each step names the exact `Store.*` or `revokeAll` action and database/R2 state transition.
 - **Real bug vs modeling error:** Open the cited symbol in `src/store.ts` or `scripts/token.mjs` and check whether the step sequence in the counterexample can happen on real D1 + R2. If yes, fix the code — never weaken an invariant to make the check pass. If a deliberate design change altered an atomic step boundary, update the model and conformance check together, verify the negative controls still fail, and advance the sync commit above.

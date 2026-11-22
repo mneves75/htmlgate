@@ -1,9 +1,5 @@
-// Writing a site's zip from a folder's files, in memory. Each file is deflated unless that would not make
-// it smaller; names are UTF-8 (flag bit 11) and every entry is a regular file, so the Instance's checks
-// (src/zip.ts in the Worker) accept what this writes. Times are fixed, so the same files give the same zip.
 import { crc32, deflateRawSync } from "node:zlib";
 
-/** The Instance's limits for a site (src/zip.ts there), checked here before anything is sent. */
 export const SITE_LIMITS = {
   zipBytes: 10 * 1024 * 1024,
   files: 1000,

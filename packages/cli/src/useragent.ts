@@ -1,4 +1,3 @@
-// The CLI's version and the User-Agent it sends.
 import { readFileSync } from "node:fs";
 import { arch, platform } from "node:os";
 

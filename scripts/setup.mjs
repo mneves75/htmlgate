@@ -14,15 +14,9 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
-// /f/* holds a Gated site's files under tickets the Worker checks itself (plan 009): a Share's requests never carry the
-// Access cookie, so Access must leave them to the Worker, as it does the API and Public Shares.
-// A Public Share's card image lives under /p/, which is already public, so a crawler fetches it without a session and
-// this list needs no special case.
 const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*"];
-// The hourly cleanup of expired Shares (plan 008).
 export const CRONS = ["17 * * * *"];
 
-/** The Wrangler config setup writes for one Instance. One file each, so Instances set up from one checkout never share it. */
 export const generatedConfig = (inst) => join(ROOT, ".instance", `${inst.name}.wrangler.jsonc`);
 
 export function readInstance(path) {
@@ -36,7 +30,6 @@ export function readInstance(path) {
   if (typeof raw.name !== "string" || !/^[a-z0-9][a-z0-9-]{0,52}$/.test(raw.name)) {
     throw new Error("name must be 1 to 53 lowercase letters, digits or '-', starting with a letter or digit.");
   }
-  // The landing's Workers (scripts/site-deploy.mjs): an Instance by either name would replace the landing.
   if (raw.name === "htmlgate-site" || raw.name === "htmlgate-site-preview") {
     throw new Error(`name ${raw.name} belongs to the htmlgate landing's Worker. Pick another name.`);
   }
@@ -49,7 +42,6 @@ export function readInstance(path) {
   if (domain !== undefined && (typeof domain !== "string" || !hostname.test(domain) || domain.length > 253)) {
     throw new Error("domain must be a hostname such as html.example.com, without https:// or a path.");
   }
-  // The language of the Instance's own pages; the Worker refuses any other value, so setup does too.
   const language = raw.language === undefined ? "en" : raw.language;
   if (language !== "en" && language !== "pt-BR") throw new Error('language must be "en" or "pt-BR" (default "en").');
   const expiryDays = raw.expiryDays === undefined ? 30 : raw.expiryDays;
@@ -65,7 +57,6 @@ export function readInstance(path) {
   return { name: raw.name, author, allowlist, domain, language, expiryDays, mfa, staging, ...(raw.bootstrapStorage === undefined ? {} : { bootstrapStorage: raw.bootstrapStorage }) };
 }
 
-/** The settings the deployed Worker reads (src/config.ts). */
 export const instanceVars = (inst, teamUrl, aud) => ({
   ACCESS_TEAM_URL: teamUrl, ACCESS_AUD: aud, AUTHOR_EMAIL: inst.author, ALLOWLIST: inst.allowlist.join(","), LANGUAGE: inst.language,
   EXPIRY_DAYS: String(inst.expiryDays),
@@ -81,7 +72,6 @@ export function sh(cmd, args, opts = {}) {
 
 export const cf = (...args) => JSON.parse(sh("cf", args));
 
-// `scripts` too: setup.mjs writes the deployed config, and the mutation gate plants violations there.
 const DEPLOYED = ["src", "site", "migrations", "packages/cli/src", "scripts"];
 const gitStatus = () => {
   const root = sh("git", ["rev-parse", "--show-toplevel"]).trim();
@@ -91,7 +81,6 @@ const gitStatus = () => {
   return sh("git", ["status", "--porcelain", "--untracked-files=all", "--", ...DEPLOYED]);
 };
 
-/** A deploy ships the working tree, so it must be what is committed: an interrupted `pnpm run mutate`, say, leaves a violation planted. */
 export function checkCleanTree(status = gitStatus) {
   const dirty = status().trim();
   if (dirty) throw new Error(`These files have uncommitted changes. Commit or restore them, then deploy:\n${dirty}`);
@@ -112,11 +101,6 @@ export function wranglerWho(env = process.env) {
   }
 }
 
-/**
- * The one account both tools act on. Wrangler deploys the Worker and cf configures its Access application: on two
- * accounts the Worker would sit behind no gate of its own. cf gives no way to tell which of several accounts a
- * command uses, so its login must reach exactly one.
- */
 export function checkSameAccount(wranglerWho, cfWho, env) {
   if (!wranglerWho?.loggedIn) throw new Error("Wrangler is not logged in. Run `pnpm exec wrangler login`.");
   if (!cfWho?.tokenValid) throw new Error("cf is not logged in. Run `cf auth login`.");
@@ -142,7 +126,6 @@ export function checkSameAccount(wranglerWho, cfWho, env) {
   return mine.id;
 }
 
-/** The R2 bucket that holds the Instance's Share bodies. */
 export const bodiesBucket = (inst) => `${inst.name}-bodies`;
 
 // `open: false` deploys a Worker that answers at no hostname; only the gated deploy opens it, at the domain if there is
@@ -163,15 +146,12 @@ export function workerConfig(inst, db, { open, vars, accountId }) {
       { name: "VIEW_LIMIT", namespace_id: "1002", simple: { limit: 1, period: 60 } },
     ],
     triggers: { crons: inst.staging ? [] : CRONS },
-    // The same rule as wrangler.jsonc: the card image is bundled from the landing's poster.
     rules: [{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }],
-    // The Worker's own logs (only unexpected errors), but no record of every request and no traces (docs/privacy.md).
     observability: { enabled: true, logs: { enabled: true, invocation_logs: false }, traces: { enabled: false } },
     vars: { ...vars, HTMLGATE_INSTANCE: inst.name },
   };
 }
 
-/** The hostnames the gated deploy answers at, from instance.json and what `wrangler deploy` printed. */
 export function deploymentUrls(inst, output) {
   const dev = /https:\/\/[a-z0-9.-]+\.workers\.dev/.exec(output)?.[0];
   if (inst.domain) {
@@ -229,7 +209,6 @@ function listBuckets() {
   throw new Error("cf kept returning R2 buckets past page 1000.");
 }
 
-/** A database name alone is not ownership. Inspect the active deployment, including gradual rollouts. */
 export function checkOwnership(inst, db, workers, apps, { requireAppAudience = false } = {}) {
   const named = (items, name, what) => {
     if (items.some((item) => !item || typeof item.name !== "string" || !item.name || typeof item.id !== "string" || !item.id)
@@ -357,7 +336,7 @@ function writeBootstrapReceipt(file, proof) {
 function createStorageResource(name, ...args) {
   const out = sh("cf", [...args, "--name", name]);
   let resource;
-  try { resource = JSON.parse(out); } catch { /* A successful exit alone does not identify the resource. */ }
+  try { resource = JSON.parse(out); } catch {}
   if (resource?.name !== name) {
     throw new Error(`Cloudflare did not identify the created resource ${name}. Check the account and pin its identity in bootstrapStorage before retrying.`);
   }
@@ -374,7 +353,6 @@ const ADDRESS_TYPES = new Set(["A", "AAAA", "CNAME"]);
 export function checkDomain(inst, cf) {
   const { domain } = inst;
   if (!domain) return;
-  // Every answer must be a list: anything else fails closed with a clear message.
   const list = (what, ...args) => {
     const out = cf(...args);
     if (!Array.isArray(out)) throw new Error(`cf returned no ${what} list; cannot check domain ${domain}.`);
@@ -400,7 +378,6 @@ export function checkDomain(inst, cf) {
   if (foreign) throw new Error(`domain ${domain} has a ${foreign.type} record that setup would replace. Remove it or pick another hostname.`);
 }
 
-/** True when a signed-out request to `host` was sent to this team's sign-in for this Access application. */
 export function isGateRedirect(status, location, { teamUrl, aud, host }) {
   if (status !== 302 || !location || !URL.canParse(location)) return false;
   const to = new URL(location);
@@ -415,7 +392,6 @@ export function isGateRedirect(status, location, { teamUrl, aud, host }) {
 export async function gated(url, gate, { budgetMs = 180_000, pauseMs = 2000 } = {}) {
   const until = Date.now() + budgetMs;
   let home, api, files, ok = false;
-  // A ticket path with no valid ticket must reach the Worker (its 404), not Access's sign-in.
   const done = () => ok && api.status === 401 && files.status === 404;
   for (let i = 0; !done(); i++) {
     if (i) await new Promise((r) => setTimeout(r, pauseMs));
@@ -439,11 +415,6 @@ export async function gated(url, gate, { budgetMs = 180_000, pauseMs = 2000 } = 
 // Second factors Access can ask for in a browser; piv_key and ssh_fido2_key apply only to SSH applications.
 const WEB_MFA = ["totp", "biometrics", "security_key"];
 
-/**
- * The Access application that gates the Instance. With `mfa`, sign-in also asks for a second factor among those the
- * organization allows (`orgMfa`), once a day; without it, the application sends no MFA setting, so the organization's
- * default applies and is never turned off here.
- */
 export function accessApp(inst, workerId, orgMfa = []) {
   const methods = orgMfa.filter((m) => WEB_MFA.includes(m));
   if (inst.mfa && !methods.length) {
@@ -459,7 +430,6 @@ export function accessApp(inst, workerId, orgMfa = []) {
     http_only_cookie_attribute: true,
     app_launcher_visible: false,
     destinations: [{ type: "worker", worker_id: workerId, overrides: PUBLIC_PATHS.map((p) => ({ behavior: "public", path_pattern: p })) }],
-    // Named people only. Never a domain, a login method or Everyone: an empty list would admit nobody.
     policies: [{ name: `htmlgate: ${inst.name} allowlist`, decision: "allow", include: inst.allowlist.map((email) => ({ email: { email } })) }],
     ...(inst.mfa ? { mfa_config: { mfa_disabled: false, allowed_authenticators: methods, session_duration: "24h" } } : {}),
   };
@@ -483,14 +453,8 @@ export function robotsApp(inst, host) {
   };
 }
 
-/** The text after `wrangler`'s failure that names Cloudflare's "R2 is not enabled" answer. */
 export const r2NotEnabled = (message) => /\b10042\b|enable R2/i.test(message);
 
-/**
- * The Worker secret that seals tickets (plan 009): 32 random bytes, made here and handed to Wrangler on stdin, never
- * printed or written to disk. Kept on later runs, so open tickets stay valid; `--rotate-ticket-key` replaces it, which
- * ends every ticket at once.
- */
 function ensureTicketKey(config, rotate) {
   const names = JSON.parse(sh(WRANGLER, ["secret", "list", "-c", config, "--format", "json"])).map((s) => s.name);
   if (names.includes("TICKET_KEY") && !rotate) return "kept";
@@ -498,7 +462,6 @@ function ensureTicketKey(config, rotate) {
   return names.includes("TICKET_KEY") ? "replaced" : "created";
 }
 
-/** Sets TICKET_KEY to 32 new random bytes, ending every open ticket. Also `pnpm run token revoke-all`. */
 export function putTicketKey(config) {
   const out = execFileSync(WRANGLER, ["secret", "put", "TICKET_KEY", "-c", config], {
     cwd: ROOT, input: randomBytes(32).toString("base64url"), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, CI: "1" },
@@ -534,7 +497,6 @@ async function main() {
   step("checking existing Instance ownership before any remote write");
   const owned = checkOwnership(inst, db, listWorkers(cf), listApplications());
 
-  // Share bodies live in R2. An account without an R2 subscription gets error 10042 here.
   step("finding or creating the R2 bucket");
   const bucket = bodiesBucket(inst);
   try {
@@ -585,8 +547,6 @@ async function main() {
   const existing = owned.app;
   let worker = owned.worker;
   if (!existing || !worker) {
-    // First setup: deploy unreachable (workers.dev off) and without its gate settings, so it refuses
-    // everything, then create the gate, then open the route. An update skips this and never goes dark.
     step("first deploy, with workers.dev off");
     sh(WRANGLER, ["deploy", "-c", config]);
     worker = findWorker();
@@ -615,8 +575,6 @@ async function main() {
   const host = new URL(urls[0]).host;
   const robotsName = `htmlgate: ${inst.name} robots`;
   const robotsWanted = `${host}/robots.txt`;
-  // Find it by name, then by the path it answers: an application someone made by hand for this path is still an
-  // application this setup must not silently duplicate (Cloudflare refuses that with 409) or repoint.
   const apps = listApplications();
   const byName = apps.filter((a) => a?.name === robotsName);
   if (byName.length > 1) throw new Error(`Ambiguous ownership for ${robotsName}; more than one application has that name.`);

@@ -33,72 +33,41 @@ export interface ShareRow {
 
 export type Kind = "page" | "site";
 
-/**
- * When a write leaves the Share to expire. `set`: a Publisher chose `at` (null: never), and it stays until a Publisher
- * changes it. Not set: `at` is the Instance's default from now, applied to a Share whose date came from the default.
- */
 export interface Expiry {
   at: number | null;
   set: boolean;
 }
 
-/** A Version's body as a write receives it: one HTML page, or a site's zip with its file index (JSON). */
 export type Body = { body: string; kind: "page"; files: null } | { body: Uint8Array; kind: "site"; files: string };
 
 const SHARE_COLUMNS = `d.slug, d.author, d.title, d.description, d.tags, d.public, d.latest_version,
   d.created_at, d.updated_at, d.changed_by, t.name AS changed_by_name, d.changed_at, d.expires_at`;
 
-// The trash ledger holds every body in R2 that no Version points at: pruned and deleted ones, and uploads not yet
-// claimed by their write. due_at is when a body may be deleted. A write first reserves room for its body in the
-// ledger (refused when the cap would be passed), due an hour later, and only then uploads it. It claims the body
-// (removes the row) in the same transaction as the Version, and only while the reservation has not expired, so
-// cleanup never deletes a claimed body. A failed upload or a refused write makes the body due at once.
-// Uploads outliving their reservation can exceed the cap until cleanup, or remain untracked if the Worker stops.
-const CLAIM_MS = 60 * 60 * 1000;
-// One execution-time clock for expiry and cleanup, including a batch delayed after its statements were prepared.
+const RESERVATION_TTL_MS = 60 * 60 * 1000;
 const CLOCK = "CAST(unixepoch('subsec') * 1000 AS INTEGER)";
-/**
- * The least a Version counts toward the storage cap. It covers the most a Share's row can hold (a title, a description
- * and metadata at their limits in src/api.ts, which test/storage-cost.test.ts measures), so empty pages cannot pile up
- * rows the cap never sees.
- */
 export const VERSION_FLOOR = 20 * 1024;
-// What a Version costs: its body in R2 and its site index in D1, and never less than the floor.
 const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;
 const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? "").length, VERSION_FLOOR);
-// Room for `?` more bytes under a cap of `?`: every Version's cost and every ledgered body count.
 const ROOM = `(SELECT COALESCE(SUM(${COST}), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?`;
-// The batch's first statement wrote the Version holding body key `?`.
 const WROTE = "EXISTS (SELECT 1 FROM versions WHERE body_key = ?)";
-// The reservation for body key `?` has not expired when the database executes the write.
 const RESERVED = `EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > ${CLOCK})`;
-// Omission is preserved against the row at commit time; null explicitly clears description.
 const FIELDS = "title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags)";
-// Binds (set, at, at, set): a set date replaces any date; a default date replaces only a default one.
 const EXPIRY = "expires_at = CASE WHEN ? = 1 THEN ? WHEN expiry_set = 0 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?)";
 const expiryArgs = (e: Expiry) => [e.set ? 1 : 0, e.at, e.at, e.set ? 1 : 0];
 type ShareFields = { title?: string; description?: string | null; tags?: string; expiresAt?: number | null };
-// A Share that is neither deleted nor expired when the statement executes. `a` is the table's alias with its dot.
 const live = (a = "") => `${a}deleted_at IS NULL AND (${a}expires_at IS NULL OR ${a}expires_at > ${CLOCK})`;
 // Bounds a cleanup run, and keeps one ledger statement within D1's 100 bound parameters.
 export const CLEANUP_BATCH = 50;
 
-/** What became of a write: written; refused for want of room; or not written (the Share is gone, or the upload took over an hour). */
 export type Written = "written" | "full" | "gone";
 
 export class Store {
   constructor(private db: D1Database, private bodies: R2Bucket) {}
 
-  // Bodies
-
-  /**
-   * Reserves room for a Version's cost (COST) under a fresh key, then uploads its body. Null, with nothing uploaded,
-   * when there is no room.
-   */
   private async putBody(slug: string, b: Body, cost: number, limit: number): Promise<string | null> {
     const key = `bodies/${slug}/${randomHex(16)}`;
     const reserved = await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, ${CLOCK} + ? WHERE ${ROOM}`)
-      .bind(key, cost, CLAIM_MS, cost, limit).run();
+      .bind(key, cost, RESERVATION_TTL_MS, cost, limit).run();
     if (!reserved.meta.changes) return null;
     try {
       await this.bodies.put(key, b.body, { httpMetadata: { contentType: b.kind === "site" ? "application/zip" : "text/html; charset=utf-8" } });
@@ -109,17 +78,11 @@ export class Store {
     return key;
   }
 
-  /** Makes a ledgered body due for deletion now, ledgering it again if cleanup already removed its row. */
   private async dueNow(key: string, size: number): Promise<void> {
     await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) VALUES (?, ?, ${CLOCK}) ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at`)
       .bind(key, size).run();
   }
 
-  /**
-   * Runs a batch whose first statement inserts the Version that points at a just-uploaded body (only while its
-   * reservation holds), and claims that body from the ledger in the same transaction. Returns false when the insert
-   * matched nothing; the upload is then due for deletion at once. A failed batch leaves it due when it expires.
-   */
   private async commit(key: string, cost: number, statements: D1PreparedStatement[]): Promise<boolean> {
     const claim = this.db.prepare(`DELETE FROM trash WHERE body_key = ? AND ${WROTE}`).bind(key, key);
     const inserted = (await this.db.batch([...statements, claim]))[0]?.meta.changes ?? 0;
@@ -127,16 +90,11 @@ export class Store {
     return inserted > 0;
   }
 
-  /**
-   * Deletes up to 50 due bodies from R2, then their ledger rows, in two D1 queries. Safe to run any time and to run
-   * twice. Returns how many it deleted, so a caller can tell whether more are due.
-   */
   async emptyTrash(): Promise<number> {
     const rows = (await this.db.prepare(`SELECT body_key, due_at FROM trash WHERE due_at <= ${CLOCK} ORDER BY due_at LIMIT ?`).bind(CLEANUP_BATCH)
       .all<{ body_key: string; due_at: number }>()).results;
     if (rows.length === 0) return 0;
     await this.bodies.delete(rows.map((r) => r.body_key));
-    // Only rows still as they were read: an upload re-ledgered meanwhile (dueNow) keeps its row and is retried.
     await this.db.prepare(`DELETE FROM trash WHERE (body_key, due_at) IN (VALUES ${rows.map(() => "(?, ?)").join(", ")})`)
       .bind(...rows.flatMap((r) => [r.body_key, r.due_at])).run();
     return rows.length;
@@ -147,39 +105,21 @@ export class Store {
     return obj ? obj.text() : null;
   }
 
-  /** A whole stored body, for the API's zip download. */
   async bodyStream(key: string): Promise<ReadableStream<Uint8Array> | null> {
     return (await this.bodies.get(key))?.body ?? null;
   }
 
-  /**
-   * Purges up to 50 expired Shares that still have Versions, in one transaction: their bodies are queued for deletion,
-   * the Shares marked deleted, and their counts and Versions deleted last, so every statement selects the same Shares
-   * and a purged Share is never selected again. `now` is bound, not read per statement. Returns how many Shares it
-   * purged.
-   */
   async expire(now: number): Promise<number> {
     const due = "SELECT slug FROM shares WHERE expires_at <= ? AND slug IN (SELECT slug FROM versions) ORDER BY expires_at, slug LIMIT ?";
     const results = await this.db.batch([
       this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ? FROM versions WHERE slug IN (${due})`).bind(now, now, CLEANUP_BATCH),
       this.db.prepare(`UPDATE shares SET deleted_at = COALESCE(deleted_at, expires_at) WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
-      // The counts and the Versions go together, and the counts first: `due` selects Shares that still have Versions, so
-      // a statement after `DELETE FROM versions` would match nothing for the batch just purged - and take the next
-      // batch's rows instead.
       this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
       this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
     ]);
     return results[1]?.meta.changes ?? 0;
   }
 
-  // Tokens
-
-  /**
-   * The live token with this digest, its use recorded at most once a minute (so routine reads write no rows). One
-   * batch, so one round trip: each is ~176 ms from Brazil to a D1 in North America (docs/perf/BASELINE.md). When the
-   * batch fails (a database that refuses writes, say), the lookup alone decides: an unknown or revoked token is still
-   * no token, and a live one's failure stands, as it did when the lookup and the write were two statements.
-   */
   async useToken(digest: string, now: number): Promise<TokenRow | null> {
     const find = this.db.prepare("SELECT id, author, name FROM tokens WHERE digest = ? AND revoked_at IS NULL").bind(digest);
     try {
@@ -211,7 +151,6 @@ export class Store {
     return r.results;
   }
 
-  /** Returns false when no live token has that id. */
   async revokeToken(author: string, id: string, now: number): Promise<boolean> {
     const r = await this.db
       .prepare("UPDATE tokens SET revoked_at = ? WHERE id = ? AND author = ? AND revoked_at IS NULL")
@@ -220,13 +159,6 @@ export class Store {
     return r.meta.changes > 0;
   }
 
-  // Views: one row per Share and UTC day, incremented when a browser opens the Share's page.
-
-  /**
-   * Counts one opening of a Share's page. The caller sends it in the background, so a slow write never delays a page; the
-   * write itself checks that the Share is still live, because an Author may erase it between the page and this statement,
-   * and an erased Share must keep no row nothing would ever delete.
-   */
   async countView(slug: string, day: string): Promise<void> {
     await this.db
       .prepare(`INSERT INTO share_views (slug, day, views) SELECT ?1, ?2, 1
@@ -236,7 +168,6 @@ export class Store {
       .run();
   }
 
-  /** Views per Share: all time, and since `sinceDay` (a UTC day, `YYYY-MM-DD`). Shares with no views are absent. */
   async viewsBySlug(sinceDay: string): Promise<Map<string, { total: number; recent: number }>> {
     const r = await this.db
       .prepare("SELECT slug, SUM(views) AS total, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS recent FROM share_views GROUP BY slug")
@@ -244,8 +175,6 @@ export class Store {
       .all<{ slug: string; total: number; recent: number }>();
     return new Map(r.results.map((row) => [row.slug, { total: row.total, recent: row.recent }]));
   }
-
-  // Shares
 
   async share(author: string, slug: string): Promise<ShareRow | null> {
     return this.db
@@ -255,10 +184,6 @@ export class Store {
       .first<ShareRow>();
   }
 
-  /**
-   * Creates a Share with its first Version: "full", with nothing uploaded, when the reservation finds no room; "gone",
-   * keeping nothing, when the upload outlived its reservation.
-   */
   async createShare(input: Body & {
     slug: string; author: string; title: string; description: string | null; tags: string;
     size: number; tokenId: string; now: number; limit: number; expiry: Expiry;
@@ -267,7 +192,6 @@ export class Store {
     const cost = costOf(size, input.files);
     const key = await this.putBody(slug, input, cost, limit);
     if (key === null) return "full";
-    // The Version row comes first so commit() can tell whether it was written; the Share row follows only then.
     const written = await this.commit(key, cost, [
       this.db.prepare(`INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT ?, 1, ?, ?, ?, ?, ?, ? WHERE ${RESERVED}`)
         .bind(slug, key, size, now, tokenId, input.kind, input.files, key),
@@ -278,7 +202,6 @@ export class Store {
     return written ? "written" : "gone";
   }
 
-  /** Adds a Version and drops whatever falls out of the window, in one transaction; keeps nothing unless written. */
   async addVersion(input: Body & {
     author: string; slug: string; title?: string; description?: string | null; tags?: string;
     size: number; tokenId: string; now: number; limit: number; expiry: Expiry;
@@ -288,9 +211,6 @@ export class Store {
     const cost = costOf(size, input.files);
     const key = await this.putBody(slug, input, cost, limit);
     if (key === null) return "full";
-    // The Version number is computed inside the transaction, so concurrent publishes get distinct numbers. Only the
-    // INSERT decides whether the Share is live: the clock moves between statements, and an expiry passing after the
-    // INSERT must not leave its Version without the Share's update. The rest follows that INSERT (WROTE).
     const written = await this.commit(key, cost, [
       this.db.prepare(`INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files)
           SELECT slug, latest_version + 1, ?, ?, ?, ?, ?, ? FROM shares WHERE slug = ? AND author = ? AND ${live()} AND ${RESERVED}`)
@@ -307,7 +227,6 @@ export class Store {
 
   async updateFields(author: string, slug: string, fields: ShareFields, tokenId: string, now: number): Promise<void> {
     const { title, description, tags, expiresAt } = fields;
-    // Only a date given here changes the expiry; it then stays until a Publisher changes it.
     const set = expiresAt !== undefined ? 1 : 0;
     await this.db
       .prepare(`UPDATE shares SET ${FIELDS}, expires_at = CASE WHEN ? = 1 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?),
@@ -325,7 +244,6 @@ export class Store {
       .run();
   }
 
-  /** Soft delete. Returns false when there was no live Share. */
   async deleteShare(author: string, slug: string, tokenId: string, now: number): Promise<boolean> {
     const r = await this.db
       .prepare(`UPDATE shares SET deleted_at = ?, changed_by = ?, changed_at = ?
@@ -335,15 +253,14 @@ export class Store {
     return r.meta.changes > 0;
   }
 
-  /**
-   * Erases a Share for good, deleted or not: the only deletion that is not soft, for a request to erase someone's data. One batch
-   * queues every body as due now, deletes the Versions and deletes the Share's row; emptyTrash then deletes the bodies
-   * from R2, and the hourly cleanup retries if R2 fails. Returns false when the Author has no such Share.
-   */
+  private async hasLegacyD1BodiesTable(): Promise<boolean> {
+    const row = await this.db.prepare("SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = 'versions_d1_legacy'").first();
+    return row !== null;
+  }
+
   async eraseShare(author: string, slug: string): Promise<boolean> {
     const own = "SELECT slug FROM shares WHERE slug = ? AND author = ?";
-    // Bodies published before 0.1.0-beta.2 sit in D1, in a table the Operator may have dropped since (operator.md).
-    const legacy = await this.db.prepare("SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = 'versions_d1_legacy'").first();
+    const legacy = await this.hasLegacyD1BodiesTable();
     const results = await this.db.batch([
       this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ${CLOCK} FROM versions WHERE slug IN (${own})
         ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at`).bind(slug, author),
@@ -355,7 +272,6 @@ export class Store {
     return results.at(-1)!.meta.changes > 0;
   }
 
-  /** The Author's Share an erase names, deleted or not: its title, and the keys of its bodies. */
   async eraseTarget(author: string, slug: string): Promise<{ title: string; keys: string[] } | null> {
     const rows = (await this.db
       .prepare("SELECT d.title, v.body_key FROM shares d LEFT JOIN versions v ON v.slug = d.slug WHERE d.slug = ? AND d.author = ?")
@@ -365,13 +281,6 @@ export class Store {
     return { title: rows[0]!.title, keys: rows.flatMap((r) => (r.body_key === null ? [] : [r.body_key])) };
   }
 
-  /**
-   * Deletes an erased Share's bodies from R2, then their ledger rows: the keys its Versions held (eraseShare ledgered
-   * them), and every object under its prefix, which also catches an upload that outlived its reservation and was never
-   * ledgered. Each found object is ledgered as due before any delete, so if R2 fails the hourly cleanup retries it; only
-   * a failure to list the prefix leaves such an upload unledgered. A write still in flight for the slug fails (its Share
-   * is gone) and ledgers its body as due.
-   */
   async eraseBodies(slug: string, keys: string[]): Promise<void> {
     const found = new Map<string, number>(keys.map((k) => [k, 0]));
     let cursor: string | undefined;
@@ -408,7 +317,6 @@ export class Store {
       args.push(q.public ? 1 : 0);
     }
     const w = where.join(" AND ");
-    // One batch: one round trip, and the total and the page are read in the same transaction.
     const [count, rows] = await this.db.batch<{ n: number } & ShareRow>([
       this.db.prepare(`SELECT COUNT(*) AS n FROM shares d WHERE ${w}`).bind(...args),
       this.db
@@ -419,10 +327,6 @@ export class Store {
     return { total: count?.results[0]?.n ?? 0, rows: (rows?.results ?? []) as ShareRow[] };
   }
 
-  /**
-   * The Author's home: the `limit` most recently updated live Shares, with the counts over all of them, in
-   * one round trip (each is ~160 ms from Brazil to a D1 in North America). No rows means no live Shares.
-   */
   async recentShares(author: string, limit: number) {
     const rows = await this.db
       .prepare(`SELECT d.slug, d.title, d.public, d.latest_version, d.updated_at, t.name AS changed_by_name,
@@ -440,10 +344,6 @@ export class Store {
     };
   }
 
-  // Versions
-
-  // Versions of a live Share only: these reads join the Share, so an expiry or delete holds here too.
-
   async versions(slug: string) {
     const r = await this.db
       .prepare(`SELECT v.n, v.kind, v.size, v.created_at, v.token_id, t.name AS token_name FROM versions v
@@ -454,7 +354,6 @@ export class Store {
     return r.results;
   }
 
-  /** A kept Version: a page with its body, or a site with its files. Null when it or its page's body is gone. */
   async version(slug: string, n: number) {
     const row = await this.db
       .prepare(`SELECT v.n, v.kind, v.body_key, v.files, v.size, v.created_at, v.token_id FROM versions v
@@ -469,10 +368,6 @@ export class Store {
     return body === null ? null : { ...meta, body, files: null };
   }
 
-  // A Share a Viewer may open is live, of this Author, and public when `publicOnly`. Each read below is one
-  // query, so a page costs one round trip to D1, plus R2 for a body.
-
-  /** A viewable Share's Version `n` (its latest when null): its number, kind and body key, or null. */
   async viewableVersion(author: string, slug: string, publicOnly: boolean, n: number | null) {
     return this.db
       .prepare(`SELECT v.n, v.kind, v.body_key FROM shares d JOIN versions v ON v.slug = d.slug AND v.n = COALESCE(?, d.latest_version)
@@ -481,7 +376,6 @@ export class Store {
       .first<{ n: number; kind: Kind; body_key: string }>();
   }
 
-  /** A viewable Share with its kept Versions, newest first, or null. */
   async viewableWithVersions(author: string, slug: string, publicOnly: boolean) {
     const r = await this.db
       .prepare(`SELECT d.slug, d.title, d.description, d.public, d.latest_version, d.updated_at, d.expires_at, v.n, v.kind
@@ -494,7 +388,6 @@ export class Store {
     return first ? { share: first, kept: r.results.map((x) => x.n), kinds: new Map(r.results.map((x) => [x.n, x.kind])) } : null;
   }
 
-  /** One file of a viewable site Version, found by its exact path, or null. One query. */
   async siteFile(author: string, slug: string, publicOnly: boolean, n: number, path: string): Promise<{ key: string; entry: SiteEntry } | null> {
     const row = await this.db
       .prepare(`SELECT v.body_key, j.value AS entry FROM shares d
@@ -506,7 +399,6 @@ export class Store {
     return row ? { key: row.body_key, entry: decodeEntry(path, row.entry) } : null;
   }
 
-  /** A site file's bytes, read from its zip with one ranged read and inflated as served. Null when the zip is gone. */
   async siteBytes(f: { key: string; entry: SiteEntry }): Promise<ReadableStream<Uint8Array> | null> {
     // An empty file has no bytes to read, and R2 has no zero-length range.
     if (f.entry.csize === 0) return new Blob([]).stream();

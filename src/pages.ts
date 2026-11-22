@@ -1,33 +1,24 @@
-// The Instance's own pages. They run no script and load nothing from elsewhere: one stylesheet, allowed
-// by its hash, and inline SVG. The look is an airport's departure board: graphite panels for the
-// Instance's own frame (the top bar, the viewer's bar, the Shares board), signal yellow only as a fill
-// under dark ink for the main action and focus, white or near-black ground, and the Shares listed in a
-// timetable's column rhythm. Colours are OKLCH tokens that switch with the visitor's scheme through
-// light-dark(); every text pair was checked for WCAG AA contrast on each of those surfaces.
 import type { Language } from "./config";
 import { VERSION } from "./version";
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+type SafeHtml = string & { readonly __brand: "SafeHtml" };
+
+function escapeHtml(s: string): SafeHtml {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!) as SafeHtml;
 }
 
 /** What a Share may do, in the viewer's iframe and as a top-level page. No allow-same-origin: issue #12. */
 export const SHARE_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-sandbox";
 
-/** The card image's real size: the landing's 1600 by 900 poster, bundled and served per Share at /p/<slug>/card.jpg. */
 export const OG_IMAGE_WIDTH = 1600;
 export const OG_IMAGE_HEIGHT = 900;
 
-/** How many Shares the Author's home lists, most recently updated first. */
 export const HOME_SHARES = 50;
 
-/** Why the token form refused a request. The page says it in the Instance's language. */
 export type TokenError = "refused" | "too-large" | "bad-name";
 export type EraseError = "refused" | "too-large" | "bad-share" | "no-share";
-/** What the Author's home says above the board: a Share just erased, or why an erase was refused. */
 export type HomeNote = { erased: string } | { error: EraseError } | { confirm: { slug: string; title: string } };
 
-// Every string is HTML: a function's arguments are already escaped by its caller.
 const en = {
   skip: "Skip to content",
   skipShare: "Skip to the Share",
@@ -64,7 +55,6 @@ const en = {
   requestsListed: "Every request is listed at",
   viewerTitle: "You're signed in",
   viewerLead: "Open a Share with the link its Author sent you. This Instance keeps no list of Shares, so there is nothing to browse here.",
-  // The card a Public Share unfurls to: a description when the publisher wrote none, and the poster's alt text.
   cardLead: "Published with htmlgate, in its author's own Cloudflare account.",
   cardImageAlt: "The htmlgate mark and the address htmlgate.com.",
   metrics: "Metrics",
@@ -83,7 +73,7 @@ const en = {
     "too-large": "That form is too large. Give the token a name of 1 to 64 characters.",
     "bad-name": "Give the token a name of 1 to 64 characters, without control characters.",
   } satisfies Record<TokenError, string>,
-  created: (name: string) => `New token: ${name}`,
+  created: (name: SafeHtml) => `New token: ${name}`,
   copyNow: "Copy it now. It is not shown again.",
   createdHint: "Paste it into <code>htmlgate login</code>, or set it as <code>$HTMLGATE_TOKEN</code> together with <code>$HTMLGATE_URL</code>.",
   createTitle: "Create a token",
@@ -100,8 +90,8 @@ const en = {
   revoked: "Revoked",
   never: "never",
   revoke: "Revoke",
-  revokeAsk: (name: string) => `Publishers using <strong>${name}</strong> stop working on their next request.`,
-  revokeNamed: (name: string) => `Revoke ${name}`,
+  revokeAsk: (name: SafeHtml) => `Publishers using <strong>${name}</strong> stop working on their next request.`,
+  revokeNamed: (name: SafeHtml) => `Revoke ${name}`,
   versions: "Versions",
   versionOf: (n: number, latest: number) => `v${n} of ${latest}`,
   versionsLabel: (n: number, latest: number) => `Versions, showing v${n} of ${latest}`,
@@ -118,7 +108,7 @@ const en = {
   backToShares: "Back to your Shares",
   goHome: "Go to the home page",
   erase: "Erase",
-  eraseAsk: (title: string) => `Erase <strong>${title}</strong> for good? Its links stop working immediately and its records are removed. Stored files are deleted separately. You cannot undo this in htmlgate.`,
+  eraseAsk: (title: SafeHtml) => `Erase <strong>${title}</strong> for good? Its links stop working immediately and its records are removed. Stored files are deleted separately. You cannot undo this in htmlgate.`,
   eraseConfirm: "Erase for good",
   eraseCheck: "Erase this Share?",
   eraseStart: "Review and erase",
@@ -127,7 +117,7 @@ const en = {
   eraseLead: "Erasure removes the Share and its Version records, including for Shares hidden by an API or CLI delete. Stored files are deleted separately.",
   eraseField: "Share link or slug",
   eraseHint: "Paste the Share's link, or its 12-character slug.",
-  erased: (slug: string) => `<code>${slug}</code> is no longer available. Erasure removes the Share and its Version records immediately. Stored files are deleted separately. Scheduled cleanup retries failures when enabled.`,
+  erased: (slug: SafeHtml) => `<code>${slug}</code> is no longer available. Erasure removes the Share and its Version records immediately. Stored files are deleted separately. Scheduled cleanup retries failures when enabled.`,
   eraseErrors: {
     refused: "Refused: this change did not come from this Instance's own page.",
     "too-large": "That form is too large. Paste one Share's link or slug.",
@@ -190,7 +180,7 @@ const ptBR: typeof en = {
     "too-large": "Formulário grande demais. Dê ao token um nome de 1 a 64 caracteres.",
     "bad-name": "Dê ao token um nome de 1 a 64 caracteres, sem caracteres de controle.",
   } satisfies Record<TokenError, string>,
-  created: (name: string) => `Novo token: ${name}`,
+  created: (name: SafeHtml) => `Novo token: ${name}`,
   copyNow: "Copie agora. Ele não aparece de novo.",
   createdHint: "Cole no <code>htmlgate login</code>, ou defina como <code>$HTMLGATE_TOKEN</code> junto com <code>$HTMLGATE_URL</code>.",
   createTitle: "Criar um token",
@@ -207,8 +197,8 @@ const ptBR: typeof en = {
   revoked: "Revogado",
   never: "nunca",
   revoke: "Revogar",
-  revokeAsk: (name: string) => `Quem usa <strong>${name}</strong> para de funcionar no próximo pedido.`,
-  revokeNamed: (name: string) => `Revogar ${name}`,
+  revokeAsk: (name: SafeHtml) => `Quem usa <strong>${name}</strong> para de funcionar no próximo pedido.`,
+  revokeNamed: (name: SafeHtml) => `Revogar ${name}`,
   versions: "Versões",
   versionOf: (n: number, latest: number) => `v${n} de ${latest}`,
   versionsLabel: (n: number, latest: number) => `Versões, mostrando a v${n} de ${latest}`,
@@ -225,7 +215,7 @@ const ptBR: typeof en = {
   backToShares: "Voltar aos seus Shares",
   goHome: "Ir para o início",
   erase: "Eliminar",
-  eraseAsk: (title: string) => `Eliminar <strong>${title}</strong> de vez? Os links param de funcionar imediatamente e os registros são removidos. A exclusão dos arquivos armazenados ocorre separadamente. Não dá para desfazer no htmlgate.`,
+  eraseAsk: (title: SafeHtml) => `Eliminar <strong>${title}</strong> de vez? Os links param de funcionar imediatamente e os registros são removidos. A exclusão dos arquivos armazenados ocorre separadamente. Não dá para desfazer no htmlgate.`,
   eraseConfirm: "Eliminar de vez",
   eraseCheck: "Eliminar este Share?",
   eraseStart: "Revisar e eliminar",
@@ -234,7 +224,7 @@ const ptBR: typeof en = {
   eraseLead: "A eliminação remove o Share e os registros das Versões, inclusive de Shares ocultados pela API ou pela CLI. A exclusão dos arquivos armazenados ocorre separadamente.",
   eraseField: "Link ou slug do Share",
   eraseHint: "Cole o link do Share, ou o slug de 12 caracteres.",
-  erased: (slug: string) => `<code>${slug}</code> não está mais disponível. A eliminação remove imediatamente o Share e os registros das Versões. A exclusão dos arquivos armazenados ocorre separadamente. A limpeza agendada, quando ativa, tenta novamente se houver falha.`,
+  erased: (slug: SafeHtml) => `<code>${slug}</code> não está mais disponível. A eliminação remove imediatamente o Share e os registros das Versões. A exclusão dos arquivos armazenados ocorre separadamente. A limpeza agendada, quando ativa, tenta novamente se houver falha.`,
   eraseErrors: {
     refused: "Recusado: este pedido não veio da página desta Instância.",
     "too-large": "Formulário grande demais. Cole o link ou o slug de um Share.",
@@ -514,8 +504,6 @@ export interface PageResult {
   csp: string;
 }
 
-// The stylesheet is allowed by its hash, so a page is the same bytes every time it is served:
-// two refused requests can never be told apart by a nonce.
 let cssHash: Promise<string> | undefined;
 function styleHash(): Promise<string> {
   cssHash ??= crypto.subtle.digest("SHA-256", new TextEncoder().encode(CSS))
@@ -523,21 +511,15 @@ function styleHash(): Promise<string> {
   return cssHash;
 }
 
-/** The htmlgate mark: an arched gate over a threshold. A single geometric figure, drawn inline. */
 const MARK = `<svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5.5 20.5V10a6.5 6.5 0 0 1 13 0v10.5"/><path d="M3 20.5h18"/><path d="M12 12.5v4"/></svg>`;
-/** The wayfinding arrow on the main action. */
 const ARROW = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12h15"/><path d="m13 6 6 6-6 6"/></svg>`;
 
-/** The release an Operator is running. Every page of the Instance's own UI carries it. */
 const VER = `htmlgate ${VERSION}`;
 
-/** What a link unfurls to: the Open Graph and X card a crawler reads before any script runs. */
 export interface SocialCard {
   title: string;
   description: string;
-  /** The canonical absolute URL of the page being shared. */
   url: string;
-  /** The absolute HTTPS URL of the image, its bytes' size and a description of what it shows. */
   image: string;
   imageAlt: string;
   imageWidth: number;
@@ -545,11 +527,6 @@ export interface SocialCard {
   siteName: string;
 }
 
-/**
- * The card's elements. Titles and descriptions are the publisher's text, so they are escaped; the image is one
- * branded poster the Instance serves itself. Both X and the Open Graph consumers in messaging apps read these before
- * any script, which is the point: the page itself runs none.
- */
 function cardMeta(c: SocialCard): string {
   const e = (s: string) => escapeHtml(s);
   return `<meta property="og:type" content="website">
@@ -597,16 +574,13 @@ ${body}${opts.bodyClass === "viewer" || opts.sandbox ? "" : `
   return { body: html, csp };
 }
 
-/** Who is looking at one of the Instance's own pages. */
 export interface Visitor {
   email: string;
   isAuthor: boolean;
-  /** The Instance's own origin, for instructions that name it. */
   origin: string;
   lang: Language;
 }
 
-/** The Author's home list: the most recently updated Shares and the counts over all of them. */
 export interface HomeList {
   total: number;
   publicTotal: number;
@@ -629,16 +603,10 @@ const skip = (lang: Language) => `<a class="skip" href="#main">${STRINGS[lang].s
 const iso = (ms: number) => new Date(ms).toISOString();
 const when = (ms: number) => iso(ms).replace("T", " ").slice(0, 16) + " UTC";
 const timeTag = (ms: number, prefix = "") => `<time datetime="${iso(ms)}">${prefix}${when(ms)}</time>`;
-/** A board time: the hour on flaps, as a departure board prints it, and the date under it. */
 const boardTime = (ms: number) => `<time datetime="${iso(ms)}"><span class="flap">${iso(ms).slice(11, 16)}</span> <span class="date">${iso(ms).slice(0, 10)} UTC</span></time>`;
 const state = (lang: Language, isPublic: boolean) =>
   isPublic ? `<span class="state state-public">${STRINGS[lang].public}</span>` : `<span class="state state-gated">${STRINGS[lang].gated}</span>`;
 
-/**
- * The one not-found page. On a public link it may offer sign-in (`signInPath`); behind the gate it offers a
- * way home (`home`), labelled for the Author. It never depends on whether a Share exists, nor on whether
- * someone is on the Allowlist.
- */
 export function notFoundPage(lang: Language, opts: { signInPath?: string; home?: "author" | "viewer" } = {}): Promise<PageResult> {
   const t = STRINGS[lang];
   const { signInPath, home } = opts;
@@ -654,17 +622,11 @@ ${signInPath ? `<a class="button" href="${escapeHtml(signInPath)}">${t.signInRet
 </main>`, { sandbox: true });
 }
 
-/** One Share's counts: the last 30 days, and all time. */
 export interface ShareViews {
   total: number;
   recent: number;
 }
 
-/**
- * How often each of the Instance's Shares was opened: one row per Share with the last 30 days and the all-time count,
- * and a button that opens that Share. Both counts are always a number, a zero in a quieter tone, so the column never
- * reads as broken; on a phone the all-time count moves under the 30-day one instead of disappearing.
- */
 export function metricsPage(v: Visitor, shares: HomeList["shares"], views: Map<string, ShareViews>): Promise<PageResult> {
   const t = STRINGS[v.lang];
   const rows = shares.map((d) => {
@@ -699,10 +661,6 @@ ${rows}
 </main>`);
 }
 
-/**
- * The home page. `list` is given for the Author only, and its presence picks the layout: a Viewer's home
- * lists nothing, so a list reaching a Viewer would show (and the tests would see it) rather than hide.
- */
 export function homePage(v: Visitor, list: HomeList | null, note?: HomeNote, views?: Map<string, ShareViews>): Promise<PageResult> {
   const t = STRINGS[v.lang];
   if (!list) {
@@ -737,7 +695,6 @@ ${rows}
 <li>${t.step2}<pre tabindex="0" role="region" aria-label="${t.step2Label}"><code>${escapeHtml(config)}</code></pre></li>
 <li>${t.step3}<pre tabindex="0" role="region" aria-label="${t.step3Label}"><code>${escapeHtml(t.publishExample)}</code></pre></li>
 </ol>`;
-  // With no Shares yet, the publish steps are the page; afterwards they sit beside the legend as a note.
   const lead = board || `<section class="board" aria-labelledby="publish"><div class="empty">
 <h2 id="publish">${t.empty}</h2>
 <p>${t.emptyLead}</p>
@@ -849,12 +806,9 @@ ${items}
 </main>`);
 }
 
-/** `frame`: where the shown Version opens when it is a site (its files' URL); a page opens from its raw URL. */
 export function viewerPage(lang: Language, d: { slug: string; title: string; description?: string | null; public: number; updated_at: number; expires_at: number | null }, prefix: "s" | "p", shown: number,
   versions: number[], latest: number, frame?: string, erase = false, origin = ""): Promise<PageResult> {
   const t = STRINGS[lang];
-  // Only a Public Share unfurls: its page is reachable without signing in, and its title is already visible to anyone
-  // with the link. A Gated Share's page is behind the gate and stays bare - no title, description or image to cache.
   const written = d.description?.trim();
   const card: SocialCard | undefined = prefix === "p" && d.public === 1 && origin !== "" ? {
     title: d.title,
@@ -873,7 +827,6 @@ export function viewerPage(lang: Language, d: { slug: string; title: string; des
     return `<li><a href="${href}"${n === shown ? ' aria-current="page"' : ""}>${label}</a></li>`;
   }).join("");
   const raw = `/${prefix}/${d.slug}/raw?v=${shown}`;
-  // The mark links home only behind the gate; on a public link the visitor may not be signed in.
   const mark = prefix === "s" ? `<a class="brand" href="/" aria-label="${t.homeOf}">${MARK}</a>` : MARK;
   return layout(lang, d.title, `<a class="skip" href="#share">${t.skipShare}</a>
 <header class="bar">

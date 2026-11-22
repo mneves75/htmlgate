@@ -1,12 +1,9 @@
-// The Publisher API, which the htmlgate CLI (packages/cli) speaks. A Version is published as JSON ({html}, a page)
-// or as a zip (a site, plan 009); every Share carries an expiry (plan 008).
 import type { Config, Env } from "./config";
 import { fail, HttpError, json, noContent, readCapped, readCappedBytes, stream } from "./http";
 import { POSITIVE, SLUG, TOKEN, TOKEN_ID, newSlug, sha256Hex } from "./ids";
 import { KEEP_VERSIONS, Store, type Body, type ShareRow, type Expiry, type TokenRow } from "./store";
 import { encodeIndex, readSite, SITE_LIMITS, SiteError, type SiteEntry } from "./zip";
 
-// The htmlgate CLI refuses a larger file before sending it (packages/cli/src/files.ts).
 export const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const MAX_TITLE = 200;
 const MAX_DESCRIPTION = 500;
@@ -15,17 +12,15 @@ const TAG_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
 const MAX_TAG_VALUE = 256;
 // JSON escaping can make a body up to six times longer (\u0001 for one byte), plus the other fields.
 const MAX_REQUEST_BYTES = 6 * MAX_HTML_BYTES + 64 * 1024;
-// A request that carries only fields (PATCH, visibility) has no HTML to make room for.
 const MAX_FIELDS_BYTES = 64 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
-// A date a Publisher sets is at least a minute and at most ten years ahead.
 const MIN_EXPIRY_MS = 60 * 1000;
 const MAX_EXPIRY_MS = 3650 * DAY_MS;
 
 type Fields = { html?: string; title?: string; description?: string | null; metadata?: Record<string, string>; expires_at?: number | null };
 
 export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, cfg: Config, url: URL): Promise<Response> {
-  const parts = url.pathname.split("/").slice(2); // after "/api"
+  const parts = url.pathname.split("/").slice(2);
   const method = req.method;
 
   if (parts.length === 1 && parts[0] === "onboard" && method === "GET") return onboard(url, cfg);
@@ -36,7 +31,6 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, c
   if (token.author !== cfg.author) return fail(401, "unauthorized", "This token belongs to no Author on this Instance.");
 
   if (method !== "GET") {
-    // Fails closed: without its limit, a leaked token could write without bound.
     if (!env.WRITE_LIMIT) return fail(503, "server_misconfigured", "This Instance is missing its write limit. The Operator must run setup.");
     const { success } = await env.WRITE_LIMIT.limit({ key: token.id });
     if (!success) return fail(429, "rate_limited", "Too many changes from this token. Wait a minute.", { "retry-after": "60" });
@@ -48,8 +42,6 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, c
     if (e instanceof HttpError) return fail(e.status, e.code, e.message);
     throw e;
   } finally {
-    // Due bodies (pruned, deleted, or a refused write's upload) are deleted from R2 after the answer, and retried
-    // on later writes.
     if (method !== "GET") ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
   }
 }
@@ -64,15 +56,12 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
     } else if (SLUG.test(b) && parts.length === 5 && c === "versions" && d !== undefined && POSITIVE.test(d) && parts[4] === "zip" && method === "GET") {
       return await zipOf(store, cfg, b, Number(d));
     } else if (SLUG.test(b) && parts.length <= 4) {
-      // Paths are matched exactly: the longest is shares/:slug/versions/:n(/zip), and nothing may follow it.
       if (c === undefined) {
         if (method === "GET") return shareJson(await mustShare(store, cfg, b), url);
         if (method === "PUT") return await replace(req, store, cfg, token, b, url);
         if (method === "PATCH") return await patch(req, store, cfg, token, b, url);
         if (method === "DELETE") return await remove(store, cfg, token, b);
       } else if (c === "versions" && d === undefined && method === "GET") {
-        // The Author's own live Share, checked alongside the read: one round trip. The check decides first, so a Share
-        // that is not the Author's or not live is a 404 even when the read fails; a read failure counts only after it.
         const read = store.versions(b).then((rows) => ({ rows }), (error: unknown) => ({ error }));
         await mustShare(store, cfg, b);
         const versions = await read;
@@ -194,10 +183,6 @@ async function readBody(req: Request, fieldsOnly = false): Promise<Record<string
   return body as Record<string, unknown>;
 }
 
-/**
- * A publish's body and fields: JSON with html (a page), or a zip with its fields in the query string (a site).
- * The zip is checked whole (src/zip.ts) before anything is stored.
- */
 async function readPublish(req: Request, url: URL): Promise<{ f: Fields; body: (Body & { size: number }) | undefined }> {
   const type = (req.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
   if (type !== "application/zip") {
@@ -217,7 +202,6 @@ async function readPublish(req: Request, url: URL): Promise<{ f: Fields; body: (
   return { f, body: { body: zip, kind: "site", files: encodeIndex(entries), size: zip.length } };
 }
 
-/** A zip publish's fields from its query string, in the shape a JSON body would give them. */
 function queryFields(url: URL): Record<string, unknown> {
   const out: Record<string, unknown> = Object.create(null);
   const metadata: Record<string, string> = Object.create(null);
@@ -232,13 +216,11 @@ function queryFields(url: URL): Record<string, unknown> {
   return out;
 }
 
-/** The expiry a publish leaves: the date it sets, or the Instance's default from now. */
 function expiryOf(f: Fields, cfg: Config, now: number): Expiry {
   if (f.expires_at !== undefined) return { at: f.expires_at, set: true };
   return { at: cfg.expiryDays > 0 ? now + cfg.expiryDays * DAY_MS : null, set: false };
 }
 
-/** Checks the fields a request may carry. `allowed` names them; anything else is refused. */
 function parseFields(body: Record<string, unknown>, allowed: (keyof Fields)[]): Fields & { size?: number } {
   for (const key of Object.keys(body)) {
     if (key === "public") throw new HttpError(400, "invalid_arg", "Publishing never changes the gate. Use POST /api/shares/:slug/visibility.");
@@ -302,13 +284,11 @@ async function create(req: Request, store: Store, cfg: Config, token: TokenRow, 
     tokenId: token.id, now, limit: cfg.storageLimit, expiry: expiryOf(f, cfg, now),
   });
   if (created === "full") throw noRoom();
-  // Only an upload that outlived its reservation (an hour) gets here.
   if (created === "gone") throw new HttpError(503, "busy", "The upload took too long. Try again.");
   return shareJson(await mustShare(store, cfg, slug), url, 201);
 }
 
 async function replace(req: Request, store: Store, cfg: Config, token: TokenRow, slug: string, url: URL) {
-  // Before the body: checking a zip is the costly part, and a Share that is not there needs none of it.
   await mustShare(store, cfg, slug);
   const { f, body } = await readPublish(req, url);
   if (body === undefined) throw new HttpError(400, "html_required", "PUT needs html or a zip. Use PATCH to change only fields.");
@@ -321,7 +301,6 @@ async function replace(req: Request, store: Store, cfg: Config, token: TokenRow,
     tokenId: token.id, now, limit: cfg.storageLimit, expiry: expiryOf(f, cfg, now),
   });
   if (added === "full") throw noRoom();
-  // Nothing was written: the Share was deleted meanwhile, or (rarely) the upload outlived its reservation.
   if (added === "gone") throw (await store.share(cfg.author, slug)) ? new HttpError(503, "busy", "The upload took too long. Try again.") : new HttpError(404, "not_found", "No such Share.");
   return shareJson(await mustShare(store, cfg, slug), url);
 }
@@ -338,7 +317,6 @@ async function patch(req: Request, store: Store, cfg: Config, token: TokenRow, s
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 
-/** A site Version's zip, as published, for a Publisher to change and publish again. */
 async function zipOf(store: Store, cfg: Config, slug: string, n: number) {
   await mustShare(store, cfg, slug);
   const v = await store.version(slug, n);

@@ -1,4 +1,3 @@
-// Pinned Vitest public reporter API; a structured assertion is different from a broken runner.
 import { writeFileSync } from "node:fs";
 
 const errors = (values = []) => values.map((e) => ({ name: e.name, message: e.message }));
@@ -23,9 +22,7 @@ export default class MutationReporter {
 const object = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 const validErrors = (v) => Array.isArray(v) && v.every((e) => object(e) && typeof e.name === "string" && typeof e.message === "string");
 
-/** Fail closed on missing controls, runner errors, interruptions and incompatible reports. */
 export function classifyMutation(report, status, signal, testFile, stderr = "") {
-  // `failed` keeps the failing tests of a timeout or runtime failure, so the gate's log names what broke.
   const broken = (reason, failed = []) => ({ state: "BROKEN", reason, failed });
   if (signal || (status !== 0 && status !== 1)) return broken(`runner exit ${status}, signal ${signal ?? "none"}`);
   if (stderr.trim()) return broken(`runner stderr must be diagnosed: ${stderr.trim().slice(0, 1000)}`);

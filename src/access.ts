@@ -1,8 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { Config } from "./config";
 
-// Signing keys are public and rotate slowly, so a per-isolate key set is safe to keep.
-// Identity is never cached: every request verifies its own token.
 const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
 function keys(teamUrl: string) {
@@ -14,8 +12,6 @@ function keys(teamUrl: string) {
   return set;
 }
 
-// jose's codes for a token that is malformed, unsigned by these keys, out of date, for another audience, of an
-// algorithm or with a header this Instance does not take, or naming a key the team does not have.
 const CALLER_CAUSED = /^ERR_(JWT_|JWS_|JOSE_ALG_NOT_ALLOWED$|JOSE_NOT_SUPPORTED$|JWKS_NO_MATCHING_KEY$|JWKS_MULTIPLE_MATCHING_KEYS$)/;
 
 /**
@@ -36,9 +32,6 @@ export async function person(req: Request, cfg: Config): Promise<string | null> 
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
     return cfg.allowlist.has(email) ? email : null;
   } catch (e) {
-    // A refusal the token itself causes is ordinary, and anyone can send a token (a forged one too, on a public
-    // path), so none of those is logged. What is left is the certs endpoint failing: unreachable, slow, or not
-    // answering with keys. Then nobody can sign in, so it is logged, by code and message, never the token.
     const code = String((e as { code?: unknown } | null)?.code ?? "");
     if (!CALLER_CAUSED.test(code)) {
       console.error("access", code || (e instanceof Error ? e.name : "error"), e instanceof Error ? e.message : "");

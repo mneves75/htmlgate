@@ -65,7 +65,6 @@ export function lintSource(relPath, content) {
   const inScripts = relPath.startsWith("scripts/");
   const isStrictTs = inWorkerSrc || inSiteSrc || inCliSrc;
 
-  // Rule 8b: @ts-ignore / @ts-expect-error suppressions in first-party TS source
   if (isStrictTs) {
     const lines = content.split("\n");
     for (let i = 0; i < lines.length; i++) {
@@ -76,7 +75,6 @@ export function lintSource(relPath, content) {
   }
 
   const visit = (node) => {
-    // Rule 1: no-raw-response — every Instance response must go through src/http.ts so BASE headers cannot be skipped (commit d6794f6).
     if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Response") {
       if (inWorkerSrc && relPath !== "src/http.ts") {
         report("no-raw-response", lineOf(sf, node.getStart(sf)), "Do not call `new Response(...)` outside src/http.ts. Use text(), json(), fail(), redirect(), noContent(), stream(), bytes(), or copyResponse() from ./http so BASE hardening headers are never dropped.");
@@ -86,7 +84,6 @@ export function lintSource(relPath, content) {
       }
     }
 
-    // Rule 2: no-unsafe-fetch — fetch() and smoke's paced() must set redirect: "manual" (never follow redirects with Bearer tokens) and bound waits with a signal.
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       const callee = node.expression.text;
       if (callee === "fetch" && (inWorkerSrc || inCliSrc || (inScripts && !relPath.startsWith("scripts/perf/")))) {
@@ -116,7 +113,6 @@ export function lintSource(relPath, content) {
       }
     }
 
-    // Rule 3 & 4: cf CLI pagination and --force safety in scripts/
     if (inScripts && ts.isCallExpression(node) && ts.isIdentifier(node.expression) && (node.expression.text === "cf" || node.expression.text === "cfImpl")) {
       const lits = node.arguments.map(stringLiteral);
       const isWorkersList = lits[0] === "workers" && lits[1] === "list";
@@ -136,7 +132,6 @@ export function lintSource(relPath, content) {
       }
     }
 
-    // Rule 5: no-brew-info-installed — `brew info --installed` dumps every formula on the host (>1 MB) and overflows spawnSync (commit a2a2ffc).
     if (inScripts && ts.isArrayLiteralExpression(node)) {
       const lits = node.elements.map(stringLiteral);
       if (lits[0] === "info" && lits.includes("--installed")) {
@@ -144,7 +139,6 @@ export function lintSource(relPath, content) {
       }
     }
 
-    // Rule 6: no-unvalidated-env-number — raw Number(process.env.X) or Number(arg(...)) turns typos into NaN and silently disables comparisons (commit c66b143).
     if ((inScripts || inWorkerSrc || inCliSrc) && ts.isVariableDeclaration(node) && node.initializer) {
       const init = node.initializer;
       const checkRawNumberCall = (expr) => {
@@ -163,7 +157,6 @@ export function lintSource(relPath, content) {
       }
     }
 
-    // Rule 7: no-access-identity-bypass — identity comes only from verified Cf-Access-Jwt-Assertion in src/access.ts (issue #18).
     if (inWorkerSrc) {
       if (ts.isPropertyAccessExpression(node) && node.name.text === "access" && ts.isIdentifier(node.expression) && node.expression.text === "ctx") {
         report("no-access-identity-bypass", lineOf(sf, node.getStart(sf)), "Never read identity from ctx.access. Verify Cf-Access-Jwt-Assertion through person() in src/access.ts.");
@@ -174,12 +167,10 @@ export function lintSource(relPath, content) {
       }
     }
 
-    // Rule 8a: no-any-or-ts-suppression — no `any` in first-party TS source (AGENTS.md).
     if (isStrictTs && node.kind === ts.SyntaxKind.AnyKeyword) {
       report("no-any-or-ts-suppression", lineOf(sf, node.getStart(sf)), "Do not use `any` in source code. Use `unknown` and narrow it.");
     }
 
-    // Rule 9: no-proto-pollutable-dict — queryFields and parseMetadata must use Object.create(null) so literal keys like `__proto__` are preserved (mutations #149, #215, #216).
     if ((relPath === "src/api.ts" && isInsideFunction(node, "queryFields")) || (relPath === "packages/cli/src/files.ts" && isInsideFunction(node, "parseMetadata"))) {
       if (ts.isVariableDeclaration(node) && node.initializer && ts.isObjectLiteralExpression(node.initializer) && node.initializer.properties.length === 0) {
         report("no-proto-pollutable-dict", lineOf(sf, node.initializer.getStart(sf)), "Initialize user-keyed dictionaries in queryFields/parseMetadata with `Object.create(null)`, never `{}`, so literal keys like `__proto__` are preserved.");

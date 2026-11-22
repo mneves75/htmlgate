@@ -1,10 +1,3 @@
-// D1 and R2 round trips on each route's critical path, counted on the real Worker (src/index.ts) run in-process over
-// real SQLite with every migration (test/fake-env.ts). Each D1 call (a statement or a batch) and each R2 call waits a
-// fixed LATENCY_MS before it runs, the way every call from a Brazilian data center waits for a database in North
-// America; calls that overlap form one wave. A route's critical path is the waves that finish before its response
-// body has been read: work sent with ctx.waitUntil is counted apart, as background. These are counters, not
-// timings, so they are valid locally (docs/perf/PLAN.md). Used by scripts/perf/d1-roundtrips.perf.ts (the report)
-// and test/roundtrips.test.ts (the ceilings in docs/perf/budgets.json).
 import worker from "../../src/index";
 import { writeZip } from "../../packages/cli/src/zip";
 import { AUTHOR, PAGE, startInstance, VIEWER } from "../../test/reviewer-beta10-harness";
@@ -45,7 +38,6 @@ function instrument(rawDb: RawDb, rawBucket: RawBucket, calls: Call[]) {
   };
   const db = {
     prepare: (sql: string) => wrap(rawDb.prepare(sql)),
-    // A batch is one round trip: its statements run unwrapped, inside the one timed call.
     batch: (ss: Stmt[]) => timed("d1", "batch", ss.map((s) => s.sql), () => rawDb.batch(ss.map((s) => raw.get(s) ?? s))),
   };
   const bucket = Object.fromEntries(
@@ -54,12 +46,6 @@ function instrument(rawDb: RawDb, rawBucket: RawBucket, calls: Call[]) {
   return { db: db as unknown as D1Database, bucket: bucket as unknown as R2Bucket };
 }
 
-/**
- * Waves: the longest chain of calls each of which started only after the one before it had ended, which is what a
- * request waits for. Overlapping calls share a wave; an independent call that overlaps a dependent chain does not
- * hide the chain. Calls that merely happen to run one after the other count as sequential, so this is an upper
- * bound: it can only make a ceiling stricter.
- */
 export function waves(calls: Call[]): number {
   const sorted = [...calls].sort((a, b) => a.start - b.start);
   const depth: number[] = [];
@@ -77,7 +63,6 @@ function must(ok: boolean, what: string) {
 
 export async function measureRoutes() {
   const i = await startInstance({ ALLOWLIST: VIEWER });
-  // A realistic shape for one Author: Gated and Public pages, a site, Versions, views over 90 days.
   const pub = await i.api("POST", "/api/shares", { html: PAGE, title: "Public" });
   must(pub.status === 201, "publish");
   const pslug = pub.json.slug as string;
@@ -99,8 +84,6 @@ export async function measureRoutes() {
   i.env.DB = inst.db;
   i.env.BODIES = inst.bucket;
 
-  // The harness's own `call` settles background work before it returns; this one marks the moment the response body
-  // has been read, then settles.
   const pending: Promise<unknown>[] = [];
   let answered = 0;
   async function call(path: string, init: RequestInit & { as?: string } = {}) {
@@ -118,7 +101,6 @@ export async function measureRoutes() {
     call(path, { method, headers: { authorization: `Bearer ${i.token}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
 
   const NAV = { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate" };
-  // [budget key, label, request, the status it must answer]: a route that fails faster is not a faster route.
   const routes: [string, string, () => Promise<Response>, number][] = [
     ["GET /", "GET / (Author home)", () => call("/", { as: AUTHOR, headers: NAV }), 200],
     ["GET / (Viewer)", "GET / (Viewer)", () => call("/", { as: VIEWER, headers: NAV }), 200],
@@ -141,7 +123,6 @@ export async function measureRoutes() {
   const rows: RouteCount[] = [];
   const statements = new Set<string>();
   for (const [key, route, go, expected] of routes) {
-    // A token's last use is recorded at most once a minute; clearing it gives every route the same, worst case.
     i.fake.sqlite.prepare("UPDATE tokens SET last_used_at = NULL").run();
     calls.length = 0;
     const res = await go();

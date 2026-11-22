@@ -1,18 +1,3 @@
-// L2 edge timings: user-perceived TTFB per URL from where this runs, the way a visitor's browser meets it.
-// Each URL is fetched N times on a new connection (DNS, TCP, TLS and the first byte: one curl per request) and
-// N times on one warm connection (one curl reusing its connection). Cache status comes from `cf-cache-status`
-// and the data center from `cf-ray`, both written by Cloudflare, never by the Worker.
-//
-//   node scripts/perf/edge.mjs --base https://htmlgate.com --paths /,/en/ [--n 30] [--gap 300] [--out file.json]
-//   node scripts/perf/edge.mjs --base A --base B ...    interleaves A and B request by request (ABAB);
-//                                                       the same URL twice is the A/A noise run
-//   --base 'https://host|<worker>=<version-id>'          pins that arm to one Worker Version with the
-//                                                       Cloudflare-Workers-Version-Overrides header (every request,
-//                                                       warm ones included); two arms may not pin the same Version
-//
-// Traffic is tagged (User-Agent htmlgate-perf/1), paced (--gap ms between requests) and capped (--cap, default 1500):
-// the run stops before the cap rather than send more. It sends GET only, never a write, and no Sec-Fetch-Dest, so
-// the landing's page counts never see it. Needs curl 7.84 or later (%header{} write-out).
 import { execFile } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { promisify } from "node:util";
@@ -41,7 +26,6 @@ export function args(argv) {
   return out;
 }
 
-/** `https://host` or `https://host|worker=version-id`. */
 export function parseBase(v) {
   const [url, pin] = v.split("|");
   const out = { url: url.replace(/\/$/, ""), override: undefined };
@@ -52,7 +36,6 @@ export function parseBase(v) {
   return out;
 }
 
-/** The curl options every request of an arm carries. */
 export function armOptions(base) {
   const a = ["-sS", "-A", UA, "-H", "accept-encoding: br, gzip", "-o", "/dev/null", "-w", FORMAT];
   if (base.override) a.push("-H", `cloudflare-workers-version-overrides: ${base.override}`);
@@ -66,7 +49,6 @@ function positive(name, v) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** One curl process: `urls` on one connection when there are several. Returns one sample per URL. */
 async function curl(base, urls) {
   const a = [];
   for (const [i, u] of urls.entries()) a.push(...(i ? ["--next"] : []), ...armOptions(base), u);
@@ -109,7 +91,6 @@ async function main() {
   for (const path of o.paths) {
     const key = (i, b) => `${i}:${b.url}${b.override ? `|${b.override}` : ""}`;
     const byBase = Object.fromEntries(o.bases.map((b, i) => [key(i, b), { cold: [], warm: [] }]));
-    // New connections, interleaved base by base.
     for (let r = 0; r < o.n; r++) {
       for (const [i, b] of o.bases.entries()) {
         take(1);
@@ -117,8 +98,6 @@ async function main() {
         await sleep(o.gap);
       }
     }
-    // One warm connection per base: the first request opens it and is dropped, the next N are measured.
-    // Bases alternate in blocks of 5 so neither always runs first.
     for (let block = 0; block * 5 < o.n; block++) {
       for (const [i, b] of (block % 2 ? [...o.bases.entries()].reverse() : [...o.bases.entries()])) {
         const k = Math.min(5, o.n - block * 5);

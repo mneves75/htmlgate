@@ -128,7 +128,6 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
       command(process.execPath, [join(ROOT, "node_modules/typescript/bin/tsc"), "-p", build,
         "--typeRoots", join(ROOT, "node_modules/@types")]);
       const fileList = (directory, prefix = "") => {
-        // The directory itself is checked too: lstatting only its children would follow a symlinked libexec.
         if (lstatSync(directory).isSymbolicLink()) throw new Error(`Unsafe installed artifact: ${prefix || "."}`);
         return readdirSync(directory).sort().flatMap((name) => {
           const relative = prefix + name;
@@ -137,9 +136,6 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
           return stat.isDirectory() ? fileList(join(directory, name), relative + "/") : [relative];
         });
       };
-      // Homebrew hoists the metafiles out of libexec into the keg root after the formula's install step, so libexec
-      // holds the built JavaScript and the manifest; the licence and README are checked at the keg root, where
-      // Homebrew puts them and where a reader finds them.
       const libexecFiles = ["package.json", ...fileList(join(build, "dist"), "dist/")].sort();
       const libexec = join(installedPrefix, "libexec");
       const actualFiles = fileList(libexec);
@@ -150,8 +146,6 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
         const installed = readFileSync(join(libexec, name));
         const built = readFileSync(join(build, name));
         if (installed.equals(built)) continue;
-        // Homebrew rewrites a script's shebang to the absolute Homebrew node the formula depends on, so the launcher's
-        // first line legitimately differs and nothing after it may.
         if (name === "dist/bin.js" && rewroteShebang(installed, built, join(nodePrefix, "bin/node"))) continue;
         throw new Error(`Installed artifact mismatch: ${name}`);
       }
@@ -165,7 +159,6 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
     step("checking the installed CLI version");
     const prefix = absolutePath(["--prefix"]);
     const launcher = `#!/bin/sh\nexec "${join(nodePrefix, "bin/node")}" "${join(installedPrefix, "libexec/dist/bin.js")}" "$@"\n`;
-    // The keg holds the launcher as a file; Homebrew links it onto PATH with a symlink that must point back at this keg.
     const kegLauncher = join(installedPrefix, "bin/htmlgate");
     if (lstatSync(kegLauncher).isSymbolicLink()) throw new Error("Unsafe installed artifact: bin/htmlgate is a symlink.");
     if (readFileSync(kegLauncher, "utf8") !== launcher) throw new Error("Installed artifact mismatch: htmlgate launcher.");

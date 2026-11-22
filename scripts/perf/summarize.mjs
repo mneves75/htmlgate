@@ -1,7 +1,3 @@
-// Recomputes the published edge summaries from raw samples, stratified by data center (colo), so a comparison never
-// mixes colos: pooled medians across GIG and MAO move by tens of milliseconds for reasons that are not the code.
-//
-//   node scripts/perf/summarize.mjs docs/perf/raw/<run>.json [--colo GIG]
 import { readFileSync } from "node:fs";
 import { quantile } from "./edge.mjs";
 

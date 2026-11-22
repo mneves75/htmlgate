@@ -1,14 +1,3 @@
-// Page-load benchmark in headless Chrome, the same way every run: one seeded Share of a fixed size, WARMUP loads,
-// then RUNS measured loads per page; the verdict is each page's p95 load (navigation start to the load event,
-// the Share's frame included) against BUDGET_MS.
-//   pnpm run bench                     every page, against the real Worker under `wrangler dev` (local D1 and R2,
-//                                      the stand-in Access certs from the tests)
-//   pnpm run bench --live <url>        a deployed Instance's pages that need no sign-in (a Public Share's page and
-//                                      body, not-found); needs HTMLGATE_TOKEN, and deletes its Share afterwards
-//   pnpm run bench --site <url>        a deployed landing's two pages (the local run measures them too)
-// Load on the host only slows pages down, so a pass on a busy host still counts; a page over budget while the
-// 1-minute load average reached MAX_LOAD proves nothing either way. Exits 0 when every page's p95 is under
-// BUDGET_MS, 1 when one is not on a quiet host, 2 when one is not but the host was busy.
 import { execFile } from "node:child_process";
 import { loadavg } from "node:os";
 import { join } from "node:path";
@@ -16,19 +5,14 @@ import { promisify } from "node:util";
 import { importJWK, SignJWT } from "jose";
 import { writeZip } from "../packages/cli/src/zip.ts";
 import { SLUG } from "../src/ids.ts";
+import { HOME_SHARES } from "../src/pages.ts";
 import { AUD, AUTHOR, settings, startCerts, startInstance, startSite } from "../test/global-setup.ts";
 
 const run = promisify(execFile);
 const BIN = join(process.cwd(), "node_modules/.bin/agent-browser");
 const SESSION = `htmlgate-bench-${process.pid}`;
 const DEV_BUDGET_MS = 50;
-// CI runs on macos-15: 3 cores, Chrome and workerd on the same CPU as the pages they measure. The same page that
-// loads in 20-30 ms on the 18-core dev machine lands near 2x there, which is the runner, not the page. CI therefore
-// measures against a runner-class allowance: it still catches a real regression, and local and --live runs keep the
-// dev-machine target. HTMLGATE_BENCH_BUDGET_MS overrides either.
 const CI_BUDGET_MS = 150;
-// An override is a person typing a number, so it is validated: without this, a typo becomes NaN, every `p95 >= NaN`
-// comparison is false, and the page budget passes without measuring anything.
 function parseFinite(raw: string | undefined, fallback: number, min: number): number {
   if (raw === undefined || raw.trim() === "") return fallback;
   const n = Number(raw);
@@ -45,9 +29,6 @@ const arg = (name: string) => {
 };
 const RUNS = Math.floor(parseFinite(arg("--runs"), 20, 1));
 const LIVE = arg("--live");
-// A deployed Instance may sit behind a rate limiting rule as strict as 20 requests per 10 s per IP on /p/, /f/ and
-// /api/ (docs/operator.md). Under --live each request holds the next one back GAP_MS, and a page load, its page and its
-// framed body, holds it back twice that, so no 10 s holds more than 18 requests. Local runs do not wait.
 const GAP_MS = LIVE ? parseFinite(process.env.HTMLGATE_LIVE_GAP_MS, 600, 0) : 0;
 let next = 0;
 async function pace(requests: number) {
@@ -55,7 +36,6 @@ async function pace(requests: number) {
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   next = Date.now() + requests * GAP_MS;
 }
-/** fetch, paced like every other request a benchmark sends. */
 async function send(url: string, init: RequestInit): Promise<Response> {
   await pace(1);
   return fetch(url, init);
@@ -65,13 +45,11 @@ const LANDING: [string, string, number][] = [["landing (pt-BR)", "/", 200], ["la
 
 const ab = async (...args: string[]) => (await run(BIN, ["--session", SESSION, ...args], { timeout: 30_000 })).stdout.trim();
 
-/** A Share of the kind the Instance is for: a self-contained report with inline styles, about 40 KB. */
 function sampleShare(): string {
   const rows = Array.from({ length: 300 }, (_, i) => `<tr><td>${i}</td><td>item ${i}</td><td>${(i * 37) % 1000}</td><td>ok</td></tr>`).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Report</title><style>body{font:16px system-ui;margin:2rem}table{border-collapse:collapse}td{padding:4px 8px;border:1px solid #ccc}</style></head><body><h1>Weekly report</h1><p>${"Lorem ipsum dolor sit amet. ".repeat(40)}</p><table>${rows}</table></body></html>`;
 }
 
-/** The created Share's slug, checked: the cleanup later puts it in a URL. */
 async function createdSlug(r: Response, what: string): Promise<string> {
   if (!r.ok) throw new Error(`${what}: HTTP ${r.status}`);
   const value: unknown = await r.json();
@@ -81,14 +59,12 @@ async function createdSlug(r: Response, what: string): Promise<string> {
   return value.slug;
 }
 
-/** The sample Share as a site: its index page and the stylesheet it loads, from a zip. */
 function sampleSite(): Uint8Array {
   const html = sampleShare().replace(/<style>[^<]*<\/style>/, '<link rel="stylesheet" href="css/report.css">');
   const css = "body{font:16px system-ui;margin:2rem}table{border-collapse:collapse}td{padding:4px 8px;border:1px solid #ccc}";
   return writeZip([{ path: "index.html", data: new TextEncoder().encode(html) }, { path: "css/report.css", data: new TextEncoder().encode(css) }]);
 }
 
-/** Publishes the sample site and returns its slug. */
 async function publishSite(base: string, token: string, makePublic: boolean): Promise<string> {
   const headers = { authorization: `Bearer ${token}` };
   const r = await send(`${base}/api/shares?title=Weekly%20report`, { method: "POST", headers: { ...headers, "content-type": "application/zip" }, redirect: "manual", body: sampleSite() });
@@ -102,7 +78,6 @@ const pct = (xs: number[], p: number) => {
   return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)]!;
 };
 
-/** Publishes the sample Share with an API token and returns its slug. */
 async function publish(base: string, token: string, makePublic: boolean, created: (slug: string) => void = () => {}): Promise<string> {
   const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
   const r = await send(`${base}/api/shares`, { method: "POST", headers, redirect: "manual", body: JSON.stringify({ html: sampleShare(), title: "Weekly report" }) });
@@ -120,10 +95,6 @@ async function makeSharePublic(base: string, token: string, slug: string): Promi
   if (!response.ok) throw new Error(`visibility: HTTP ${response.status}`);
 }
 
-/**
- * Loads each page WARMUP + RUNS times and prints one line per page. Returns how many are over budget; a page that
- * answers another status than it should is an error, whatever the load: a fast error page is not a fast page.
- */
 async function measure(base: string, pages: [string, string, number][], headers: Record<string, string>, where: string): Promise<number> {
   await ab("open", "about:blank");
   if (Object.keys(headers).length) await ab("set", "headers", JSON.stringify(headers));
@@ -170,7 +141,6 @@ async function measure(base: string, pages: [string, string, number][], headers:
 
 async function local(): Promise<number> {
   const over = await instancePages();
-  // Started only now, so it never shares the host with the Instance being measured.
   const site = await startSite();
   try {
     return over + (await measure(site.base, LANDING, {}, "the landing under wrangler dev --local"));
@@ -200,8 +170,7 @@ async function instancePages(): Promise<number> {
     const open = await publish(base, token, true);
     const site = await publishSite(base, token, true);
     const gatedSite = await publishSite(base, token, false);
-    // The Author's home lists up to 50 Shares: measure it full, and let the metrics report count them.
-    for (let i = 0; i < 46; i++) await publish(base, token, false);
+    for (let i = 0; i < HOME_SHARES - 4; i++) await publish(base, token, false);
     return await measure(base, [
       ["home", "/", 200],
       ["tokens", "/tokens", 200],

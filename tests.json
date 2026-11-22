@@ -128,6 +128,15 @@
         "HOME_SHARES - 4 in scripts/bench.ts",
         "storage-status.sql parity test in test/storage-cost.test.ts"
       ]
+    },
+    "pr3FormalVerification": {
+      "status": "passed",
+      "storeReachableStates": 104068,
+      "storeTransitions": 328065,
+      "revokeReachableStates": 8,
+      "historicalBugReplaysCaught": 7,
+      "realBugFoundAndFixed": "Store.dueNow same-millisecond conflict with Store.emptyTrash deleting re-ledgered R2 row",
+      "formalTestsPassed": 10
     }
   }
 }

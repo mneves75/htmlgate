@@ -10,6 +10,9 @@ case "$cmd" in
   lint)
     pnpm run lint
     ;;
+  verify)
+    pnpm run verify:model
+    ;;
   check)
     pnpm run check
     ;;
@@ -17,7 +20,7 @@ case "$cmd" in
     pnpm run mutate --check
     ;;
   *)
-    echo "Usage: ./init.sh [setup|lint|check|mutate-check]" >&2
+    echo "Usage: ./init.sh [setup|lint|verify|check|mutate-check]" >&2
     exit 2
     ;;
 esac

@@ -289,7 +289,7 @@ const validBucketIdentity = (bucket) => typeof bucket?.createdAt === "string" &&
 const sameBucket = (a, b) => a.createdAt === b.createdAt && a.jurisdiction === b.jurisdiction;
 
 function checkBucketPrivacy(bucket) {
-  const managed = cf("r2", "buckets", "domains", "managed", "list", "--bucket-name", bucket);
+  const managed = cf("r2", "buckets", "domains", "managed", "get", bucket);
   const custom = cf("r2", "buckets", "domains", "custom", "list", "--bucket-name", bucket);
   if (managed?.enabled !== false || !Array.isArray(custom?.domains) || custom.domains.some((d) => !d || d.enabled !== false)) throw new Error("The reused R2 bucket is public or its privacy is unknown. Disable every public domain before setup.");
 }
@@ -479,7 +479,7 @@ async function main() {
   step("checking the Cloudflare logins");
   const accountId = checkSameAccount(wranglerWho(), cf("auth", "whoami"), process.env);
 
-  const orgs = cf("zero-trust", "organizations", "list");
+  const orgs = cf("zero-trust", "organization", "get");
   const org = Array.isArray(orgs) ? orgs[0] : orgs;
   const authDomain = org?.auth_domain;
   if (!authDomain) throw new Error("This account has no Zero Trust organization. Create one in the dashboard (Zero Trust), then run setup again.");

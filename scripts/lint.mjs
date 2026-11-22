@@ -79,8 +79,11 @@ export function lintSource(relPath, content) {
       if (inWorkerSrc && relPath !== "src/http.ts") {
         report("no-raw-response", lineOf(sf, node.getStart(sf)), "Do not call `new Response(...)` outside src/http.ts. Use text(), json(), fail(), redirect(), noContent(), stream(), bytes(), or copyResponse() from ./http so BASE hardening headers are never dropped.");
       }
-      if (inSiteSrc && !isInsideFunction(node, "withHeaders") && !isInsideFunction(node, "redirect") && !isInsideFunction(node, "fetch")) {
-        report("no-raw-response", lineOf(sf, node.getStart(sf)), "Wrap every landing Response in withHeaders() so CSP and HSTS headers are never dropped.");
+      if (inSiteSrc && !isInsideFunction(node, "withHeaders")) {
+        const wrapped = node.parent && ts.isCallExpression(node.parent) && ts.isIdentifier(node.parent.expression) && node.parent.expression.text === "withHeaders";
+        if (!wrapped) {
+          report("no-raw-response", lineOf(sf, node.getStart(sf)), "Wrap every landing Response in withHeaders() so CSP and HSTS headers are never dropped.");
+        }
       }
     }
 
@@ -90,13 +93,21 @@ export function lintSource(relPath, content) {
         const init = node.arguments[1];
         const isSendWrapper = relPath === "scripts/bench.ts" && isInsideFunction(node, "send");
         const isPacedWrapper = relPath === "scripts/smoke.mjs" && isInsideFunction(node, "paced");
-        if (!isSendWrapper) {
+        if (isSendWrapper) {
+          if (!init) {
+            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), "Forward the caller's RequestInit (including `redirect: \"manual\"`) to fetch() inside send().");
+          }
+        } else if (isPacedWrapper) {
+          if (!init || !ts.isObjectLiteralExpression(init) || !hasObjectSpread(init) || !objectProperty(init, "signal")) {
+            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), "paced() must forward `...init` and set a deadline `signal` (e.g. `AbortSignal.timeout(...)`) on fetch().");
+          }
+        } else {
           if (!init || !ts.isObjectLiteralExpression(init)) {
             report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), 'Pass an options object with `redirect: "manual"` and a timeout `signal` to fetch().');
           } else {
             const redir = objectProperty(init, "redirect");
             const sig = objectProperty(init, "signal");
-            if (!isPacedWrapper && stringLiteral(redir) !== "manual") {
+            if (stringLiteral(redir) !== "manual") {
               report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), 'Set `redirect: "manual"` on fetch() so credentials and tokens are never forwarded across redirects.');
             }
             if (!sig && !hasObjectSpread(init)) {

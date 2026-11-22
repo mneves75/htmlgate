@@ -182,7 +182,7 @@ dependency for the legacy JavaScript compiler API.
 
 ```sh
 pnpm run check         # AST lint, formal Store/revokeAll model check, typecheck, and end-to-end tests through `wrangler dev`, including the htmlgate CLI
-pnpm run lint          # 10 AST invariant rules and version sync check (`pnpm run version:sync <ver>` bumps every release surface together)
+pnpm run lint          # 10 AST invariant rules and version sync check (`pnpm run version:sync <ver> && pnpm run cli:formula` updates packages, pages and the Homebrew formula)
 pnpm run verify:model  # exhaustive BFS model check of D1/R2 Store lifecycle and revokeAll containment + 7 historical bug replays
 pnpm run mutate        # requires an assertion to catch each violation; runner failures are BROKEN
 pnpm run bench         # every page's load time in headless Chrome, the landing's included; fails at 50 ms p95

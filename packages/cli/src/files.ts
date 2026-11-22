@@ -35,6 +35,7 @@ async function openReal(path: string): Promise<FileHandle> {
   const fh = await open(path, flags | constants.O_NOFOLLOW).catch((e: NodeJS.ErrnoException) => {
     throw e.code === "ELOOP" ? linked() : e;
   });
+  // Linux has no O_NOFOLLOW_ANY: confirm the opened descriptor's resolved path matches what was requested.
   if (process.platform === "linux" && (await readlink(`/proc/self/fd/${fh.fd}`)) !== path) {
     await fh.close();
     throw linked();

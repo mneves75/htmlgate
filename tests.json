@@ -74,7 +74,34 @@
       "passed": 87,
       "status": "pass"
     },
-    "production": {"status": "blocked", "servedVersion": "0.1.18", "pendingMigrations": 0},
-    "staging": {"status": "not deployed", "instanceFound": false, "landingPreviewIngress": false}
+    "finalIntegration": {
+      "candidate": "6be9b9fee5397be51c2146fc29d33f45c1260bc4",
+      "status": "pass",
+      "files": 74,
+      "passed": 1394,
+      "tagDependentSkips": 2,
+      "taggedArchivePassed": 12
+    },
+    "production": {
+      "status": "deployed",
+      "servedVersion": "0.1.20",
+      "tag": "v0.1.20",
+      "releaseMerge": "287b4b54a95375751f1aa38062dd395898340c0f",
+      "pendingMigrations": 0,
+      "securityVerdict": "waived",
+      "smokePassed": 16,
+      "independentReadbackPassed": 11,
+      "landingP95Ms": {"pt-BR": 16.6, "en-US": 17.9},
+      "instanceBenchmark": {"status": "inconclusive", "peakOneMinuteLoad": 281.8, "exitCode": 2},
+      "releaseValidation": {"run": 44968705590, "statusAtCloseout": "in_progress"}
+    },
+    "staging": {
+      "status": "off",
+      "instanceFound": false,
+      "instanceStorageFound": false,
+      "landingPreviewIngress": false,
+      "landingPreviewCrons": 0,
+      "landingPreviewRequests24h": 0
+    }
   }
 }

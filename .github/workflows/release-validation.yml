@@ -66,6 +66,8 @@ jobs:
         run: pnpm audit --audit-level high 2>&1 | tee .scratch/ci-evidence/audit.log
       - name: Structural lint and version sync
         run: pnpm run lint 2>&1 | tee .scratch/ci-evidence/lint.log
+      - name: Formal state-machine verification and bug replays
+        run: pnpm run verify:model 2>&1 | tee .scratch/ci-evidence/formal.log
       - name: Check all mutation anchors
         run: pnpm run mutate --check | tee .scratch/ci-evidence/anchors.log
       - name: Full typecheck and integration tests

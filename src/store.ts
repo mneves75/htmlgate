@@ -79,7 +79,7 @@ export class Store {
   }
 
   private async dueNow(key: string, size: number): Promise<void> {
-    await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) VALUES (?, ?, ${CLOCK}) ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at`)
+    await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) VALUES (?, ?, ${CLOCK}) ON CONFLICT (body_key) DO UPDATE SET due_at = CASE WHEN excluded.due_at = trash.due_at THEN excluded.due_at + 1 ELSE excluded.due_at END`)
       .bind(key, size).run();
   }
 

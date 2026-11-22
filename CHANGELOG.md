@@ -15,7 +15,7 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ### Added
 
-- 10-rule AST invariant linter (`scripts/lint.mjs`, `pnpm run lint`) and release version synchronizer (`scripts/sync-version.mjs`, `pnpm run version:sync`) wired into `pnpm run check` and CI, backed by negative tests (`test/lint.test.ts`).
+- Repository invariant linter (`scripts/lint.mjs`, `pnpm run lint`, 9 AST rules plus version sync) and release version synchronizer (`scripts/sync-version.mjs`, `pnpm run version:sync`) wired into `pnpm run check` and CI, backed by negative tests (`test/lint.test.ts`).
 - Exhaustive BFS formal model checker (`formal/store-lifecycle.model.ts`, `formal/verify.ts`, `pnpm run verify:model`) and project-local verification skill (`.claude/skills/store-lifecycle-verification/SKILL.md`), verifying 104,068 reachable `Store` lifecycle states and `revokeAll` containment with 7 historical/discovered bug replays wired into `pnpm run check` and CI.
 - `init.sh` helper script for reproducible local check/lint/model-verification runs.
 

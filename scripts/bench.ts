@@ -38,7 +38,7 @@ async function pace(requests: number) {
 }
 async function send(url: string, init: RequestInit): Promise<Response> {
   await pace(1);
-  return fetch(url, init);
+  return fetch(url, { signal: AbortSignal.timeout(30_000), ...init });
 }
 const SITE = arg("--site");
 const LANDING: [string, string, number][] = [["landing (pt-BR)", "/", 200], ["landing (en-US)", "/en/", 200]];

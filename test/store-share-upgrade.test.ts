@@ -8,9 +8,11 @@ test("migration 0005 preserves every Share, Version, legacy body, trash row, and
   let legacy: Record<string, SQLOutputValue>[] = [];
   let trash: Record<string, SQLOutputValue>[] = [];
   let tokens: Record<string, SQLOutputValue>[] = [];
+  let columnsBefore: Record<string, SQLOutputValue>[] = [];
   const env = fakeEnv({
     before: "0005_shares.sql",
     seed: (db) => {
+      columnsBefore = db.prepare("PRAGMA table_info(drops)").all();
       db.prepare(`INSERT INTO tokens (id, author, name, digest, created_at, last_used_at, revoked_at)
         VALUES ('tok000000001', 'author@example.com', 'laptop', 'digest-value', 90, 150, NULL)`).run();
       const insert = db.prepare(`INSERT INTO drops (slug, author, title, description, tags, public, latest_version,
@@ -41,6 +43,7 @@ test("migration 0005 preserves every Share, Version, legacy body, trash row, and
     },
   });
   try {
+    expect(env.sqlite.prepare("PRAGMA table_info(shares)").all()).toEqual(columnsBefore);
     expect(env.sqlite.prepare("SELECT * FROM shares ORDER BY slug").all()).toEqual(shares);
     expect(env.sqlite.prepare("SELECT * FROM versions ORDER BY slug, n").all()).toEqual(versions);
     expect(env.sqlite.prepare("SELECT * FROM versions_d1_legacy ORDER BY slug, n").all()).toEqual(legacy);

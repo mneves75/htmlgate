@@ -37,6 +37,10 @@ describe("repository structural lint", () => {
     const replacedBenchInit = lintSource("scripts/bench.ts", "async function send(url: string, init: RequestInit) { return fetch(url, {}); }");
     expect(replacedBenchInit.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
 
+    const droppedBenchDeadline = lintSource("scripts/bench.ts", "async function send(url: string, init: RequestInit) { return fetch(url, { ...init }); }");
+    expect(droppedBenchDeadline.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
+    expect(droppedBenchDeadline[0].message).toContain("signal");
+
     const droppedSmokeDeadline = lintSource("scripts/smoke.mjs", "async function paced(url, init) { return fetch(url, { ...init }); }");
     expect(droppedSmokeDeadline.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
     expect(droppedSmokeDeadline[0].message).toContain("signal");

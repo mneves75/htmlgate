@@ -136,6 +136,7 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
           return stat.isDirectory() ? fileList(join(directory, name), relative + "/") : [relative];
         });
       };
+      // Homebrew hoists metafiles (LICENSE, README.md) out of libexec into the keg root after install.
       const libexecFiles = ["package.json", ...fileList(join(build, "dist"), "dist/")].sort();
       const libexec = join(installedPrefix, "libexec");
       const actualFiles = fileList(libexec);

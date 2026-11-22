@@ -29,13 +29,17 @@
 
 Local checks use disposable synthetic data. Cloudflare accounts, backups, and live Shares are separate evidence for deployment and recovery. Test results and unresolved checks are recorded in `tests.json`.
 
-## Production release preparation
+## Production release
 
-- Production still serves `0.1.18` on the Instance and landing. Cloudflare reports no pending production migrations. The public `v0.1.19` tag identifies the build that passed tagged CI.
+- Before rollout, the Instance and landing served `0.1.18`. Cloudflare reported no pending production migrations. The public `v0.1.19` tag identifies the intermediate build that passed tagged CI.
 - Cloudflare inventory found no staging Instance or staging D1 or R2 resource. The separate landing preview has workers.dev and preview URLs disabled.
 - Both staging setup controls failed against the previous code because setup installed the hourly cron. The `0.1.20` candidate accepts a staging setting and sends an empty schedule on the closed bootstrap, serving deploy and later updates. Existing Instances keep the default hourly cleanup.
 - The CLI release archive was rebuilt for `0.1.20`. Independent verification reproduced the archive bytes and exercised the setup command against a synthetic provider.
 - The source review caught a staging-only wording mismatch. The API, both erasure messages and the privacy inventory now distinguish an immediate access change from a scheduled physical cleanup.
 - The first `0.1.20` revision passed 1,391 integration tests with two pre-tag skips. Three browser commands failed before their flow assertions. See `tests.json` for the revision and run boundaries.
 - A focused rerun with installed Chrome passed all 87 cases across six suites, including all 11 browser cases and the three flows that timed out in the full run.
-- Live staging, production security acceptance, backup and restore evidence, and the application rollback rehearsal are pending. Release and staging shutdown depend on that live evidence.
+- The final release candidate passed 1,394 integration tests. After tagging, the release archive suite passed all 12 checks, including the two previously skipped.
+- The Instance and landing serve `v0.1.20`. All 16 authenticated smoke checks and 11 independent readback checks passed. The tag identifies the deployed commit, and PR #28 merged the same release tree.
+- The landing passed the 50 ms p95 budget in both languages. The live Instance benchmark was inconclusive under high host load. Isolated release validation was in progress at closeout.
+- Staging has no Instance database or bucket. The landing preview has no public ingress or cron triggers and recorded zero invocations in the verified 24-hour window.
+- The owner authorized production under a release-specific waiver. The security verdict was WAIVED. The deferred controls remain recorded in the private release evidence.

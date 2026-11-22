@@ -58,9 +58,11 @@ export function readInstance(path) {
   }
   const mfa = raw.mfa === undefined ? false : raw.mfa;
   if (typeof mfa !== "boolean") throw new Error("mfa must be true or false (default false).");
+  const staging = raw.staging === undefined ? false : raw.staging;
+  if (typeof staging !== "boolean") throw new Error("staging must be true or false (default false).");
   const author = raw.authorEmail.trim().toLowerCase();
   const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];
-  return { name: raw.name, author, allowlist, domain, language, expiryDays, mfa, ...(raw.bootstrapStorage === undefined ? {} : { bootstrapStorage: raw.bootstrapStorage }) };
+  return { name: raw.name, author, allowlist, domain, language, expiryDays, mfa, staging, ...(raw.bootstrapStorage === undefined ? {} : { bootstrapStorage: raw.bootstrapStorage }) };
 }
 
 /** The settings the deployed Worker reads (src/config.ts). */
@@ -160,7 +162,7 @@ export function workerConfig(inst, db, { open, vars, accountId }) {
       { name: "WRITE_LIMIT", namespace_id: "1001", simple: { limit: 60, period: 60 } },
       { name: "VIEW_LIMIT", namespace_id: "1002", simple: { limit: 1, period: 60 } },
     ],
-    triggers: { crons: CRONS },
+    triggers: { crons: inst.staging ? [] : CRONS },
     // The same rule as wrangler.jsonc: the card image is bundled from the landing's poster.
     rules: [{ type: "Data", globs: ["**/media/*.jpg"], fallthrough: true }],
     // The Worker's own logs (only unexpected errors), but no record of every request and no traces (docs/privacy.md).

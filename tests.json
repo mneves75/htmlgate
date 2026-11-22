@@ -47,5 +47,34 @@
     "releaseArtifact": {"version": "0.1.19", "revision": 1, "candidateArchive": "pass", "sha256": "4dff69ef0b3cf02fd4dacf92383e9d912a78cb1b478f012a79f2399941d72e98"},
     "remoteMain": {"mergeReceipt": "https://github.com/mneves75/htmlgate/pull/27", "taggedValidation": "https://github.com/mneves75/htmlgate/actions/workflows/release-validation.yml"},
     "remoteTag": {"ref": "refs/tags/v0.1.19", "expectedTarget": "merge commit of PR 27"}
+  },
+  "productionRelease": {
+    "candidateVersion": "0.1.20",
+    "baseline": "e8fd5b91c27f322e58a7f821fa559a11a9d99718",
+    "redControls": ["first staging setup schedules cron", "staging update schedules cron"],
+    "candidateChecks": {
+      "typecheck": "pass",
+      "dependencyAuditHigh": "pass",
+      "mutationAnchors": 250,
+      "independentSetup": {"status": "pass", "tests": 142, "model": "gpt-6.2-astra", "provider": "synthetic"},
+      "cliArchiveSha256": "f8a686d053d2a49c55c78e36895f6013450b3a6f9c2e466725d27f5a6b3d03d7",
+      "cccc": {"readInstance": 24, "workerConfig": 5, "setupMain": 54}
+    },
+    "initialIntegration": {
+      "candidate": "6f6db9af28639245bcf7f6e29ea37f531001f310",
+      "passed": 1391,
+      "tagDependentSkips": 2,
+      "browserCommandFailures": 3,
+      "status": "fail"
+    },
+    "focusedRerun": {
+      "browser": "installed Chrome",
+      "browserCases": 11,
+      "files": 6,
+      "passed": 87,
+      "status": "pass"
+    },
+    "production": {"status": "blocked", "servedVersion": "0.1.18", "pendingMigrations": 0},
+    "staging": {"status": "not deployed", "instanceFound": false, "landingPreviewIngress": false}
   }
 }

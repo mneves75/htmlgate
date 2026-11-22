@@ -127,7 +127,7 @@ const en = {
   eraseLead: "Erasure removes the Share and its Version records, including for Shares hidden by an API or CLI delete. Stored files are deleted separately.",
   eraseField: "Share link or slug",
   eraseHint: "Paste the Share's link, or its 12-character slug.",
-  erased: (slug: string) => `<code>${slug}</code> is no longer available. Erasure removes the Share and its Version records immediately. Stored files are deleted separately, with retries during hourly cleanup.`,
+  erased: (slug: string) => `<code>${slug}</code> is no longer available. Erasure removes the Share and its Version records immediately. Stored files are deleted separately. Scheduled cleanup retries failures when enabled.`,
   eraseErrors: {
     refused: "Refused: this change did not come from this Instance's own page.",
     "too-large": "That form is too large. Paste one Share's link or slug.",
@@ -234,7 +234,7 @@ const ptBR: typeof en = {
   eraseLead: "A eliminação remove o Share e os registros das Versões, inclusive de Shares ocultados pela API ou pela CLI. A exclusão dos arquivos armazenados ocorre separadamente.",
   eraseField: "Link ou slug do Share",
   eraseHint: "Cole o link do Share, ou o slug de 12 caracteres.",
-  erased: (slug: string) => `<code>${slug}</code> não está mais disponível. A eliminação remove imediatamente o Share e os registros das Versões. A exclusão dos arquivos armazenados ocorre separadamente, com novas tentativas na limpeza a cada hora.`,
+  erased: (slug: string) => `<code>${slug}</code> não está mais disponível. A eliminação remove imediatamente o Share e os registros das Versões. A exclusão dos arquivos armazenados ocorre separadamente. A limpeza agendada, quando ativa, tenta novamente se houver falha.`,
   eraseErrors: {
     refused: "Recusado: este pedido não veio da página desta Instância.",
     "too-large": "Formulário grande demais. Cole o link ou o slug de um Share.",

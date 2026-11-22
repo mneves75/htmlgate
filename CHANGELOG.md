@@ -2,6 +2,12 @@
 
 All notable changes to htmlgate. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.1.20] - 2026-11-21
+
+### Fixed
+
+- Setup keeps scheduled cleanup off for Instances marked as staging, including during their initial deployment. The API and erasure confirmation explain when scheduled cleanup applies.
+
 ## [0.1.19] - 2026-11-21
 
 ### Security

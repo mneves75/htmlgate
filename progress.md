@@ -35,4 +35,7 @@ Local checks use disposable synthetic data. Cloudflare accounts, backups, and li
 - Cloudflare inventory found no staging Instance or staging D1 or R2 resource. The separate landing preview has workers.dev and preview URLs disabled.
 - Both staging setup controls failed against the previous code because setup installed the hourly cron. The `0.1.20` candidate accepts a staging setting and sends an empty schedule on the closed bootstrap, serving deploy and later updates. Existing Instances keep the default hourly cleanup.
 - The CLI release archive was rebuilt for `0.1.20`. Independent verification reproduced the archive bytes and exercised the setup command against a synthetic provider.
+- The source review caught a staging-only wording mismatch. The API, both erasure messages and the privacy inventory now distinguish an immediate access change from a scheduled physical cleanup.
+- The first `0.1.20` revision passed 1,391 integration tests with two pre-tag skips. Three browser commands failed before their flow assertions. See `tests.json` for the revision and run boundaries.
+- A focused rerun with installed Chrome passed all 87 cases across six suites, including all 11 browser cases and the three flows that timed out in the full run.
 - Live staging, production security acceptance, backup and restore evidence, and the application rollback rehearsal are pending. Release and staging shutdown depend on that live evidence.

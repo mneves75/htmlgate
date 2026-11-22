@@ -123,8 +123,8 @@ function onboard(url: URL, cfg: Config): Response {
       default_days: cfg.expiryDays,
       rule: "A Share expires default_days after its latest publish (never when 0), unless a Publisher sets expires_at: "
         + "milliseconds since the epoch, 1 minute to 3650 days ahead, or null for never. A set date stays until changed. "
-        + "An expired Share answers 404 everywhere immediately. Its bodies are deleted in bounded hourly cleanup batches, "
-        + "with retries on later runs; backlog or failures can delay physical deletion beyond an hour. There is no guaranteed deletion deadline.",
+        + "An expired Share answers 404 everywhere immediately. When scheduled cleanup is enabled, it deletes bodies in bounded hourly batches. "
+        + "Backlog or failures can delay physical deletion. There is no guaranteed deletion deadline.",
     },
     requests: [
       "POST /api/shares {html, title, description?, metadata?, expires_at?} -> 201 Share (starts gated)",

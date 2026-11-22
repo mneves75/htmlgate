@@ -60,6 +60,20 @@
       "cliArchiveSha256": "f8a686d053d2a49c55c78e36895f6013450b3a6f9c2e466725d27f5a6b3d03d7",
       "cccc": {"readInstance": 24, "workerConfig": 5, "setupMain": 54}
     },
+    "initialIntegration": {
+      "candidate": "6f6db9af28639245bcf7f6e29ea37f531001f310",
+      "passed": 1391,
+      "tagDependentSkips": 2,
+      "browserCommandFailures": 3,
+      "status": "fail"
+    },
+    "focusedRerun": {
+      "browser": "installed Chrome",
+      "browserCases": 11,
+      "files": 6,
+      "passed": 87,
+      "status": "pass"
+    },
     "production": {"status": "blocked", "servedVersion": "0.1.18", "pendingMigrations": 0},
     "staging": {"status": "not deployed", "instanceFound": false, "landingPreviewIngress": false}
   }

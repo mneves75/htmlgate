@@ -6,7 +6,7 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ### Fixed
 
-- Setup keeps scheduled cleanup off for Instances marked as staging, including during their initial deployment.
+- Setup keeps scheduled cleanup off for Instances marked as staging, including during their initial deployment. The API and erasure confirmation explain when scheduled cleanup applies.
 
 ## [0.1.19] - 2026-11-21
 

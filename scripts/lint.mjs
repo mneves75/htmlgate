@@ -94,12 +94,14 @@ export function lintSource(relPath, content) {
         const isSendWrapper = relPath === "scripts/bench.ts" && isInsideFunction(node, "send");
         const isPacedWrapper = relPath === "scripts/smoke.mjs" && isInsideFunction(node, "paced");
         if (isSendWrapper) {
-          if (!init) {
-            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), "Forward the caller's RequestInit (including `redirect: \"manual\"`) to fetch() inside send().");
+          if (!init || !ts.isIdentifier(init) || init.text !== "init") {
+            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), "Forward the caller's `init` RequestInit (including `redirect: \"manual\"`) to fetch() inside send().");
           }
         } else if (isPacedWrapper) {
-          if (!init || !ts.isObjectLiteralExpression(init) || !hasObjectSpread(init) || !objectProperty(init, "signal")) {
-            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), "paced() must forward `...init` and set a deadline `signal` (e.g. `AbortSignal.timeout(...)`) on fetch().");
+          const sig = init && ts.isObjectLiteralExpression(init) ? objectProperty(init, "signal") : undefined;
+          const validSignal = Boolean(sig && !(ts.isIdentifier(sig) && sig.text === "undefined") && sig.kind !== ts.SyntaxKind.NullKeyword && ts.isCallExpression(sig));
+          if (!init || !ts.isObjectLiteralExpression(init) || !hasObjectSpread(init) || !validSignal) {
+            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), "paced() must forward `...init` and set a deadline `signal` call (e.g. `AbortSignal.timeout(...)`) on fetch().");
           }
         } else {
           if (!init || !ts.isObjectLiteralExpression(init)) {

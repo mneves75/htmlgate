@@ -34,9 +34,15 @@ describe("repository structural lint", () => {
     const droppedBenchInit = lintSource("scripts/bench.ts", "async function send(url: string, init: RequestInit) { return fetch(url); }");
     expect(droppedBenchInit.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
 
+    const replacedBenchInit = lintSource("scripts/bench.ts", "async function send(url: string, init: RequestInit) { return fetch(url, {}); }");
+    expect(replacedBenchInit.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
+
     const droppedSmokeDeadline = lintSource("scripts/smoke.mjs", "async function paced(url, init) { return fetch(url, { ...init }); }");
     expect(droppedSmokeDeadline.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
     expect(droppedSmokeDeadline[0].message).toContain("signal");
+
+    const undefinedSmokeDeadline = lintSource("scripts/smoke.mjs", "async function paced(url, init) { return fetch(url, { ...init, signal: undefined }); }");
+    expect(undefinedSmokeDeadline.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
   });
 
   test("no-unpaginated-cf-list catches direct cf applications/workers/buckets list outside scripts/setup.mjs helpers", () => {
@@ -110,6 +116,11 @@ describe("repository structural lint", () => {
       const beforePkg = readFileSync(join(dir, "package.json"), "utf8");
       writeFileSync(join(dir, "site/public/404.html"), "<!doctype html><html><body>no span</body></html>");
       expect(() => syncVersion(dir, "9.9.9")).toThrow(/site\/public\/404\.html/);
+      expect(readFileSync(join(dir, "package.json"), "utf8")).toBe(beforePkg);
+
+      cpSync(join(process.cwd(), "site/public/404.html"), join(dir, "site/public/404.html"));
+      writeFileSync(join(dir, "packages/cli/package.json"), '{ "version": "0.1.0", broken');
+      expect(() => syncVersion(dir, "9.9.9")).toThrow();
       expect(readFileSync(join(dir, "package.json"), "utf8")).toBe(beforePkg);
     } finally {
       rmSync(dir, { recursive: true, force: true });

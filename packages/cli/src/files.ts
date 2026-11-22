@@ -16,6 +16,7 @@ async function openReal(path: string): Promise<FileHandle> {
   const linked = () => new CliError("unsafe_path", `${path} goes through a symbolic link. The CLI publishes only a real file, named by its real path.`, {
     hint: "Pass the file's real path (see `realpath`), or check who else can write to its directory.",
   });
+  // O_NONBLOCK prevents opening a FIFO from blocking before fstat.
   const flags = constants.O_RDONLY | constants.O_NONBLOCK;
   if (process.platform === "darwin") {
     // macOS /tmp, /var, and /etc are symlinks into /private.
@@ -25,6 +26,7 @@ async function openReal(path: string): Promise<FileHandle> {
     });
   }
   if (process.platform !== "linux") {
+    // Other platforms lack O_NOFOLLOW_ANY and /proc/self/fd; component lstat before open is best-effort against concurrent writes.
     const { root } = parse(path);
     let at = root;
     for (const part of path.slice(root.length).split(sep).filter(Boolean)) {

@@ -189,7 +189,7 @@
     "pr5Release0121": {
       "version": "0.1.21",
       "status": "candidate_ready",
-      "cliArchiveSha256": "611a2df5c7413e264dea6dc1e86cab62b66cb2192d0389c7cec95f2aba114c48",
+      "cliArchiveSha256": "2137f1181022d64a727a8d73324898752ec483318b1a3e01dbe1023d62fb5e83",
       "lintViolations": 0,
       "formalStates": 104068,
       "formalBugReplaysCaught": 7,

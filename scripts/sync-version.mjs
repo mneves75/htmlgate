@@ -65,6 +65,10 @@ export function syncVersion(root = ROOT, targetVersion) {
   };
   stage("package.json", pkgText, /"version":\s*"[^"]+"/g, `"version": "${version}"`, '"version" field');
   const cliText = readFileSync(join(root, "packages/cli/package.json"), "utf8");
+  const cliPkg = JSON.parse(cliText);
+  if (typeof cliPkg?.version !== "string") {
+    throw new Error('packages/cli/package.json must contain a valid JSON string "version" field.');
+  }
   stage("packages/cli/package.json", cliText, /"version":\s*"[^"]+"/g, `"version": "${version}"`, '"version" field');
   const srcVersionText = readFileSync(join(root, "src/version.ts"), "utf8");
   stage("src/version.ts", srcVersionText, /export const VERSION = "[^"]+";/g, `export const VERSION = "${version}";`, "VERSION export");

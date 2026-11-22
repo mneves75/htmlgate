@@ -103,24 +103,34 @@ export function lintSource(relPath, content) {
         const isPacedWrapper = relPath === "scripts/smoke.mjs" && isInsideFunction(node, "paced");
         if (isSendWrapper || isPacedWrapper) {
           let spreadIdx = -1;
+          let lastSpreadIdx = -1;
           let signalIdx = -1;
           let validSignal = false;
           if (init && ts.isObjectLiteralExpression(init)) {
             init.properties.forEach((prop, idx) => {
-              if (ts.isSpreadAssignment(prop) && ts.isIdentifier(prop.expression) && prop.expression.text === "init") spreadIdx = idx;
+              if (ts.isSpreadAssignment(prop)) {
+                lastSpreadIdx = idx;
+                if (ts.isIdentifier(prop.expression) && prop.expression.text === "init") spreadIdx = idx;
+              }
               if (ts.isPropertyAssignment(prop)) {
                 const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : undefined;
                 if (key === "signal") {
                   signalIdx = idx;
                   const sig = prop.initializer;
-                  validSignal = Boolean(!(ts.isIdentifier(sig) && sig.text === "undefined") && sig.kind !== ts.SyntaxKind.NullKeyword && ts.isCallExpression(sig));
+                  validSignal = Boolean(
+                    ts.isCallExpression(sig) &&
+                    ts.isPropertyAccessExpression(sig.expression) &&
+                    ts.isIdentifier(sig.expression.expression) &&
+                    sig.expression.expression.text === "AbortSignal" &&
+                    sig.expression.name.text === "timeout",
+                  );
                 }
               }
             });
           }
-          if (spreadIdx === -1 || signalIdx === -1 || !validSignal || spreadIdx > signalIdx) {
+          if (spreadIdx === -1 || signalIdx === -1 || !validSignal || lastSpreadIdx > signalIdx) {
             const fnName = isSendWrapper ? "send" : "paced";
-            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), `${fnName}() must spread \`...init\` before setting a deadline \`signal\` call (e.g. \`AbortSignal.timeout(...)\`) on fetch().`);
+            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), `${fnName}() must spread \`...init\` before \`signal: AbortSignal.timeout(...)\` with no trailing spread on fetch().`);
           }
         } else {
           if (!init || !ts.isObjectLiteralExpression(init)) {

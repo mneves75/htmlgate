@@ -50,6 +50,9 @@ export function syncVersion(root = ROOT, targetVersion) {
   const pkgPath = join(root, "package.json");
   const pkgText = readFileSync(pkgPath, "utf8");
   const pkg = JSON.parse(pkgText);
+  if (typeof pkg?.version !== "string") {
+    throw new Error('package.json must contain a top-level string "version" field.');
+  }
   const version = targetVersion ?? pkg.version;
   if (typeof version !== "string" || !SEMVER.test(version)) {
     throw new Error(`Invalid version "${version}". Expected X.Y.Z or X.Y.Z-beta.N.`);

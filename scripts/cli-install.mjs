@@ -136,7 +136,7 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
           return stat.isDirectory() ? fileList(join(directory, name), relative + "/") : [relative];
         });
       };
-      // Homebrew hoists metafiles (LICENSE, README.md) out of libexec into the keg root after install.
+      // Formula/htmlgate.rb installs LICENSE and README.md directly into the keg root via prefix.install.
       const libexecFiles = ["package.json", ...fileList(join(build, "dist"), "dist/")].sort();
       const libexec = join(installedPrefix, "libexec");
       const actualFiles = fileList(libexec);

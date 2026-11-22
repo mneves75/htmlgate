@@ -7,7 +7,7 @@
 // Usage: pnpm run site:deploy --preview | --live
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cf, checkCleanTree, checkDomain, checkSameAccount, listWorkers, sh, wranglerWho } from "./setup.mjs";
+import { cf, checkCleanTree, checkDomain, checkSameAccount, listApplications, listWorkers, sh, wranglerWho } from "./setup.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
@@ -28,8 +28,7 @@ export function deployPlan(argv) {
  * named after it), or, for a preview, a Worker that serves a domain, since a preview must never change one.
  */
 export function checkTarget(plan, cf) {
-  const apps = cf("zero-trust", "access", "applications", "list", "--per-page", "1000");
-  if (!Array.isArray(apps)) throw new Error("cf returned no Access application list.");
+  const apps = listApplications(cf);
   if (apps.some((a) => a.name === `htmlgate: ${plan.name}`)) throw new Error(`The Worker ${plan.name} is an htmlgate Instance. The landing will not deploy over it.`);
   const worker = listWorkers(cf).find((w) => w.name === plan.name);
   const domains = (worker?.references?.domains ?? []).map((d) => d.hostname);

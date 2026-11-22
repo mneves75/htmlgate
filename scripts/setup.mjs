@@ -201,10 +201,10 @@ export function listWorkers(cf) {
 }
 
 // Access lists page silently too. A partial list cannot prove that a name or destination is free.
-export function listApplications() {
+export function listApplications(cfImpl = cf) {
   const all = [];
   for (let page = 1; page <= 1000; page++) {
-    const batch = cf("zero-trust", "access", "applications", "list", "--per-page", "1000", "--page", String(page));
+    const batch = cfImpl("zero-trust", "access", "applications", "list", "--per-page", "1000", "--page", String(page));
     if (!Array.isArray(batch)) throw new Error("cf returned no Access application list.");
     if (!batch.length) return all;
     all.push(...batch);

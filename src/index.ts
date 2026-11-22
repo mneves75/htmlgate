@@ -3,7 +3,7 @@
 import { person } from "./access";
 import { handleApi } from "./api";
 import { readConfig, type Config, type Env, type Language } from "./config";
-import { BASE, contentTypeFor, fail, readCapped, redirect, stream, text } from "./http";
+import { bytes, contentTypeFor, copyResponse, fail, readCapped, redirect, stream, text } from "./http";
 import { POSITIVE, SLUG, newToken, randomHex, sha256Hex } from "./ids";
 import ogPoster from "../site/public/media/htmlgate-15s.jpg";
 import { SHARE_SANDBOX, HOME_SHARES, homePage, metricsPage, notFoundPage, tokensPage, viewerPage, type HomeNote, type PageResult, type Visitor } from "./pages";
@@ -106,9 +106,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
     // to be able to cache the card. It keeps BASE's hardening headers, nosniff included.
     const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, true, null);
     if (!share) return notFound(cfg.language, { signInPath: `/s/${card[1]}` });
-    return new Response(ogPoster, {
-      headers: { ...BASE, "content-type": OG_IMAGE_TYPE, "cache-control": "public, max-age=31536000, immutable" },
-    });
+    return bytes(ogPoster, OG_IMAGE_TYPE, { "cache-control": "public, max-age=31536000, immutable" });
   }
 
 
@@ -278,7 +276,7 @@ const SITE_HEADERS = {
 function noReferrer(res: Response): Response {
   const headers = new Headers(res.headers);
   headers.set("referrer-policy", "no-referrer");
-  return new Response(res.body, { status: res.status, headers });
+  return copyResponse(res, headers);
 }
 
 /**

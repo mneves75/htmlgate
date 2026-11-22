@@ -331,9 +331,9 @@ describe("deploying the landing", () => {
     expect(p.args).toEqual(["deploy", "-c", "site/wrangler.jsonc", "--name", "htmlgate-site", "--domain", "htmlgate.com", "--domain", "www.htmlgate.com"]);
   });
 
-  /** A stand-in for the cf CLI: one page of Workers, then an empty one, and the Access applications. */
+  /** A stand-in for the cf CLI: one page of Workers or Access applications, then an empty page. */
   const cfWith = (workers: unknown[], apps: unknown[] = []) => (...args: string[]) =>
-    args[0] === "workers" ? (args.includes("1") ? workers : []) : apps;
+    args[0] === "workers" ? (args.includes("1") ? workers : []) : (args.includes("1") ? apps : []);
 
   test("a deploy refuses a Worker that is an Instance, and a preview refuses one that serves a domain", () => {
     const preview = deployPlan(["--preview"]);
@@ -343,6 +343,9 @@ describe("deploying the landing", () => {
     expect(() => checkTarget(preview, cfWith([{ name: "htmlgate-site-preview", references: { domains: [{ hostname: "htmlgate.com" }] } }]))).toThrow(/Custom Domain/);
     expect(() => checkTarget(preview, cfWith([{ name: "htmlgate-site-preview" }], [{ name: "htmlgate: htmlgate-site-preview" }]))).toThrow(/Instance/);
     expect(() => checkTarget(live, cfWith([{ name: "htmlgate-site" }], [{ name: "htmlgate: htmlgate-site" }]))).toThrow(/Instance/);
+    const pagedApps = (...args: string[]) =>
+      args[0] === "workers" ? [] : args.includes("1") ? [{ name: "other" }] : args.includes("2") ? [{ name: "htmlgate: htmlgate-site" }] : [];
+    expect(() => checkTarget(live, pagedApps)).toThrow(/Instance/);
   });
 
   test("going live needs app.htmlgate.com to answer behind its sign-in, so no visitor lands on a dead link", async () => {

@@ -43,3 +43,8 @@ Local checks use disposable synthetic data. Cloudflare accounts, backups, and li
 - The landing passed the 50 ms p95 budget in both languages. The live Instance benchmark was inconclusive under high host load. Isolated release validation was in progress at closeout.
 - Staging has no Instance database or bucket. The landing preview has no public ingress or cron triggers and recorded zero invocations in the verified 24-hour window.
 - The owner authorized production under a release-specific waiver. The security verdict was WAIVED. The deferred controls remain recorded in the private release evidence.
+
+## Poteto-mode hardening pass
+
+- PR 1 (`hardening/prevent-recurring-mistakes`): audited git log and past fixes; fixed live recurrences (response creation in `src/index.ts` routed through `src/http.ts` `bytes()`/`copyResponse()`, paginated `listApplications(cf)` in `scripts/site-deploy.mjs`, `redirect: "manual"` on authenticated zip download and card probe in `scripts/smoke.mjs`, finite-number validation for `RUNS`/`GAP_MS`/`BUDGET_MS` in `scripts/bench.ts` and `scripts/smoke.mjs`); added `scripts/sync-version.mjs`, `init.sh`, and 10-rule AST linter `scripts/lint.mjs` (wired into `pnpm run check` and CI) with negative proofs in `test/lint.test.ts`.
+

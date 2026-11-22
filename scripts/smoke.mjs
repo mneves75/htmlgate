@@ -30,7 +30,12 @@ function must(cond, msg) {
 
 // A rate limiting rule as strict as 20 requests per 10 s per IP on /p/, /f/ and /api/ (docs/operator.md) refuses
 // requests sent back to back, so every request waits until GAP_MS after the previous one.
-const GAP_MS = Number(process.env.HTMLGATE_LIVE_GAP_MS ?? 600);
+function parseNonNegative(raw, fallback) {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+const GAP_MS = parseNonNegative(process.env.HTMLGATE_LIVE_GAP_MS, 600);
 let last = 0;
 async function paced(url, init) {
   const wait = last + GAP_MS - Date.now();
@@ -127,7 +132,7 @@ try {
   // which the Access application leaves public: if that ever changes, every shared link loses its thumbnail while the
   // pages themselves still answer.
   await check("a card image answers a crawler only while the Share is public", async () => {
-    must((await paced(base + `/p/${gated.slug}/card.jpg`, { headers: { "user-agent": "Twitterbot/1.0" } })).status === 404, "a gated Share served its image");
+    must((await paced(base + `/p/${gated.slug}/card.jpg`, { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } })).status === 404, "a gated Share served its image");
     must((await api("POST", `/api/shares/${gated.slug}/visibility`, { public: true })).status === 200, "visibility on failed");
     try {
       const r = await paced(base + `/p/${gated.slug}/card.jpg`, { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } });
@@ -191,7 +196,7 @@ try {
     must(css.headers.get("cache-control") === "no-store", "not no-store");
     const raw = await get(`/p/${d.slug}/raw`);
     must(raw.status === 303 && raw.headers.get("location") === `/p/${d.slug}/1/`, `raw answered ${raw.status} to ${raw.headers.get("location")}`);
-    const back = await paced(`${base}/api/shares/${d.slug}/versions/1/zip`, { headers: { authorization: `Bearer ${token}` } });
+    const back = await paced(`${base}/api/shares/${d.slug}/versions/1/zip`, { redirect: "manual", headers: { authorization: `Bearer ${token}` } });
     must(back.status === 200 && Buffer.from(await back.arrayBuffer()).equals(Buffer.from(zip)), `zip download answered ${back.status}`);
   });
 

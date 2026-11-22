@@ -20,6 +20,10 @@ describe("repository structural lint", () => {
     const siteHits = lintSource("site/src/worker.ts", 'export default { async fetch() { return new Response("Method not allowed\\n", { status: 405 }); } };');
     expect(siteHits.map((h: { rule: string }) => h.rule)).toContain("no-raw-response");
     expect(siteHits[0].message).toContain("withHeaders");
+
+    const siteAssetHits = lintSource("site/src/worker.ts", "export default { async fetch(req: Request, env: Env) { return await env.ASSETS.fetch(req); } };");
+    expect(siteAssetHits.map((h: { rule: string }) => h.rule)).toContain("no-raw-response");
+    expect(siteAssetHits[0].message).toContain("withHeaders");
   });
 
   test("no-unsafe-fetch catches missing redirect/signal at call sites and inside bench.send() and smoke.paced()", () => {
@@ -40,6 +44,12 @@ describe("repository structural lint", () => {
     const droppedBenchDeadline = lintSource("scripts/bench.ts", "async function send(url: string, init: RequestInit) { return fetch(url, { ...init }); }");
     expect(droppedBenchDeadline.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
     expect(droppedBenchDeadline[0].message).toContain("signal");
+
+    const reversedBenchOrder = lintSource("scripts/bench.ts", "async function send(url: string, init: RequestInit) { return fetch(url, { signal: AbortSignal.timeout(1000), ...init }); }");
+    expect(reversedBenchOrder.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
+
+    const unrelatedSpread = lintSource("scripts/smoke.mjs", "async function paced(url, init) { const other = {}; return fetch(url, { ...other, signal: AbortSignal.timeout(1000) }); }");
+    expect(unrelatedSpread.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
 
     const droppedSmokeDeadline = lintSource("scripts/smoke.mjs", "async function paced(url, init) { return fetch(url, { ...init }); }");
     expect(droppedSmokeDeadline.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
@@ -125,6 +135,11 @@ describe("repository structural lint", () => {
       cpSync(join(process.cwd(), "site/public/404.html"), join(dir, "site/public/404.html"));
       writeFileSync(join(dir, "packages/cli/package.json"), '{ "version": "0.1.0", broken');
       expect(() => syncVersion(dir, "9.9.9")).toThrow();
+      expect(readFileSync(join(dir, "package.json"), "utf8")).toBe(beforePkg);
+
+      cpSync(join(process.cwd(), "packages/cli/package.json"), join(dir, "packages/cli/package.json"));
+      writeFileSync(join(dir, "Formula/htmlgate.rb"), "class Htmlgate < Formula\nend\n");
+      expect(() => syncVersion(dir, "9.9.9")).toThrow(/Formula\/htmlgate\.rb/);
       expect(readFileSync(join(dir, "package.json"), "utf8")).toBe(beforePkg);
     } finally {
       rmSync(dir, { recursive: true, force: true });

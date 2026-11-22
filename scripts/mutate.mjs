@@ -51,7 +51,7 @@ const MUTATIONS = [
   ["the Access cookie is readable by scripts", "scripts/setup.mjs", "http_only_cookie_attribute: true,", "http_only_cookie_attribute: false,", "test/operator.test.ts"],
   ["smoke sends its requests back to back", "scripts/smoke.mjs", "  if (wait > 0) await new Promise((r) => setTimeout(r, wait));\n", "", "test/reviewer-release-tools.test.ts"],
   ["bench --live loads pages back to back", "scripts/bench.ts", "    await pace(2);\n", "", "test/reviewer-release-tools.test.ts"],
-  ["bench --live sends its API requests back to back", "scripts/bench.ts", "  await pace(1);\n  return fetch(url, { signal: AbortSignal.timeout(30_000), ...init });", "  return fetch(url, { signal: AbortSignal.timeout(30_000), ...init });", "test/reviewer-release-tools.test.ts"],
+  ["bench --live sends its API requests back to back", "scripts/bench.ts", "  await pace(1);\n  return fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });", "  return fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });", "test/reviewer-release-tools.test.ts"],
   ["smoke accepts an Instance that answers plain http", "scripts/smoke.mjs", 'must(upgraded || (p === "/api/shares" && r.status === 403)', "must(true", "test/reviewer-release-tools.test.ts"],
   ["the not-found page is not sandboxed", "src/pages.ts", "</main>`, { sandbox: true });", "</main>`);", "test/viewer.test.ts"],
   ["a token of another Author is accepted", "src/api.ts", 'if (token.author !== cfg.author) return fail(401, "unauthorized", "This token belongs to no Author on this Instance.");', "", "test/operator.test.ts"],

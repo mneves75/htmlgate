@@ -70,14 +70,18 @@ test("migration 0005 preserves every Share, Version, legacy body, trash row, and
   }
 });
 
-test("a fresh database applies every migration and accepts the renamed Share table", () => {
+test("a fresh database applies every migration, matches upgraded shares schema, and accepts the renamed Share table", () => {
+  const upgraded = fakeEnv({ before: "0005_shares.sql" });
   const env = fakeEnv();
   try {
+    expect(env.sqlite.prepare("PRAGMA table_info(shares)").all())
+      .toEqual(upgraded.sqlite.prepare("PRAGMA table_info(shares)").all());
     env.sqlite.prepare(`INSERT INTO shares (slug, author, title, latest_version, created_at, updated_at, changed_by, changed_at)
       VALUES ('FreshShare01', 'author@example.com', 'Fresh', 1, 100, 100, 'tok', 100)`).run();
     expect(env.sqlite.prepare("SELECT slug, expires_at, expiry_set FROM shares").all())
       .toEqual([{ slug: "FreshShare01", expires_at: null, expiry_set: 0 }]);
   } finally {
+    upgraded.sqlite.close();
     env.sqlite.close();
   }
 });

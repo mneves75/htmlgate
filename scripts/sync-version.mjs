@@ -76,6 +76,11 @@ export function syncVersion(root = ROOT, targetVersion) {
     const html = readFileSync(join(root, rel), "utf8");
     stage(rel, html, /<span class="version">[^<]+<\/span>/g, `<span class="version">${version}</span>`, '<span class="version"> tag');
   }
+  const formula = readFileSync(join(root, "Formula/htmlgate.rb"), "utf8");
+  const formulaMatches = formula.match(/^  version "[^"\r\n]+"$/gm);
+  if (!formulaMatches || formulaMatches.length !== 1) {
+    throw new Error(`Formula/htmlgate.rb must contain exactly one version line (found ${formulaMatches?.length ?? 0}).`);
+  }
   const updated = [];
   for (const item of plan) {
     if (item.current !== item.next) {

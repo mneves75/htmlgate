@@ -87,6 +87,14 @@ export function lintSource(relPath, content) {
       }
     }
 
+    if (inSiteSrc && ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "fetch" && node.expression.expression.getText(sf).endsWith("ASSETS")) {
+      const target = node.parent && ts.isAwaitExpression(node.parent) ? node.parent : node;
+      const wrapped = target.parent && ts.isCallExpression(target.parent) && ts.isIdentifier(target.parent.expression) && target.parent.expression.text === "withHeaders";
+      if (!wrapped) {
+        report("no-raw-response", lineOf(sf, node.getStart(sf)), "Wrap every landing ASSETS.fetch() response in withHeaders() so CSP and HSTS headers are never dropped.");
+      }
+    }
+
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       const callee = node.expression.text;
       if (callee === "fetch" && (inWorkerSrc || inCliSrc || (inScripts && !relPath.startsWith("scripts/perf/")))) {
@@ -94,11 +102,25 @@ export function lintSource(relPath, content) {
         const isSendWrapper = relPath === "scripts/bench.ts" && isInsideFunction(node, "send");
         const isPacedWrapper = relPath === "scripts/smoke.mjs" && isInsideFunction(node, "paced");
         if (isSendWrapper || isPacedWrapper) {
-          const sig = init && ts.isObjectLiteralExpression(init) ? objectProperty(init, "signal") : undefined;
-          const validSignal = Boolean(sig && !(ts.isIdentifier(sig) && sig.text === "undefined") && sig.kind !== ts.SyntaxKind.NullKeyword && ts.isCallExpression(sig));
-          if (!init || !ts.isObjectLiteralExpression(init) || !hasObjectSpread(init) || !validSignal) {
+          let spreadIdx = -1;
+          let signalIdx = -1;
+          let validSignal = false;
+          if (init && ts.isObjectLiteralExpression(init)) {
+            init.properties.forEach((prop, idx) => {
+              if (ts.isSpreadAssignment(prop) && ts.isIdentifier(prop.expression) && prop.expression.text === "init") spreadIdx = idx;
+              if (ts.isPropertyAssignment(prop)) {
+                const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : undefined;
+                if (key === "signal") {
+                  signalIdx = idx;
+                  const sig = prop.initializer;
+                  validSignal = Boolean(!(ts.isIdentifier(sig) && sig.text === "undefined") && sig.kind !== ts.SyntaxKind.NullKeyword && ts.isCallExpression(sig));
+                }
+              }
+            });
+          }
+          if (spreadIdx === -1 || signalIdx === -1 || !validSignal || spreadIdx > signalIdx) {
             const fnName = isSendWrapper ? "send" : "paced";
-            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), `${fnName}() must forward \`...init\` and set a deadline \`signal\` call (e.g. \`AbortSignal.timeout(...)\`) on fetch().`);
+            report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), `${fnName}() must spread \`...init\` before setting a deadline \`signal\` call (e.g. \`AbortSignal.timeout(...)\`) on fetch().`);
           }
         } else {
           if (!init || !ts.isObjectLiteralExpression(init)) {

@@ -112,6 +112,22 @@
       "focusedSuitesPassed": 132,
       "affectedMutationsCaught": 4,
       "mutationAnchors": 250
+    },
+    "pr2NoComments": {
+      "status": "passed",
+      "commentBlocksDeleted": 278,
+      "verifiedKeepComments": 39,
+      "holdComments": 1,
+      "reanchoredMutationsCaught": 4,
+      "safeHtmlMutationsCaught": 2,
+      "encodedConstraints": [
+        "SafeHtml branded type in src/pages.ts",
+        "MAX_UNBIASED_BYTE in src/ids.ts",
+        "fromCanonicalBase64url in src/ticket.ts",
+        "RESERVATION_TTL_MS and hasLegacyD1BodiesTable in src/store.ts",
+        "HOME_SHARES - 4 in scripts/bench.ts",
+        "storage-status.sql parity test in test/storage-cost.test.ts"
+      ]
     }
   }
 }

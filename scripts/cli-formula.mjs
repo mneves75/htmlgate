@@ -27,8 +27,6 @@ export function pinFormula({ root = ROOT, log = console.log, error = console.err
     const sources = join(root, "Formula/sources");
     mkdirSync(sources, { recursive: true });
     writeFileSync(join(sources, `${sha256}.tar`), archive);
-    // The tap carries one source archive: the one this formula references. A superseded archive is dead weight a reader
-    // may mistake for the live input, and an older tag still installs from its own tree, not from this directory.
     for (const name of readdirSync(sources)) {
       if (name.endsWith(".tar") && name !== `${sha256}.tar`) rmSync(join(sources, name));
     }

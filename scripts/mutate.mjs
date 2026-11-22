@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-// Controls for the security checks: plant each violation, prove the named test file goes red,
-// then restore the source. A check that stays green with its protection removed proves nothing.
-// Usage: pnpm run mutate [--check] [--only <text>]   (--check validates anchors without planting;
-// --only runs the mutations whose name contains the text, for iterating;
-// the full run is the gate)
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,7 +21,6 @@ const MUTATIONS = [
   ["a Gated Share's viewer page is served on /p/", "src/store.ts", '${publicOnly ? "AND d.public = 1" : ""} ORDER BY', '${publicOnly ? "" : ""} ORDER BY', "test/viewer.test.ts"],
   ["a token can mint tokens", "src/api.ts", 'if (b === undefined && method === "GET") {', 'if (b === undefined && method === "POST") { return json(201, { token: "hg_" }); }\n      if (b === undefined && method === "GET") {', "test/api.test.ts"],
   ["revoked tokens keep working", "src/store.ts", "WHERE digest = ? AND revoked_at IS NULL", "WHERE digest = ?", "test/api.test.ts"],
-  // Two routes now refuse a Viewer, so the anchor keeps the POST check that only the token route has.
   ["a Viewer reaches the token page", "src/index.ts", 'if (!isAuthor) return lost();\n    if (req.method === "GET" && path === "/tokens") return html(200, tokensPage(visitor, await store.listTokens(cfg.author)));', 'if (req.method === "GET" && path === "/tokens") return html(200, tokensPage(visitor, await store.listTokens(cfg.author)));', "test/viewer.test.ts"],
   ["a Viewer's home lists Shares", "src/index.ts", "isAuthor ? store.recentShares(cfg.author, HOME_SHARES) : null", "store.recentShares(cfg.author, HOME_SHARES)", "test/home.test.ts"],
   ["the home lists deleted Shares", "src/store.ts", " AND ${live(\"d.\")} ORDER BY d.updated_at DESC", " ORDER BY d.updated_at DESC", "test/home.test.ts"],
@@ -35,7 +29,7 @@ const MUTATIONS = [
   ["a Share title on the home is not escaped", "src/pages.ts", '<a href="/s/${d.slug}">${escapeHtml(d.title)}</a>', '<a href="/s/${d.slug}">${d.title}</a>', "test/home.test.ts"],
   ["a Publisher name on the home is not escaped", "src/pages.ts", "${escapeHtml(d.changed_by_name)}", "${d.changed_by_name}", "test/home.test.ts"],
   ["a cross-site request passes the Fetch Metadata check", "src/index.ts", 'if (site !== null) return site === "same-origin";', "if (site !== null) return true;", "test/browser.test.ts"],
-  ["raw Shares send a referrer", "src/index.ts", "  // A Share's links and requests never tell other sites which Share they came from.\n  \"referrer-policy\": \"no-referrer\",\n", "  // A Share's links and requests never tell other sites which Share they came from.\n", "test/viewer.test.ts"],
+  ["raw Shares send a referrer", "src/index.ts", '  "cross-origin-resource-policy": "same-origin",\n  "referrer-policy": "no-referrer",\n', '  "cross-origin-resource-policy": "same-origin",\n', "test/viewer.test.ts"],
   ["raw Shares lose Cross-Origin-Resource-Policy", "src/index.ts", '"cross-origin-resource-policy": "same-origin",', "", "test/viewer.test.ts"],
   ["responses lose nosniff", "src/http.ts", '"x-content-type-options": "nosniff",', "", "test/viewer.test.ts"],
   ["plain http is served", "src/index.ts", "  const insecure = cleartext(req, url);\n  if (insecure) return insecure;\n", "", "test/transport.test.ts"],
@@ -94,7 +88,7 @@ const MUTATIONS = [
   ["setup accepts a deploy that left workers.dev on beside the domain", "scripts/setup.mjs", "if (dev) throw", "if (false) throw", "test/operator.test.ts"],
   ["an Instance records every request", "scripts/setup.mjs", "invocation_logs: false", "invocation_logs: true", "test/operator.test.ts"],
   ["an Instance records traces", "scripts/setup.mjs", "traces: { enabled: false }", "traces: { enabled: true }", "test/operator.test.ts"],
-  ["no rate limit", "src/api.ts", '  if (method !== "GET") {\n    // Fails closed', '  if (false) {\n    // Fails closed', "test/limits.test.ts"],
+  ["no rate limit", "src/api.ts", '  if (method !== "GET") {\n    if (!env.WRITE_LIMIT)', '  if (false) {\n    if (!env.WRITE_LIMIT)', "test/limits.test.ts"],
   ["the CLI follows redirects with its token", "packages/cli/src/api.ts", 'redirect: "manual",', 'redirect: "follow",', "test/cli-safety.test.ts"],
   ["the CLI sends plain http beyond loopback", "packages/cli/src/config.ts", 'if (u.protocol !== "https:" && !(u.protocol === "http:" && LOOPBACK.has(u.hostname))) {', "if (false) {", "test/cli-safety.test.ts"],
   ["the CLI reads an answer of any size", "packages/cli/src/api.ts", "if (size > MAX_RESPONSE_BYTES) break;", "", "test/cli-safety.test.ts"],
@@ -119,7 +113,6 @@ const MUTATIONS = [
   ["text output passes terminal escapes through", "packages/cli/src/bin.ts", 'const printable = (s: string) => s.replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, "");', "const printable = (s: string) => s;", "test/cli-safety.test.ts"],
   ["upsert updates the first of several matches", "packages/cli/src/bin.ts", "if (found.total > 1) {", "if (false) {", "test/cli.test.ts"],
   ["the landing loses its CSP", "site/src/worker.ts", `  "content-security-policy": "default-src 'none'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",\n`, "", "test/site.test.ts"],
-  // The view counter hangs off the same if, so the preview branch keeps its shape and only its header is dropped.
   ["the landing preview is indexable", "site/src/worker.ts", 'if (url.hostname !== site.hostname) res.headers.set("x-robots-tag", "noindex");', 'if (false) res.headers.set("x-robots-tag", "noindex");', "test/site.test.ts"],
   ["the landing loses HSTS", "site/src/worker.ts", '"strict-transport-security": "max-age=31536000; includeSubDomains",', "", "test/site.test.ts"],
   ["a visitor off the Allowlist gets a not-found unlike a Viewer's", "src/index.ts", 'if (!who) return notFound(cfg.language, { home: "viewer" });', 'if (!who) return notFound(cfg.language, { home: "author" });', "test/viewer.test.ts"],
@@ -164,7 +157,7 @@ const MUTATIONS = [
   ["a mutation accepts an incomplete global teardown", "scripts/mutate.mjs", "if (teardown " + '!== "complete")', "if (false)", "test/mutation-gate.test.ts"],
   ["a mutation accepts a late runner close error", "scripts/mutation-reporter.mjs", '  if (stderr.trim()) return broken(`runner stderr must be diagnosed: ${stderr.trim().slice(0, 1000)}`);\n', "", "test/mutation-gate.test.ts"],
   ["site files lose the sandbox header", "src/index.ts", "const SITE_HEADERS = {\n  \"content-security-policy\": `sandbox ${SHARE_SANDBOX}; frame-ancestors 'self'`,", "const SITE_HEADERS = {\n  \"content-security-policy\": `frame-ancestors 'self'`,", "test/sites.test.ts"],
-  ["site files send a referrer", "src/index.ts", "  // A ticket in the URL never leaves in a Referer by default.\n  \"referrer-policy\": \"no-referrer\",\n", "  // A ticket in the URL never leaves in a Referer by default.\n", "test/sites.test.ts"],
+  ["site files send a referrer", "src/index.ts", '  "access-control-allow-origin": "*",\n  "referrer-policy": "no-referrer",\n', '  "access-control-allow-origin": "*",\n', "test/sites.test.ts"],
   ["errors under /f/ send a referrer", "src/index.ts", "  headers.set(\"referrer-policy\", \"no-referrer\");\n", "", "test/sites.test.ts"],
   ["a Gated site's files are served on /p/", "src/store.ts", "${live(\"d.\")} ${publicOnly ? \"AND d.public = 1\" : \"\"}`)\n      .bind(n, path, slug, author)", "${live(\"d.\")} ${publicOnly ? \"\" : \"\"}`)\n      .bind(n, path, slug, author)", "test/sites.test.ts"],
   ["a deleted Share's site files stay readable", "src/store.ts", "AND ${live(\"d.\")} ${publicOnly ? \"AND d.public = 1\" : \"\"}`)\n      .bind(n, path, slug, author)", "${publicOnly ? \"AND d.public = 1\" : \"\"}`)\n      .bind(n, path, slug, author)", "test/sites.test.ts"],
@@ -240,21 +233,15 @@ const MUTATIONS = [
   ["Homebrew accepts a release tag with different candidate inputs","scripts/cli-install.mjs","      command(\"git\", [\"-C\", repository, \"diff\", \"--exit-code\", `${tag}^{commit}`, \"--\",\n        \"Formula/htmlgate.rb\", `Formula/sources/${verified.archive}`, ...CLI_INPUTS.map((name) => `packages/cli/${name}`)]);","","test/cli-brew.test.ts"],
   ["Homebrew accepts duplicate formula metadata","scripts/cli-archive.mjs","if (lines.length !== 1 || declarations !== expected) throw new Error(","if (false) throw new Error(","test/cli-brew.test.ts"],
   ["setup accepts a project inside another Git checkout","scripts/setup.mjs","if (realpathSync(root) !== realpathSync(ROOT)) {","if (false) {","test/reviewer-launch-audit-docs.test.ts"],
-  // The metrics report: the Author-only page and the shape of what a sync may store.
-  ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.',"test/metrics.test.ts"],
+  ["a Viewer reads the page counts","src/index.ts",'  if (path === "/metrics") {\n    if (!isAuthor) return lost();','  if (path === "/metrics") {',"test/metrics.test.ts"],
   ["raw bytes count as a view","src/index.ts",'  if (raw || res.status !== 200) return res;','  if (res.status !== 200) return res;',"test/metrics.test.ts"],
   ["a prefetch counts as a view","src/index.ts",'  if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return res;','  if (req.headers.get("sec-fetch-dest") !== "document") return res;',"test/metrics.test.ts"],
   ["a count outlives the Share it belongs to","src/store.ts",'        WHERE EXISTS (SELECT 1 FROM shares WHERE slug = ?1 AND ${live()})','        WHERE 1',"test/store-sites-expiry.test.ts"],
-  // A Gated Share must stay bare: its page is behind the gate, and its title may never reach a crawler's cache.
   ["a Gated Share's link unfurls too","src/pages.ts",'prefix === "p" && d.public === 1 && origin !== ""','origin !== ""',"test/social.test.ts"],
-  // The card image has to be reachable without a session, or every unfurl gets a login redirect instead of a thumbnail.
   ["the card image ignores the Share's visibility","src/index.ts",'const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, true, null);','const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, false, null);',"test/social.test.ts"],
-  // A robots policy that opens the Instance, and a robots application that gates it, are both silent failures: no
-  // unfurl and no page shows either.
   ["robots.txt opens the whole Instance","src/index.ts",'const ROBOTS = "User-agent: *\\nAllow: /p/\\nDisallow: /\\n";','const ROBOTS = "User-agent: *\\nAllow: /\\n";',"test/api.test.ts"],
   ["the robots application gates robots.txt","scripts/setup.mjs",'policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "bypass", include: [{ everyone: {} }] }],','policies: [{ name: `htmlgate: ${inst.name} robots bypass`, decision: "allow", include: [{ everyone: {} }] }],',"test/operator.test.ts"],
   ["an expired Share keeps its counts","src/store.ts",'      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),','      this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),\n      this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),',"test/store-sites-expiry.test.ts"],
-  // Release 0.1.18: the view limit, what the storage cap counts, and revoke-all (security gate C-1, C-2, C-3, SEC-03).
   ["anonymous views skip the view limit","src/index.ts","    if (!(await limit.limit({ key })).success) return;\n","","test/views-limit.test.ts"],
   ["the view limit ignores the address","src/index.ts","  const key = `${network(req.headers.get(\"cf-connecting-ip\") ?? \"\")} ${slug}`;","  const key = slug;","test/views-limit.test.ts"],
   ["the view limit ignores the Share","src/index.ts","  const key = `${network(req.headers.get(\"cf-connecting-ip\") ?? \"\")} ${slug}`;","  const key = network(req.headers.get(\"cf-connecting-ip\") ?? \"\");","test/views-limit.test.ts"],
@@ -263,7 +250,6 @@ const MUTATIONS = [
   ["a publish reserves room for its zip alone","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => Math.max(size, VERSION_FLOOR);","test/storage-cost.test.ts"],
   ["an empty publish reserves no room","src/store.ts","const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? \"\").length, VERSION_FLOOR);","const costOf = (size: number, files: string | null) => size + new TextEncoder().encode(files ?? \"\").length;","test/storage-cost.test.ts"],
   ["revoke-all leaves Access sign-ins open","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Account\", checkAccount], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
-  // Release 0.1.18, second candidate: IPv6 /64, and revoke-all's account check and order (gate F-1, F-01, F-03).
   ["the view limit keys IPv6 by full address","src/index.ts","  if (!address.includes(\":\")) return address;","  return address;","test/views-limit.test.ts"],
   ["revoke-all ends Access sign-ins last","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Account\", checkAccount], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey], [\"Access sign-ins\", revokeSessions]]","test/token-revoke-all.test.ts"],
   ["revoke-all skips the account check","scripts/token.mjs","[[\"Account\", checkAccount], [\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","[[\"Access sign-ins\", revokeSessions], [\"Tokens\", revokeTokens], [\"Ticket key\", rotateTicketKey]]","test/token-revoke-all.test.ts"],
@@ -298,7 +284,6 @@ if (process.argv.includes("--check")) {
 let interrupted = false;
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { interrupted = true; });
 
-/** Runs the chosen mutations and returns the exit code. */
 async function gate() {
 let failures = 0;
 let completed = 0;
@@ -317,7 +302,6 @@ for (const [name, file, from, to, testFile] of chosen) {
   let result;
   try {
     writeFileSync(file, original.replace(from, to));
-    // A CLI mutation must still compile: a build error is not a caught protection.
     if (file.startsWith("packages/cli/")) {
       execFileSync("node_modules/.bin/tsc", ["-p", "packages/cli", "--noEmit"], { stdio: "pipe" });
     }
@@ -346,7 +330,6 @@ for (const [name, file, from, to, testFile] of chosen) {
   if (result.state === "BROKEN") break;
 }
 } finally {
-  // The last test run built the mutated CLI; rebuild only from restored source, even after a broken run.
   execFileSync("node_modules/.bin/tsc", ["-p", "packages/cli"], { stdio: "pipe" });
 }
 if (interrupted) {

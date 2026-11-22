@@ -1,4 +1,3 @@
--- Match the millisecond clock and per-Version cost used by Store in src/store.ts.
 WITH clock(now_ms) AS (
   SELECT CAST(unixepoch('subsec') * 1000 AS INTEGER)
 ), version_totals AS (

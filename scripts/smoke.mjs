@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-// Live checks against a deployed Instance (issue #17). Needs a token in HTMLGATE_TOKEN.
-// It publishes test Shares that expire within minutes, and soft-deletes them at the end; the hourly cleanup then
-// deletes their bodies.
-// Usage: HTMLGATE_TOKEN=hg_... pnpm run smoke https://<the Instance's domain, or name.subdomain.workers.dev without one>
 import { writeZip } from "../packages/cli/src/zip.ts";
 const base = (process.argv[2] ?? "").replace(/\/+$/, "");
 const token = process.env.HTMLGATE_TOKEN;
@@ -28,8 +24,6 @@ function must(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-// A rate limiting rule as strict as 20 requests per 10 s per IP on /p/, /f/ and /api/ (docs/operator.md) refuses
-// requests sent back to back, so every request waits until GAP_MS after the previous one.
 function parseNonNegative(raw, fallback) {
   if (raw === undefined || raw.trim() === "") return fallback;
   const n = Number(raw);
@@ -57,13 +51,11 @@ async function api(method, path, body) {
 }
 const page = (s) => `<!doctype html><title>smoke</title><p>${s}</p>`;
 
-/** Records a created Share for cleanup, only when its slug is one: the cleanup puts it in a URL with the token. */
 function own(slug) {
   must(typeof slug === "string" && /^[A-Za-z0-9]{12}$/.test(slug), "publish: invalid slug in the created Share response");
   created.push(slug);
 }
 
-// Smoke Shares expire soon, so the cleanup deletes their bodies instead of a soft delete keeping them.
 const soon = () => Date.now() + 10 * 60 * 1000;
 
 async function publish(html = page("smoke")) {
@@ -118,8 +110,6 @@ try {
     must(a.headers.get("content-security-policy") === b.headers.get("content-security-policy"), "CSP differs");
   });
 
-  // X refuses to build a card for a site whose robots.txt it cannot read, and the Instance needs to be readable to say
-  // what may be crawled. This is the check that catches a missing bypass application in production.
   await check("robots.txt answers a crawler and lets it read a Public Share", async () => {
     const r = await paced(base + "/robots.txt", { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } });
     must(r.status === 200, `answered ${r.status}`);
@@ -128,9 +118,6 @@ try {
     must(/^Disallow: \/$/m.test(body), "no Disallow: /");
   });
 
-  // A crawler has no session, so an unfurl of a Public Share fetches the card image without one. It lives under /p/,
-  // which the Access application leaves public: if that ever changes, every shared link loses its thumbnail while the
-  // pages themselves still answer.
   await check("a card image answers a crawler only while the Share is public", async () => {
     must((await paced(base + `/p/${gated.slug}/card.jpg`, { redirect: "manual", headers: { "user-agent": "Twitterbot/1.0" } })).status === 404, "a gated Share served its image");
     must((await api("POST", `/api/shares/${gated.slug}/visibility`, { public: true })).status === 200, "visibility on failed");

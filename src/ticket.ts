@@ -1,9 +1,4 @@
-// Tickets (plan 009): a site's files are fetched by a Share running in an opaque origin, so its requests
-// never carry the Access cookie. The Worker, after verifying a person's Access token, issues a ticket:
-// AES-GCM sealed under the Instance's TICKET_KEY, naming one Version of one Share, that person and an
-// expiry. Sealed, not signed, so a Share's scripts reading their own URL cannot learn who is viewing.
 import { EMAIL, SLUG } from "./ids";
-// A ticket proves only that it was issued; every request still checks the Allowlist and the Share.
 
 export const TICKET_TTL_MS = 60 * 60 * 1000;
 
@@ -14,21 +9,17 @@ export interface Ticket {
   exp: number;
 }
 
-/** The TICKET_KEY secret: 32 bytes as unpadded base64url. */
 export const TICKET_KEY_FORMAT = /^[A-Za-z0-9_-]{43}$/;
 const SEALED = /^[A-Za-z0-9_-]{40,1024}$/;
-// What a ticket is for, and which Instance sealed it (its Access audience), bound into the seal.
 const aad = (aud: string) => new TextEncoder().encode(`htmlgate ticket 1 ${aud}`);
 
-/** A ticket key as setup makes it: exactly 32 bytes as canonical, unpadded base64url. Synchronous, for readConfig. */
 export function isTicketKey(raw: string): boolean {
-  return TICKET_KEY_FORMAT.test(raw) && fromBase64url(raw)?.length === 32;
+  return TICKET_KEY_FORMAT.test(raw) && fromCanonicalBase64url(raw)?.length === 32;
 }
 
-/** The Instance's ticket key from its secret, or null when the secret is not one. */
 export async function importTicketKey(raw: string): Promise<CryptoKey | null> {
   if (!isTicketKey(raw)) return null;
-  return crypto.subtle.importKey("raw", fromBase64url(raw)!, "AES-GCM", false, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", fromCanonicalBase64url(raw)!, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
 export async function sealTicket(key: CryptoKey, aud: string, t: Ticket): Promise<string> {
@@ -41,10 +32,9 @@ export async function sealTicket(key: CryptoKey, aud: string, t: Ticket): Promis
   return toBase64url(out);
 }
 
-/** What an authentic ticket says, expired or not; null for anything this Instance did not seal. */
 export async function openTicket(key: CryptoKey, aud: string, sealed: string): Promise<Ticket | null> {
   if (!SEALED.test(sealed)) return null;
-  const bytes = fromBase64url(sealed);
+  const bytes = fromCanonicalBase64url(sealed);
   if (!bytes || bytes.length < 12 + 16) return null;
   let plain: ArrayBuffer;
   try {
@@ -71,8 +61,7 @@ function toBase64url(bytes: Uint8Array): string {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** Canonical only: a string whose unused trailing bits are not zero would name the same bytes twice. */
-function fromBase64url(s: string): Uint8Array | null {
+function fromCanonicalBase64url(s: string): Uint8Array | null {
   if (s.length % 4 === 1) return null;
   let bytes: Uint8Array;
   try {

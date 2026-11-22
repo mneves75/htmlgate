@@ -4,16 +4,13 @@ import { isTicketKey } from "./ticket";
 export interface Env {
   DB: D1Database;
   BODIES: R2Bucket;
-  /** Without it the API refuses every change (src/api.ts). */
   WRITE_LIMIT?: RateLimit;
-  /** One view a minute per network address and Share. Without it no view is counted (src/index.ts). */
   VIEW_LIMIT?: RateLimit;
   ACCESS_TEAM_URL?: string;
   ACCESS_AUD?: string;
   AUTHOR_EMAIL?: string;
   ALLOWLIST?: string;
   STORAGE_LIMIT_BYTES?: string;
-  /** The language of the Instance's own pages: "en" (the default) or "pt-BR". */
   LANGUAGE?: string;
   TICKET_KEY?: string;
   EXPIRY_DAYS?: string;
@@ -25,24 +22,18 @@ export interface Config {
   teamUrl: string;
   aud: string;
   author: string;
-  /** Lowercased emails allowed to open Gated Shares. Always contains the Author. */
   allowlist: Set<string>;
   storageLimit: number;
   language: Language;
-  /** Seals tickets for a Gated site's files (src/ticket.ts): 43 base64url characters, a Worker secret. */
   ticketKey: string;
-  /** Days a Share lives after its latest publish unless a Publisher sets a date; 0 means never. */
   expiryDays: number;
 }
 
-// R2's free allowance is 10 GB-month; leave room for the rest of the account.
 const DEFAULT_STORAGE_LIMIT = 5 * 1000 * 1000 * 1000;
 const DEFAULT_EXPIRY_DAYS = 30;
 const MAX_EXPIRY_DAYS = 3650;
-// The signing keys come from here, so plain http is allowed only for a test server on this machine.
 const TEAM_URL = /^(https:\/\/[^/]+|http:\/\/(127\.0\.0\.1|localhost)(:[0-9]+)?)$/;
 
-/** Reads the Instance's settings. Returns null when any is missing or malformed, so callers fail closed. */
 export function readConfig(env: Env): Config | null {
   const teamUrl = env.ACCESS_TEAM_URL?.trim().replace(/\/+$/, "");
   const aud = env.ACCESS_AUD?.trim();

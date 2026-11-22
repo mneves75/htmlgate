@@ -1,11 +1,9 @@
-/** Headers on every response the Instance makes. Exported for the one response that replaces its cache policy. */
 export const BASE: Record<string, string> = {
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
   // Our own pages send their address to themselves only. A form POST under no-referrer carries
   // Origin: null, which the token page would refuse (found in a real browser on staging).
   "referrer-policy": "same-origin",
-  // A year, for this host only: the Operator's domain may have other hosts that are not https.
   "strict-transport-security": "max-age=31536000",
 };
 
@@ -16,7 +14,6 @@ export function json(status: number, body: unknown, extra: Record<string, string
   });
 }
 
-/** The error envelope; the htmlgate CLI (packages/cli) maps its codes to exit codes. */
 export function fail(status: number, code: string, message: string, extra: Record<string, string> = {}): Response {
   return json(status, { error: { code, message } }, extra);
 }
@@ -33,7 +30,6 @@ export function text(status: number, body: string, contentType: string, extra: R
   return new Response(body, { status, headers: { ...BASE, "content-type": contentType, ...extra } });
 }
 
-/** A streamed body (a site's file, a Version's zip) with the headers every response carries. */
 export function stream(body: ReadableStream<Uint8Array>, contentType: string, extra: Record<string, string> = {}): Response {
   return new Response(body, { status: 200, headers: { ...BASE, "content-type": contentType, ...extra } });
 }
@@ -46,8 +42,6 @@ export function copyResponse(res: Response, headers: Headers): Response {
   return new Response(res.body, { status: res.status, headers });
 }
 
-// A site's file is served with a type from this table and nothing else, so a file cannot choose how a browser treats
-// it. Text is UTF-8; anything unknown is a download. (`nosniff` is on every response.)
 const TYPES: Record<string, string> = {
   html: "text/html; charset=utf-8", htm: "text/html; charset=utf-8", css: "text/css; charset=utf-8",
   js: "text/javascript; charset=utf-8", mjs: "text/javascript; charset=utf-8", json: "application/json; charset=utf-8",
@@ -65,16 +59,11 @@ export function contentTypeFor(path: string): string {
   return TYPES[ext] ?? "application/octet-stream";
 }
 
-/**
- * The request body as text, or null when it is over `max` bytes. It stops reading at the cap, so a larger body
- * is refused before it fills memory; leaving the loop early cancels the stream.
- */
 export async function readCapped(req: Request, max: number): Promise<string | null> {
   const bytes = await readCappedBytes(req, max);
   return bytes === null ? null : new TextDecoder().decode(bytes);
 }
 
-/** The request body's bytes, or null when it is over `max`; it stops reading at the cap. */
 export async function readCappedBytes(req: Request, max: number): Promise<Uint8Array | null> {
   if (Number(req.headers.get("content-length") ?? 0) > max) return null;
   const chunks: Uint8Array[] = [];

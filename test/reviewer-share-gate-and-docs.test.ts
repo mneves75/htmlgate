@@ -62,7 +62,7 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
   ["Homebrew accepts a release tag with different candidate inputs","scripts/cli-install.mjs","      command(\"git\", [\"-C\", repository, \"diff\", \"--exit-code\", `${tag}^{commit}`, \"--\",\n        \"Formula/htmlgate.rb\", `Formula/sources/${verified.archive}`, ...CLI_INPUTS.map((name) => `packages/cli/${name}`)]);","","test/cli-brew.test.ts"],
   ["Homebrew accepts duplicate formula metadata","scripts/cli-archive.mjs","if (lines.length !== 1 || declarations !== expected) throw new Error(","if (false) throw new Error(","test/cli-brew.test.ts"],
   ["setup accepts a project inside another Git checkout","scripts/setup.mjs","if (realpathSync(root) !== realpathSync(ROOT)) {","if (false) {","test/reviewer-launch-audit-docs.test.ts"],
-    ["a Viewer reads the page counts","src/index.ts",'    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.\n    if (!isAuthor) return lost();','    // The Author only, like the token page: how often each of this Instance\'s Shares was opened.',"test/metrics.test.ts"],
+    ["a Viewer reads the page counts","src/index.ts",'  if (path === "/metrics") {\n    if (!isAuthor) return lost();','  if (path === "/metrics") {',"test/metrics.test.ts"],
     ["raw bytes count as a view","src/index.ts",'  if (raw || res.status !== 200) return res;','  if (res.status !== 200) return res;',"test/metrics.test.ts"],
     ["a prefetch counts as a view","src/index.ts",'  if (req.headers.get("sec-fetch-dest") !== "document" || req.headers.has("sec-purpose")) return res;','  if (req.headers.get("sec-fetch-dest") !== "document") return res;',"test/metrics.test.ts"],
     ["a count outlives the Share it belongs to","src/store.ts",'        WHERE EXISTS (SELECT 1 FROM shares WHERE slug = ?1 AND ${live()})','        WHERE 1',"test/store-sites-expiry.test.ts"],
@@ -123,6 +123,8 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
       "paths match loosely",
       "public paths serve Gated Shares",
       "a Share title on the home is not escaped",
+      "raw Shares send a referrer",
+      "site files send a referrer",
       // The limit's condition lost its `&& env.WRITE_LIMIT` when a missing limit began to refuse changes.
       "no rate limit",
       // The landing gained a film section, so its CSP gained `media-src 'self'`.
@@ -144,6 +146,11 @@ describe("scripts/mutate.mjs preserves the renamed base and every explicitly add
       // The planted violation is the same one: the replacement still differs from the anchor, and the only change from
       // the old pair is the letter of the gated path prefix.
       expect(a[3], a[0]).not.toBe(a[2]);
+      if (a[0] === "raw Shares send a referrer" || a[0] === "site files send a referrer") {
+        expect(a[2]).toContain('"referrer-policy": "no-referrer"');
+        expect(a[3]).not.toContain('"referrer-policy": "no-referrer"');
+        continue;
+      }
       if (a[0] === "no rate limit") {
         // Still the same violation: the whole limit block is skipped.
         expect(a[2]).toContain('if (method !== "GET") {');

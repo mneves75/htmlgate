@@ -1,7 +1,3 @@
-// The round-trip report: D1 and R2 waves per route and EXPLAIN QUERY PLAN per statement (scripts/perf/roundtrips.ts).
-//
-//   pnpm exec vitest run -c scripts/perf/vitest.config.ts       writes docs/perf/raw/d1-roundtrips.{json,md}
-//   HTMLGATE_PERF_OUT=<dir> ...                                  writes there instead (a baseline/candidate pair)
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, test } from "vitest";

@@ -2,6 +2,7 @@
 // stored in D1 beside its Version, and every Version counts at least VERSION_FLOOR, which covers the most metadata a
 // Share can carry. So neither a site of empty files with long names nor a stream of empty pages grows the database
 // past the cap.
+import { readFileSync } from "node:fs";
 import { afterAll, describe, expect, test } from "vitest";
 import { VERSION_FLOOR } from "../src/store";
 import { writeZip } from "../packages/cli/src/zip";
@@ -87,5 +88,19 @@ describe("what the storage cap counts", () => {
       + LENGTH(CAST(description AS BLOB)) + LENGTH(CAST(tags AS BLOB)) AS n FROM shares WHERE slug = ?`).get(r.json.slug) as { n: number };
     expect(row.n).toBeGreaterThan(15_000);
     expect(row.n).toBeLessThanOrEqual(VERSION_FLOOR);
+  });
+
+  test("scripts/storage-status.sql matches Store's VERSION_FLOOR and site-index cost", async () => {
+    const i = await startInstance();
+    expect((await i.api("POST", "/api/shares", { html: "", title: "empty" })).status).toBe(201);
+    const zip = bigIndexSite();
+    const site = await i.api("POST", "/api/shares?title=idx", zip, i.zipHeaders);
+    expect(site.status).toBe(201);
+    const idx = indexBytes(i, site.json.slug);
+    const sql = readFileSync("scripts/storage-status.sql", "utf8");
+    const report = i.fake.sqlite.prepare(sql).get() as { version_count: number; version_bytes: number; tracked_bytes: number };
+    expect(report.version_count).toBe(2);
+    expect(report.version_bytes).toBe(VERSION_FLOOR + zip.length + idx);
+    expect(report.tracked_bytes).toBe(report.version_bytes);
   });
 });

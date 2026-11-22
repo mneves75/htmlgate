@@ -23,10 +23,6 @@ export function deployPlan(argv) {
   return { name, domains, args: ["deploy", "-c", "site/wrangler.jsonc", "--name", name, ...domains.flatMap((d) => ["--domain", d])] };
 }
 
-/**
- * Refuses to deploy over a Worker that is not this landing's: an Instance (it has an Access application
- * named after it), or, for a preview, a Worker that serves a domain, since a preview must never change one.
- */
 export function checkTarget(plan, cf) {
   const apps = listApplications(cf);
   if (apps.some((a) => a.name === `htmlgate: ${plan.name}`)) throw new Error(`The Worker ${plan.name} is an htmlgate Instance. The landing will not deploy over it.`);
@@ -37,7 +33,6 @@ export function checkTarget(plan, cf) {
   }
 }
 
-/** The landing's sign-in links lead to app.htmlgate.com: it must answer behind its Access sign-in before the landing goes live. */
 export async function checkAppGated(fetchImpl = fetch) {
   let status = 0;
   let to = "";
@@ -54,7 +49,6 @@ export async function checkAppGated(fetchImpl = fetch) {
   }
 }
 
-/** Polls until `check` passes on a response from `url`: a new Custom Domain needs its DNS record and certificate first. */
 async function expectLive(url, check, what) {
   const deadline = Date.now() + 180_000;
   let last = "no answer";

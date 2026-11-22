@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-// The Operator's token command. It runs with the Operator's own Cloudflare login, which is as strong
-// as signing in to the token page, so it may create tokens (issue #13). Needs a prior `pnpm run setup`.
-//
-// Usage: pnpm run token create <name> | list | revoke <id> | revoke-all   [--config <file>] [--local --persist-to <dir>]
-// --local acts on a `wrangler dev` database instead of the deployed one (used by the tests).
 import { createHash, randomInt } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -44,13 +39,6 @@ function d1(sql, inst, flags, targetConfig, statements = 1) {
   return receipt.at(-1);
 }
 
-/**
- * Ends every way in, for a lost laptop or a leaked token. First it verifies that Wrangler and cf target the deployed
- * Instance on the same account. Then every Access sign-in to the
- * Instance, so a stolen session cannot make a token while the rest runs; then every token; then every open ticket (a new
- * TICKET_KEY). A failed step stops the rest; each step is safe to repeat, so the fix is to run the command again. A
- * local database has only tokens.
- */
 export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, say }) {
   const steps = local
     ? [["Tokens", revokeTokens]]
@@ -81,12 +69,10 @@ function revocationTarget(inst, accountId) {
     || generated.vars?.ACCESS_AUD !== app.aud || (Object.hasOwn(generated.vars, "HTMLGATE_INSTANCE") && generated.vars.HTMLGATE_INSTANCE !== inst.name)) {
     throw new Error("The generated configuration does not match the verified Instance target. Check the config and run setup before retrying.");
   }
-  // Pin only the verified target fields so setup cannot replace the generated config between revocation steps.
   return { appId: app.id, config: { account_id: accountId, name: worker.name, d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid }] } };
 }
 
 function revokeSessions(appId) {
-  // Without --force cf asks, gets no answer, prints "Aborted." and still exits 0.
   const result = cf("zero-trust", "access", "applications", "revoke-tokens", appId, "--force");
   // cf prints the result of Cloudflare's successful response, an empty object.
   if (!result || typeof result !== "object" || Array.isArray(result) || Object.keys(result).length !== 0) throw new Error("cf did not confirm the session revocation");
@@ -104,14 +90,12 @@ function main() {
     if (!arg || !/^[A-Za-z0-9 ._-]{1,64}$/.test(arg)) throw new Error("Give the token a name: 1 to 64 letters, digits, spaces, '.', '_' or '-'.");
     const token = newToken();
     const digest = createHash("sha256").update(token).digest("hex");
-    // Every value is checked or generated above, so it is safe inside the SQL text.
     d1(`INSERT INTO tokens (id, author, name, digest, created_at) VALUES ('${hex(12)}', '${inst.author.replace(/'/g, "''")}', '${arg}', '${digest}', ${Date.now()})`, inst, flags);
     console.error(`Token "${arg}" created. It is shown once; store it where your Publisher reads it.`);
     console.log(token);
   } else if (cmd === "list") {
     for (const t of d1("SELECT id, name, created_at, last_used_at, revoked_at FROM tokens ORDER BY created_at DESC", inst, flags).results) {
       const when = (ms) => (ms ? new Date(ms).toISOString().slice(0, 16) : "never");
-      // A name stored by an older Worker may hold control or bidi characters; the terminal never gets them.
       const name = t.name.replace(/(?![\u200c\u200d])[\p{Cc}\p{Cf}]/gu, "");
       console.log(`${t.id}  ${name.padEnd(24)} created ${when(t.created_at)}  last used ${when(t.last_used_at)}  ${t.revoked_at ? "REVOKED" : "live"}`);
     }

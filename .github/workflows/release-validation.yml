@@ -64,6 +64,8 @@ jobs:
           } | tee .scratch/ci-evidence/tools.log
       - name: No known vulnerability at high severity or above
         run: pnpm audit --audit-level high 2>&1 | tee .scratch/ci-evidence/audit.log
+      - name: Structural lint and version sync
+        run: pnpm run lint 2>&1 | tee .scratch/ci-evidence/lint.log
       - name: Check all mutation anchors
         run: pnpm run mutate --check | tee .scratch/ci-evidence/anchors.log
       - name: Full typecheck and integration tests

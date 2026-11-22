@@ -29,8 +29,12 @@ const DEV_BUDGET_MS = 50;
 const CI_BUDGET_MS = 150;
 // An override is a person typing a number, so it is validated: without this, a typo becomes NaN, every `p95 >= NaN`
 // comparison is false, and the page budget passes without measuring anything.
-const override = Number(process.env.HTMLGATE_BENCH_BUDGET_MS ?? "");
-const BUDGET_MS = Number.isFinite(override) && override > 0 ? override : process.env.CI === "1" ? CI_BUDGET_MS : DEV_BUDGET_MS;
+function parseFinite(raw: string | undefined, fallback: number, min: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= min ? n : fallback;
+}
+const BUDGET_MS = parseFinite(process.env.HTMLGATE_BENCH_BUDGET_MS, process.env.CI === "1" ? CI_BUDGET_MS : DEV_BUDGET_MS, Number.MIN_VALUE);
 const WARMUP = 10;
 const MAX_LOAD = 9;
 let peakLoad = 0;
@@ -39,12 +43,12 @@ const arg = (name: string) => {
   const at = process.argv.indexOf(name);
   return at > 0 ? process.argv[at + 1] : undefined;
 };
-const RUNS = Number(arg("--runs") ?? 20);
+const RUNS = Math.floor(parseFinite(arg("--runs"), 20, 1));
 const LIVE = arg("--live");
 // A deployed Instance may sit behind a rate limiting rule as strict as 20 requests per 10 s per IP on /p/, /f/ and
 // /api/ (docs/operator.md). Under --live each request holds the next one back GAP_MS, and a page load, its page and its
 // framed body, holds it back twice that, so no 10 s holds more than 18 requests. Local runs do not wait.
-const GAP_MS = LIVE ? Number(process.env.HTMLGATE_LIVE_GAP_MS ?? 600) : 0;
+const GAP_MS = LIVE ? parseFinite(process.env.HTMLGATE_LIVE_GAP_MS, 600, 0) : 0;
 let next = 0;
 async function pace(requests: number) {
   const wait = next - Date.now();
@@ -186,6 +190,7 @@ async function instancePages(): Promise<number> {
     const base = instance.base;
     const page = await send(`${base}/tokens`, {
       method: "POST",
+      redirect: "manual",
       headers: { "cf-access-jwt-assertion": jwt, "sec-fetch-site": "same-origin", "content-type": "application/x-www-form-urlencoded" },
       body: "name=bench",
     });

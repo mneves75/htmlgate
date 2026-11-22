@@ -103,5 +103,15 @@
       "landingPreviewCrons": 0,
       "landingPreviewRequests24h": 0
     }
+  },
+  "potetoHardening": {
+    "pr1PreventRecurringMistakes": {
+      "status": "passed",
+      "lintRules": 10,
+      "lintTestsPassed": 11,
+      "focusedSuitesPassed": 132,
+      "affectedMutationsCaught": 4,
+      "mutationAnchors": 250
+    }
   }
 }

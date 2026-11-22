@@ -38,6 +38,14 @@ export function stream(body: ReadableStream<Uint8Array>, contentType: string, ex
   return new Response(body, { status: 200, headers: { ...BASE, "content-type": contentType, ...extra } });
 }
 
+export function bytes(body: Uint8Array | ArrayBuffer, contentType: string, extra: Record<string, string> = {}): Response {
+  return new Response(body, { status: 200, headers: { ...BASE, "content-type": contentType, ...extra } });
+}
+
+export function copyResponse(res: Response, headers: Headers): Response {
+  return new Response(res.body, { status: res.status, headers });
+}
+
 // A site's file is served with a type from this table and nothing else, so a file cannot choose how a browser treats
 // it. Text is UTF-8; anything unknown is a download. (`nosniff` is on every response.)
 const TYPES: Record<string, string> = {

@@ -14,8 +14,12 @@ export function temporaryBuild() {
   return mkdtempSync(join(scratch, "cli-archive-"));
 }
 
-export function tar(args) {
-  const result = spawnSync("/usr/bin/tar", args, { env: { ...process.env, COPYFILE_DISABLE: "1" }, maxBuffer: 1024 * 1024 });
+export function tar(args, input) {
+  const result = spawnSync("/usr/bin/tar", args, {
+    env: { ...process.env, COPYFILE_DISABLE: "1" },
+    maxBuffer: 1024 * 1024,
+    ...(input !== undefined ? { input } : {}),
+  });
   if (result.error || result.status !== 0) throw new Error(`Source archive tar failed: ${result.error?.message || result.stderr?.toString()}`);
   return result.stdout;
 }

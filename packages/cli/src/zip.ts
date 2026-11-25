@@ -5,6 +5,7 @@ export const SITE_LIMITS = {
   files: 1000,
   fileBytes: 5 * 1024 * 1024,
   totalBytes: 25 * 1024 * 1024,
+  pathBytes: 512,
 } as const;
 
 export interface ZipFile {

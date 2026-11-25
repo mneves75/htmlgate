@@ -483,18 +483,24 @@ describe("the privacy notice against the code and docs/privacy.md", () => {
     expect(readFileSync("site/wrangler.jsonc", "utf8")).toMatch(/"observability": \{ "enabled": true \}/);
   });
 
-  test("[finding] after Expiry the record keeps tags, the Author's email and the token id, and the notice says so", async () => {
+  test("[finding] after Expiry the record scrubs title, description, tags and expires_at while keeping only minimal tombstones, and the notice says so", async () => {
     const i = await startInstance();
-    const r = await i.api("POST", "/api/shares", { html: PAGE, title: "T", metadata: { client: "acme" } });
+    const r = await i.api("POST", "/api/shares", { html: PAGE, title: "Confidential Q4", description: "Private", metadata: { client: "acme" } });
     const slug = r.json.slug as string;
     i.fake.sqlite.prepare("UPDATE shares SET expires_at = 1 WHERE slug = ?").run(slug);
     await i.cron();
-    const row = i.fake.one<{ tags: string; author: string; changed_by: string; deleted_at: number | null }>("SELECT tags, author, changed_by, deleted_at FROM shares WHERE slug = ?", slug);
+    const row = i.fake.one<{ title: string; description: string | null; tags: string; expires_at: number | null; author: string; changed_by: string; deleted_at: number | null }>(
+      "SELECT title, description, tags, expires_at, author, changed_by, deleted_at FROM shares WHERE slug = ?",
+      slug,
+    );
     expect(row.deleted_at).not.toBeNull();
-    expect(row.tags).toContain("acme");
+    expect(row.title).toBe("");
+    expect(row.description).toBeNull();
+    expect(row.tags).toBe("{}");
+    expect(row.expires_at).toBeNull();
     expect(row.author).toBe(AUTHOR);
     expect(row.changed_by).toBeTruthy();
-    // The notice must not understate what stays.
+    // Both notices describe the scrubbed metadata and retained tombstone fields.
     expect(text(pt)).toMatch(/etiquetas/);
     expect(text(pt)).toMatch(/e-mail do autor/);
     expect(text(en)).toMatch(/tags/);

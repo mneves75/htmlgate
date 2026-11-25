@@ -258,7 +258,7 @@ function execute({ absent = false, tapped = false, installed = false, version = 
       if (operation === "merge --ff-only origin/main") { merged = true; return ok(); }
       if (operation === "rev-parse --verify --quiet refs/tags/" + tag + "^{commit}") return ok("b".repeat(40));
       if (args[2] === "diff") {
-        expect(args.slice(2)).toEqual(["diff", "--exit-code", tag + "^{commit}", "--", "Formula/htmlgate.rb",
+        expect(args.slice(2)).toEqual(["diff", "--exit-code", "refs/tags/" + tag + "^{commit}", "--", "Formula/htmlgate.rb",
           "Formula/sources/" + formulaMetadata(readFileSync(join(repository, "Formula/htmlgate.rb"), "utf8")).archive,
           "packages/cli/LICENSE", "packages/cli/README.md", "packages/cli/package.json", "packages/cli/src", "packages/cli/tsconfig.json"]);
         return staleTag ? fail() : ok();

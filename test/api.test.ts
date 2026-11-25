@@ -287,5 +287,71 @@ describe("discoverability", () => {
   test("robots.txt lets a crawler read a Public Share and nothing else", async () => {
     const r = await fetch(`${base}/robots.txt`);
     expect(await r.text()).toBe("User-agent: *\nAllow: /p/\nDisallow: /\n");
+    const head = await fetch(`${base}/robots.txt`, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect((await fetch(`${base}/robots.txt`, { method: "POST" })).status).toBe(404);
+  });
+});
+
+describe("API input hardening", () => {
+  let hardenToken: string;
+  let hardenCall: ReturnType<typeof api>;
+  beforeAll(async () => {
+    hardenToken = await mintToken("api-harden");
+    hardenCall = api(hardenToken);
+  });
+
+  test("deeply nested or structurally excessive JSON is rejected before parsing", async () => {
+    const deep = '{"a":' + "[".repeat(32) + "]".repeat(32) + "}";
+    const r1 = await fetch(`${base}/api/shares`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${hardenToken}`, "content-type": "application/json" },
+      body: deep,
+    });
+    expect(r1.status).toBe(400);
+    expect(((await r1.json()) as any).error.code).toBe("invalid_json");
+    const wide = '{"a":[' + "[]".repeat(600).split("][").join("],[") + "]}";
+    const r2 = await fetch(`${base}/api/shares`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${hardenToken}`, "content-type": "application/json" },
+      body: wide,
+    });
+    expect(r2.status).toBe(400);
+    expect(((await r2.json()) as any).error.code).toBe("invalid_json");
+    const flat = '{"a":[' + "0,".repeat(1200) + "0]}";
+    const r3 = await fetch(`${base}/api/shares`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${hardenToken}`, "content-type": "application/json" },
+      body: flat,
+    });
+    expect(r3.status).toBe(400);
+    expect(((await r3.json()) as any).error.code).toBe("invalid_json");
+  });
+
+  test("bidi and control characters are refused in Share title and description, while newlines stay valid in description", async () => {
+    for (const bad of ["Hello\u202eWorld", "Line\nBreak", "Esc\u001b[31m", "Null\u0000Byte", "Bell\u0007Ring", "Tab\tTitle", "Bom\ufeffMark"]) {
+      const r = await hardenCall("POST", "/api/shares", { html: page("x"), title: bad });
+      expect(r.status, JSON.stringify(bad)).toBe(400);
+      expect(r.json.error.code).toBe("invalid_arg");
+    }
+    for (const badDescVal of ["Secret\u202eFlip", "Null\u0000Desc", "Bom\ufeffDesc"]) {
+      const badDesc = await hardenCall("POST", "/api/shares", { html: page("x"), title: "Hello", description: badDescVal });
+      expect(badDesc.status, JSON.stringify(badDescVal)).toBe(400);
+      expect(badDesc.json.error.code).toBe("invalid_arg");
+    }
+    const goodDesc = await hardenCall("POST", "/api/shares", { html: page("x"), title: "Hello", description: "Line 1\nLine 2\tindented" });
+    expect(goodDesc.status).toBe(201);
+  });
+
+  test("duplicate expires_at query parameter on zip publish is refused", async () => {
+    const { writeZip } = await import("../packages/cli/src/zip");
+    const zip = writeZip([{ path: "index.html", data: new TextEncoder().encode("<p>ok</p>") }]);
+    const r = await fetch(`${base}/api/shares?title=dup&expires_at=never&expires_at=never`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${hardenToken}`, "content-type": "application/zip" },
+      body: zip,
+    });
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as any).error.code).toBe("invalid_arg");
   });
 });

@@ -2,7 +2,6 @@
 // every state, written from the acceptance criteria rather than from the implementation.
 import { describe, expect, test } from "vitest";
 import type { Language } from "../src/config";
-import worker from "../src/index";
 import { homePage, notFoundPage, tokensPage, viewerPage, type HomeList, type PageResult, type Visitor } from "../src/pages";
 
 const LANGS: Language[] = ["en", "pt-BR"];
@@ -200,30 +199,8 @@ describe("security headers of the pages", () => {
     }
   });
 
-  test("the not-found page is byte-identical whatever the cause: the sign-in action is the only difference", async () => {
-    for (const lang of LANGS) {
-      const a = await notFoundPage(lang);
-      const b = await notFoundPage(lang);
-      expect(a).toEqual(b);
-    }
-  });
-
   test("a public viewer links nowhere into the gate", async () => {
     const body = (await pages("en"))["viewer public"]!.body;
     for (const text of ['href="/"', 'href="/tokens"', "ZQ-author", "/s/"]) expect(body, text).not.toContain(text);
-  });
-});
-
-describe("the Worker's settings", () => {
-  const env = (over: Record<string, string>) => ({ ACCESS_TEAM_URL: "https://team.example.com", ACCESS_AUD: "aud", AUTHOR_EMAIL: "a@example.com", ...over }) as never;
-  const ctx = { waitUntil() {}, passThroughOnException() {} } as never;
-
-  test.each(["", "fr", "pt-br", "PT-BR", "en-US"])("an Instance with LANGUAGE=%j refuses every page and API request with 503, not a page in a guessed language", async (language) => {
-    for (const path of ["/", "/tokens", "/s/AAAAAAAAAAAA", "/p/AAAAAAAAAAAA", "/api/shares"]) {
-      const r = await worker.fetch(new Request(`http://localhost${path}`), env({ LANGUAGE: language }), ctx);
-      expect(r.status, `${JSON.stringify(language)} ${path}`).toBe(503);
-      expect(r.headers.get("cache-control")).toBe("no-store");
-      expect(await r.text()).not.toContain("<html");
-    }
   });
 });

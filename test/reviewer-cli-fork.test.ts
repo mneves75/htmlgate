@@ -343,24 +343,23 @@ describe("errors keep upstream's exit codes", () => {
     expect(r.code).toBe(exit);
   });
 
-  test("a server that sends headers and then stalls ends in a network error (exit 8) at the 30 s deadline, not 'unknown'", async () => {
-    const s = await serve((_req, res) => { res.writeHead(200, { "content-type": "application/json" }); res.write('{"data":['); });
-    const d = fresh("stall");
+  test("a server that stalls after headers or never answers ends in exit 8 at the 30 s deadline, not 'unknown'", async () => {
+    const [stalled, silent] = await Promise.all([
+      serve((_req, res) => { res.writeHead(200, { "content-type": "application/json" }); res.write('{"data":['); }),
+      serve(() => {}),
+    ]);
+    const d1 = fresh("stall");
+    const d2 = fresh("silent");
     const t0 = Date.now();
-    const r = await run(d, { HOME: d, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"], { timeout: 45_000 });
+    const [r1, r2] = await Promise.all([
+      run(d1, { HOME: d1, HTMLGATE_URL: stalled.url, HTMLGATE_TOKEN: TOKEN }, ["list"], { timeout: 45_000 }),
+      run(d2, { HOME: d2, HTMLGATE_URL: silent.url, HTMLGATE_TOKEN: TOKEN }, ["list"], { timeout: 45_000 }),
+    ]);
     expect(Date.now() - t0).toBeGreaterThan(25_000);
     expect(Date.now() - t0).toBeLessThan(40_000);
-    expect(r.err?.code).toBe("network_error");
-    expect(r.code).toBe(8);
-  }, 55_000);
-
-  test("a server that never answers ends in exit 8 at the same deadline", async () => {
-    const s = await serve(() => {});
-    const d = fresh("silent");
-    const t0 = Date.now();
-    const r = await run(d, { HOME: d, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"], { timeout: 45_000 });
-    expect(Date.now() - t0).toBeLessThan(40_000);
-    expect(r.code).toBe(8);
+    expect(r1.err?.code).toBe("network_error");
+    expect(r1.code).toBe(8);
+    expect(r2.code).toBe(8);
   }, 55_000);
 
   test("usage: no command exits 7 with the help on stderr; --help and --version exit 0 on stdout; bad --output exits 7", async () => {
@@ -438,7 +437,7 @@ describe("a token is never printed", () => {
 
 describe("upsert", () => {
   test("more matches than one page of the lookup holds is still ambiguous: exit 7, nothing is written", async () => {
-    const shares = Array.from({ length: 10 }, (_, i) => ({ slug: `S${String(i).padStart(11, "0")}`, title: "t", url: "x", public: false, metadata: {}, updated_at: 1 }));
+    const shares = Array.from({ length: 10 }, (_, i) => ({ slug: `S${String(i).padStart(11, "0")}`, title: "t", url: `/s/${i}`, public: false, metadata: {}, updated_at: 1 }));
     const s = await serve((req, res) => (req.method === "GET" ? json(res, 200, { data: shares, pagination: { total: 12, total_pages: 2 } }) : json(res, 500, { error: { code: "invalid_arg", message: "should not be called" } })));
     const d = fresh("amb");
     writeFileSync(join(d, "a.html"), page("a"));

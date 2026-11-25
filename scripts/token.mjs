@@ -18,11 +18,23 @@ export function parseArgs(argv) {
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--config") flags.config = argv[++i];
-    else if (a === "--persist-to") flags.persistTo = argv[++i];
-    else if (a === "--local") flags.local = true;
-    else rest.push(a);
+    if (a === "--config") {
+      const value = argv[++i];
+      if (!value || value.startsWith("-")) throw new Error("--config requires a path.");
+      flags.config = value;
+    } else if (a === "--persist-to") {
+      const value = argv[++i];
+      if (!value || value.startsWith("-")) throw new Error("--persist-to requires a directory.");
+      flags.persistTo = value;
+    } else if (a === "--local") {
+      flags.local = true;
+    } else if (a.startsWith("-")) {
+      throw new Error(`Unknown flag "${a}". Use --config <path>, --local, or --persist-to <dir>.`);
+    } else {
+      rest.push(a);
+    }
   }
+  if (rest.length > 2) throw new Error(`Unexpected argument "${rest[2]}".`);
   if (flags.local && !flags.persistTo) throw new Error("--local needs --persist-to <dir>.");
   return { cmd: rest[0], arg: rest[1], flags };
 }

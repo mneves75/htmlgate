@@ -27,6 +27,9 @@ export function checkTarget(plan, cf) {
   const apps = listApplications(cf);
   if (apps.some((a) => a.name === `htmlgate: ${plan.name}`)) throw new Error(`The Worker ${plan.name} is an htmlgate Instance. The landing will not deploy over it.`);
   const worker = listWorkers(cf).find((w) => w.name === plan.name);
+  if (worker?.id && apps.some((a) => Array.isArray(a.destinations) && a.destinations.some((d) => d?.type === "worker" && d.worker_id === worker.id))) {
+    throw new Error(`The Worker ${plan.name} is protected by an Access application. The landing will not deploy over it.`);
+  }
   const domains = (worker?.references?.domains ?? []).map((d) => d.hostname);
   if (plan.domains.length === 0 && domains.length > 0) {
     throw new Error(`The preview Worker ${plan.name} serves the Custom Domain ${domains.join(", ")}. A preview must never change a domain.`);
@@ -35,17 +38,18 @@ export function checkTarget(plan, cf) {
 
 export async function checkAppGated(fetchImpl = fetch) {
   let status = 0;
-  let to = "";
+  let location = "";
   try {
     const r = await fetchImpl(APP, { redirect: "manual", signal: AbortSignal.timeout(10_000) });
     status = r.status;
-    to = r.headers.get("location") ?? "";
+    location = r.headers.get("location") ?? "";
   } catch (e) {
     throw new Error(`${APP} does not answer (${e.message}). Set up the production Instance there first.`);
   }
-  const host = URL.canParse(to) ? new URL(to).hostname : "";
-  if (status !== 302 || !host.endsWith(".cloudflareaccess.com")) {
-    throw new Error(`${APP} answered ${status}${to ? ` to ${to}` : ""}, not its Access sign-in. Set up the production Instance there first.`);
+  const to = location && URL.canParse(location) ? new URL(location) : undefined;
+  if (status !== 302 || to?.protocol !== "https:" || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/.test(to.hostname)
+    || to.username || to.password || to.port) {
+    throw new Error(`${APP} answered ${status}${location ? ` to ${location}` : ""}, not its Access sign-in. Set up the production Instance there first.`);
   }
 }
 

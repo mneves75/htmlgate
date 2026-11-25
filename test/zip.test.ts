@@ -14,12 +14,19 @@ interface Raw {
   data?: Uint8Array | string;
   method?: number;
   flags?: number;
+  localFlags?: number;
   madeBy?: number;
   extAttr?: number;
+  diskStart?: number;
+  cdExtra?: Uint8Array;
+  localExtra?: Uint8Array;
   /** Overrides written into the central directory only. */
   size?: number;
   csize?: number;
   localName?: string;
+  localCrc?: number;
+  localCsize?: number;
+  localSize?: number;
   /** Point this entry's central record at an earlier entry's local header. */
   sameLocalAs?: number;
   /** The CRC written in the central directory. */
@@ -33,11 +40,12 @@ const enc = new TextEncoder();
 const bytes = (d: Uint8Array | string | undefined) => (typeof d === "string" ? enc.encode(d) : (d ?? new Uint8Array()));
 
 /** A zip built byte by byte, so a test can write what no well-behaved tool would. */
-function rawZip(entries: Raw[], opts: { afterDirectory?: string } = {}): Uint8Array {
+function rawZip(entries: Raw[], opts: { afterDirectory?: string; prepend?: Uint8Array } = {}): Uint8Array {
   const locals: Uint8Array[] = [];
   const centrals: Uint8Array[] = [];
   const offsets: number[] = [];
-  let at = 0;
+  const prefix = opts.prepend ?? new Uint8Array();
+  let at = prefix.length;
   for (const e of entries) {
     const name = typeof e.name === "string" ? enc.encode(e.name) : e.name;
     const plain = bytes(e.data);
@@ -45,26 +53,30 @@ function rawZip(entries: Raw[], opts: { afterDirectory?: string } = {}): Uint8Ar
     let stored = method === 8 ? new Uint8Array(deflateRawSync(plain)) : plain;
     if (e.junk !== undefined) stored = new Uint8Array([...stored, ...enc.encode(e.junk)]);
     if (e.cut !== undefined) stored = stored.slice(0, stored.length - e.cut);
-    const local = new Uint8Array(30 + (e.localName !== undefined ? enc.encode(e.localName).length : name.length) + stored.length);
     const lname = e.localName !== undefined ? enc.encode(e.localName) : name;
+    const lextra = e.localExtra ?? new Uint8Array();
+    const local = new Uint8Array(30 + lname.length + lextra.length + stored.length);
     const lv = new DataView(local.buffer);
     lv.setUint32(0, 0x04034b50, true);
     lv.setUint16(4, 20, true);
-    lv.setUint16(6, e.flags ?? 0x0800, true);
+    lv.setUint16(6, e.localFlags ?? e.flags ?? 0x0800, true);
     lv.setUint16(8, method, true);
-    lv.setUint32(14, crc32(plain), true);
-    lv.setUint32(18, stored.length, true);
-    lv.setUint32(22, plain.length, true);
+    lv.setUint32(14, e.localCrc ?? e.crc ?? crc32(plain), true);
+    lv.setUint32(18, e.localCsize ?? stored.length, true);
+    lv.setUint32(22, e.localSize ?? plain.length, true);
     lv.setUint16(26, lname.length, true);
+    lv.setUint16(28, lextra.length, true);
     local.set(lname, 30);
-    local.set(stored, 30 + lname.length);
+    local.set(lextra, 30 + lname.length);
+    local.set(stored, 30 + lname.length + lextra.length);
     const offset = e.sameLocalAs !== undefined ? offsets[e.sameLocalAs]! : at;
     offsets.push(offset);
     if (e.sameLocalAs === undefined) {
       locals.push(local);
       at += local.length;
     }
-    const central = new Uint8Array(46 + name.length);
+    const cextra = e.cdExtra ?? new Uint8Array();
+    const central = new Uint8Array(46 + name.length + cextra.length);
     const cv = new DataView(central.buffer);
     cv.setUint32(0, 0x02014b50, true);
     cv.setUint16(4, e.madeBy ?? (3 << 8) | 20, true);
@@ -75,9 +87,12 @@ function rawZip(entries: Raw[], opts: { afterDirectory?: string } = {}): Uint8Ar
     cv.setUint32(20, e.csize ?? stored.length, true);
     cv.setUint32(24, e.size ?? plain.length, true);
     cv.setUint16(28, name.length, true);
+    cv.setUint16(30, cextra.length, true);
+    cv.setUint16(34, e.diskStart ?? 0, true);
     cv.setUint32(38, e.extAttr ?? (0o100644 << 16) >>> 0, true);
     cv.setUint32(42, offset, true);
     central.set(name, 46);
+    central.set(cextra, 46 + name.length);
     centrals.push(central);
   }
   const cdSize = centrals.reduce((n, c) => n + c.length, 0);
@@ -91,7 +106,7 @@ function rawZip(entries: Raw[], opts: { afterDirectory?: string } = {}): Uint8Ar
   ev.setUint32(16, at, true);
   const out = new Uint8Array(at + cdSize + between.length + 22);
   let p = 0;
-  for (const part of [...locals, ...centrals, between, eocd]) {
+  for (const part of [prefix, ...locals, ...centrals, between, eocd]) {
     out.set(part, p);
     p += part.length;
   }
@@ -218,8 +233,8 @@ describe("a site zip that is refused", () => {
     await refused(rawZip([INDEX, { name: "a.txt", data: "aaaa" }, { name: "a.txt", data: "aaaa", sameLocalAs: 1 }]), "site_invalid", "overlap");
     await refused(rawZip([INDEX, { name: "a.txt", data: "x", localName: "b.txt" }]), "site_invalid", "local");
     await refused(rawZip([INDEX, { name: "a.txt", data: "abcdef", method: 0, size: 3 }]), "site_invalid", "a.txt");
-    await refused(rawZip([INDEX, { name: "a.txt", data: "a".repeat(5000), size: 100 }]), "site_invalid", "a.txt");
-    await refused(rawZip([INDEX, { name: "a.txt", data: "abc", size: 100 }]), "site_invalid", "a.txt");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "a".repeat(5000), size: 100, localSize: 100 }]), "site_invalid", "a.txt");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "abc", size: 100, localSize: 100 }]), "site_invalid", "a.txt");
   });
 
   test("bytes that do not inflate cleanly, or that fail their checksum", async () => {
@@ -246,5 +261,41 @@ describe("a site zip that is refused", () => {
     const sixty = Array.from({ length: 6 }, (_, i) => ({ name: `part${i}.bin`, data: new Uint8Array(SITE_LIMITS.fileBytes - 1) }));
     await refused(rawZip([INDEX, ...sixty]), "site_too_large", "unzipped");
     await refused(rawZip([INDEX, { name: "x".repeat(513), data: "x" }]), "site_invalid", "long");
+  });
+
+  test("skipped macOS entries and directories cannot smuggle unverified bombs or payloads", async () => {
+    await refused(rawZip([INDEX, { name: "dir/", data: "hidden payload", method: 8, size: 0, localSize: 0, crc: 0, localCrc: 0 }]), "site_invalid", "dir");
+    // A valid multi-block deflate stream inflating to 0 bytes still exceeds the 2-byte empty stream cap on a directory.
+    await refused(rawZip([INDEX, { name: "dir2/", data: "", method: 8, junk: "\x00\x00\x00\xff\xff", size: 0, localSize: 0, crc: 0, localCrc: 0 }]), "site_invalid", "folder with content");
+    await refused(rawZip([INDEX, { name: "__MACOSX/bomb", data: new Uint8Array(SITE_LIMITS.fileBytes + 1) }]), "site_too_large", "__MACOSX/bomb");
+    await refused(rawZip([INDEX, { name: "__MACOSX/bad", data: "hello", crc: 1234 }]), "site_invalid", "checksum");
+    await refused(rawZip([INDEX, { name: ".DS_Store", data: "hello ".repeat(50), junk: "JUNK" }]), "site_invalid", "damaged");
+  });
+
+  test("symlinks and special files are refused regardless of madeBy host OS (including macOS madeBy=19)", async () => {
+    await refused(rawZip([INDEX, { name: "link.txt", data: "/etc/passwd", method: 0, madeBy: (19 << 8) | 20, extAttr: (0o120777 << 16) >>> 0 }]), "site_invalid", "is a symbolic link");
+    await refused(rawZip([INDEX, { name: "link0.txt", data: "/etc/passwd", method: 0, madeBy: 20, extAttr: (0o120777 << 16) >>> 0 }]), "site_invalid", "is a symbolic link");
+    await refused(rawZip([INDEX, { name: "fifo.txt", data: "", method: 0, madeBy: (19 << 8) | 20, extAttr: (0o010644 << 16) >>> 0 }]), "site_invalid", "is not a regular file");
+  });
+
+  test("polyglot prepends, LFH/CD disagreements, split disks, alternate extra headers, and bidi filenames are refused", async () => {
+    await refused(rawZip([INDEX], { prepend: enc.encode("GIF89a") }), "site_invalid", "before its first entry");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", diskStart: 1 }]), "site_invalid", "split");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", localFlags: 0x0808 }]), "site_invalid", "local header disagrees");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", flags: 0x0800, localFlags: 0x0000 }]), "site_invalid", "local header disagrees");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", flags: 0x0808, localFlags: 0x0808, localCrc: 0, localCsize: 0, localSize: 0 }]), "site_invalid", "data descriptor");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", localFlags: 0x0801 }]), "site_invalid", "local header disagrees");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", localCrc: 9999 }]), "site_invalid", "local header disagrees");
+    // Info-ZIP Unicode Path (0x7075) and ZIP64 (0x0001) extra fields alter parser interpretation.
+    const unicodePath = new Uint8Array([0x75, 0x70, 0x05, 0x00, 0x01, 0, 0, 0, 0]);
+    const zip64Extra = new Uint8Array([0x01, 0x00, 0x00, 0x00]);
+    const truncatedExtra = new Uint8Array([0x55, 0x54, 0x10, 0x00, 0x01]);
+    const benignUtExtra = new Uint8Array([0x55, 0x54, 0x05, 0x00, 0x01, 0, 0, 0, 0]);
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", cdExtra: unicodePath }]), "site_invalid", "Unicode path");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", localExtra: unicodePath }]), "site_invalid", "Unicode path");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", cdExtra: zip64Extra }]), "site_invalid", "ZIP64");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", cdExtra: truncatedExtra }]), "site_invalid", "extra header");
+    expect((await readSite(rawZip([INDEX, { name: "a.txt", data: "x", cdExtra: benignUtExtra, localExtra: benignUtExtra }]))).map((e) => e.path)).toContain("a.txt");
+    await refused(rawZip([INDEX, { name: "safe\u202ehtml.txt", data: "x" }]), "site_invalid", "control character");
   });
 });

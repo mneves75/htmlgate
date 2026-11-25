@@ -27,3 +27,9 @@ describe("the expiry default", () => {
     expect(read({ EXPIRY_DAYS: days })).toBeNull();
   });
 });
+
+describe("the Access team URL", () => {
+  test.each(["https://team.example.com/nested", "http://team.example.com", "https://bad..host", "http://127.0.0.1:99999", "https://user@team.example.com"])("%j refuses everything", (url) => {
+    expect(read({ ACCESS_TEAM_URL: url })).toBeNull();
+  });
+});

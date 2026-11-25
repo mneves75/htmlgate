@@ -18,7 +18,7 @@ async function serve(handler: Handler): Promise<{ url: string; hits: IncomingMes
   return { url: `http://127.0.0.1:${(s.address() as { port: number }).port}`, hits };
 }
 const jsonRes = (res: ServerResponse, status: number, body: unknown) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
-const share = (n: number) => ({ slug: `S${String(n).padStart(11, "0")}`, title: `t${n}`, url: `x/s/${n}`, public: false, metadata: {}, updated_at: n, latest_version: 1 });
+const share = (n: number) => ({ slug: `S${String(n).padStart(11, "0")}`, title: `t${n}`, url: `/s/${n}`, public: false, metadata: {}, updated_at: n, latest_version: 1 });
 
 let dir: string;
 beforeAll(() => { dir = mkdtempSync(join(tmpdir(), "htmlgate-cli-safety-")); });
@@ -313,5 +313,108 @@ describe("a cloned repository's .htmlgate/config cannot stall the CLI", () => {
     const r = await status((config) => writeFileSync(config, "# padding\n".repeat(7000) + 'api_url = "https://html.example.com"\n'));
     expect(r.code).toBe(7);
     expect(r.stderr).toMatch(/larger than 65536 bytes/);
+  });
+
+  test("a symlinked .htmlgate/config or .htmlgate directory is refused", async () => {
+    const { rmSync, symlinkSync, writeFileSync } = await import("node:fs");
+    const target = join(dir, "real-config");
+    writeFileSync(target, 'api_url = "https://html.example.com"\n');
+    const r1 = await status((config) => symlinkSync(target, config));
+    expect(r1.code).toBe(7);
+    expect(r1.stderr).toMatch(/symbolic link/);
+    const r2 = await status((config) => {
+      const parent = join(config, "..");
+      rmSync(parent, { recursive: true });
+      symlinkSync(dir, parent);
+    });
+    expect(r2.code).toBe(7);
+    expect(r2.stderr).toMatch(/symbolic link/);
+  });
+});
+
+describe("CLI response URL, pagination, and argument hardening", () => {
+  test("a server returning a cross-origin, backslash, schemeless, javascript:, credentialed, or newline-bearing Share URL is refused", async () => {
+    for (const badUrl of [
+      "http://evil.example/s/abc",
+      "https://evil.example/s/abc",
+      "https://user:pass@evil.example/s/abc",
+      "javascript:alert(1)",
+      "http://127.0.0.1:9/s/1\nforged",
+      "//evil.example/s/1",
+      "/\\evil.example/s/1",
+      "evil.example/phish",
+      "https:sample",
+      "http:sample",
+    ]) {
+      const s = await serve((_req, res) => jsonRes(res, 200, { ...share(1), url: badUrl }));
+      const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["url", "s1"]);
+      expect(r.code, badUrl).toBe(8);
+      expect(JSON.parse(r.stderr).error.code, badUrl).toBe("bad_response");
+    }
+  });
+
+  test("JSON output escapes bidi and C1 characters so agent terminals cannot spoof output", async () => {
+    const s = await serve((_req, res) => jsonRes(res, 200, {
+      data: [{ ...share(1), title: "ok\u202e\u061c\u009b" }],
+      pagination: { page: 1, page_size: 1, total: 1, total_pages: 1 },
+    }));
+    const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("\\u202e");
+    expect(r.stdout).toContain("\\u061c");
+    expect(r.stdout).not.toMatch(/[\u007f-\u009f\u061c\u202e]/);
+  });
+
+  test("list -n requests a consistent bounded pageSize across pages and refuses invalid total_pages", async () => {
+    const seenSizes: string[] = [];
+    const s = await serve((req, res) => {
+      const qs = new URL(req.url!, "http://x").searchParams;
+      seenSizes.push(qs.get("pageSize") ?? "");
+      jsonRes(res, 200, { data: [share(1), share(2)], pagination: { page: 1, page_size: 2, total: 2, total_pages: 1 } });
+    });
+    const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list", "-n", "2"]);
+    expect(r.code).toBe(0);
+    expect(seenSizes).toEqual(["2"]);
+
+    // Multi-page -n 250 must keep pageSize=200 on page 2 so offset pagination never duplicates items 50..99.
+    const multiSizes: string[] = [];
+    const multi = await serve((req, res) => {
+      const qs = new URL(req.url!, "http://x").searchParams;
+      const page = Number(qs.get("page") ?? "1");
+      const ps = Number(qs.get("pageSize") ?? "200");
+      multiSizes.push(`${page}:${ps}`);
+      const offset = (page - 1) * ps;
+      const items = Array.from({ length: Math.min(ps, Math.max(0, 260 - offset)) }, (_, i) => share(offset + i + 1));
+      jsonRes(res, 200, { data: items, pagination: { page, page_size: ps, total: 260, total_pages: 2 } });
+    });
+    const rMulti = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: multi.url, HTMLGATE_TOKEN: TOKEN }, ["list", "-n", "250"]);
+    expect(rMulti.code).toBe(0);
+    expect(multiSizes).toEqual(["1:200", "2:200"]);
+    const parsed = JSON.parse(rMulti.stdout) as { slug: string }[];
+    expect(parsed).toHaveLength(250);
+    expect(new Set(parsed.map((x) => x.slug)).size).toBe(250);
+
+    const bad = await serve((_req, res) => jsonRes(res, 200, { data: [share(1)], pagination: { page: 1, page_size: 1, total: 1, total_pages: -1 } }));
+    const rBad = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: bad.url, HTMLGATE_TOKEN: TOKEN }, ["list"]);
+    expect(rBad.code).toBe(8);
+    expect(JSON.parse(rBad.stderr).error.code).toBe("bad_response");
+  });
+
+  test("unexpected extra positional arguments are refused and update --title '' forwards empty title", async () => {
+    let seenBody: unknown;
+    const s = await serve(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(Buffer.from(c));
+      seenBody = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : undefined;
+      jsonRes(res, 200, share(1));
+    });
+    const extra = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["delete", "s1", "s2"]);
+    expect(extra.code).toBe(7);
+    expect(JSON.parse(extra.stderr).error.code).toBe("invalid_arg");
+    expect(s.hits).toHaveLength(0);
+
+    const emptyTitle = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["update", "s1", "--title", ""]);
+    expect(emptyTitle.code).toBe(0);
+    expect(seenBody).toEqual({ title: "" });
   });
 });

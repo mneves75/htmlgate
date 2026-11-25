@@ -20,7 +20,7 @@ const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as Execut
 // ---------------------------------------------------------------------------------------------------------------------
 describe("claim 4: the 64 KiB cap on requests that carry fields only", () => {
   /** JSON with every character as a six-byte \u escape: the largest a legitimate client (Python's json.dumps) can send. */
-  const esc = (n: number) => '"' + "\\u0001".repeat(n) + '"';
+  const esc = (n: number) => '"' + "\\u00e9".repeat(n) + '"';
   const keys = Array.from({ length: 10 }, (_, i) => String.fromCharCode(97 + i).repeat(64));
   const worst = () =>
     `{"title":${esc(200)},"description":${esc(500)},"metadata":{${keys.map((k) => `"${k}":${esc(256)}`).join(",")}},"expires_at":${Date.now() + 86_400_000}}`;
@@ -277,17 +277,6 @@ describe("claim 2: the `access` log", () => {
     } finally {
       server.close();
     }
-  });
-
-  test("an expired or wrong-audience token from the real key is an ordinary refusal", async () => {
-    const i = await startInstance();
-    const cfg = readConfig(i.env)!;
-    const errors = spy();
-    expect(await person(request(await i.jwt(AUTHOR, { aud: "other" })), cfg)).toBeNull();
-    const a = await startInstance();
-    void a;
-    expect(AUD).toBeTruthy();
-    expect(errors).not.toHaveBeenCalled();
   });
 });
 

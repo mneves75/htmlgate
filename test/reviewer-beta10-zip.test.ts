@@ -6,7 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 import { afterAll, describe, expect, test } from "vitest";
-import { parseExpires } from "../packages/cli/src/files";
 import { readConfig } from "../src/config";
 import { importTicketKey, openTicket, sealTicket } from "../src/ticket";
 import { entryStream, readSite, siteRequestPath, SiteError, type SiteEntry } from "../src/zip";
@@ -519,25 +518,5 @@ describe("Instance settings", () => {
     const noncanonical = "A".repeat(42) + "B";
     expect(await importTicketKey(noncanonical)).toBeNull();
     expect(readConfig({ ...base, TICKET_KEY: noncanonical })).toBeNull();
-  });
-});
-
-// ---------- the CLI's --expires ----------
-describe("the CLI reads --expires", () => {
-  const now = Date.UTC(2026, 9, 9, 12);
-  test("the documented forms", () => {
-    expect(parseExpires("never", now)).toBeNull();
-    expect(parseExpires("30d", now)).toBe(now + 30 * 86_400_000);
-    expect(parseExpires("12h", now)).toBe(now + 12 * 3_600_000);
-    expect(parseExpires("2026-12-31", now)).toBe(Date.UTC(2026, 11, 31));
-    expect(parseExpires("2026-12-31T18:00:00Z", now)).toBe(Date.UTC(2026, 11, 31, 18));
-    expect(parseExpires("2026-12-31T18:00:00-03:00", now)).toBe(Date.UTC(2026, 11, 31, 21));
-  });
-  test.each(["", "soon", "0d", "-1d", "30", "1w", "2026-13-01", "2026-12-32", "2026-12-31T18:00:00", "12:00"])("%j is refused", (bad) => {
-    expect(() => parseExpires(bad, now), bad).toThrow();
-  });
-  // A calendar date that does not exist must not be silently moved to another day (V8's Date.parse rolls 02-31 to 03-03).
-  test.each(["2026-02-31", "2026-02-30", "2026-04-31", "2026-11-31"])("an impossible calendar date %s is refused, not moved to another day", (bad) => {
-    expect(() => parseExpires(bad, now), bad).toThrow();
   });
 });

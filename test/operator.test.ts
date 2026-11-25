@@ -7,7 +7,11 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, inject, test } from "vitest";
 // @ts-expect-error plain JavaScript module
-import { accessApp, checkDomain, checkSameAccount, deploymentUrls, gated, generatedConfig, instanceVars, isGateRedirect, listWorkers, r2NotEnabled, readInstance, robotsApp, workerConfig, wranglerWho } from "../scripts/setup.mjs";
+import { accessApp, checkDomain, checkSameAccount, deploymentUrls, gated, generatedConfig, instanceVars, isGateRedirect, listWorkers, parseSetupArgs, r2NotEnabled, readInstance, robotsApp, verifyAccessApp, workerConfig, wranglerWho } from "../scripts/setup.mjs";
+// @ts-expect-error plain JavaScript module
+import { parseArgs as parseTokenArgs } from "../scripts/token.mjs";
+// @ts-expect-error plain JavaScript module
+import { args as parseEdgeArgs, parseBase as parseEdgeBase } from "../scripts/perf/edge.mjs";
 import { AUTHOR, settings, startInstance, type Instance } from "./global-setup";
 
 const run = promisify(execFile);
@@ -301,7 +305,8 @@ describe("the account check: Wrangler and cf must act on one and the same accoun
 
   test("a logged-out Wrangler, which exits 1, gets the login hint rather than a generic failure", () => {
     const { CLOUDFLARE_API_TOKEN: _t, CLOUDFLARE_ACCOUNT_ID: _a, ...env } = process.env;
-    const who = wranglerWho({ ...env, XDG_CONFIG_HOME: mkdtempSync(join(tmpdir(), "htmlgate-nologin-")) });
+    const noLogin = mkdtempSync(join(tmpdir(), "htmlgate-nologin-"));
+    const who = wranglerWho({ ...env, HOME: noLogin, XDG_CONFIG_HOME: noLogin });
     expect(who).toEqual({ loggedIn: false });
     expect(() => checkSameAccount(who, cfw(A), {})).toThrow(/wrangler login/);
   });
@@ -612,5 +617,49 @@ describe("each Instance's generated config", () => {
     } finally {
       rmSync(other, { force: true });
     }
+  });
+});
+
+describe("strict operator CLI flag and response validation", () => {
+  test("setup parseSetupArgs refuses unknown flags, --flag=value, and missing --config paths", () => {
+    expect(parseSetupArgs([])).toEqual({ config: "instance.json", rotateTicketKey: false });
+    expect(parseSetupArgs(["--config", ".instance/production.json", "--rotate-ticket-key"])).toEqual({ config: ".instance/production.json", rotateTicketKey: true });
+    expect(() => parseSetupArgs(["--config=.instance/production.json"])).toThrow(/Unknown argument/);
+    expect(() => parseSetupArgs(["--config"])).toThrow(/--config requires a path/);
+    expect(() => parseSetupArgs(["--unknown"])).toThrow(/Unknown argument/);
+  });
+
+  test("setup verifyAccessApp requires aud, Lax+HttpOnly cookies, matching Worker destination, and MFA when requested", () => {
+    const inst = { name: "my-bin", mfa: false };
+    const good = { aud: "a1", same_site_cookie_attribute: "lax", http_only_cookie_attribute: true, destinations: [{ type: "worker", worker_id: "w1" }] };
+    expect(() => verifyAccessApp(good, inst, "w1")).not.toThrow();
+    expect(() => verifyAccessApp({ ...good, aud: "" }, inst, "w1")).toThrow(/audience/);
+    expect(() => verifyAccessApp({ ...good, aud: "   " }, inst, "w1")).toThrow(/audience/);
+    expect(() => verifyAccessApp({ ...good, aud: {} as unknown as string }, inst, "w1")).toThrow(/audience/);
+    expect(() => verifyAccessApp({ ...good, same_site_cookie_attribute: "none" }, inst, "w1")).toThrow(/SameSite=Lax/);
+    expect(() => verifyAccessApp({ ...good, http_only_cookie_attribute: false }, inst, "w1")).toThrow(/HttpOnly/);
+    expect(() => verifyAccessApp({ ...good, destinations: [{ type: "worker", worker_id: "w2" }] }, inst, "w1")).toThrow(/destination/);
+    expect(() => verifyAccessApp({ aud: "a1" }, inst, "w1")).toThrow(/SameSite=Lax/);
+    expect(() => verifyAccessApp({ aud: "a1", same_site_cookie_attribute: "lax", http_only_cookie_attribute: true }, inst, "w1")).toThrow(/destination/);
+    expect(() => verifyAccessApp(good, { ...inst, mfa: true }, "w1")).toThrow(/MFA/);
+    expect(() => verifyAccessApp({ ...good, mfa_config: { mfa_disabled: true } }, { ...inst, mfa: true }, "w1")).toThrow(/MFA/);
+    expect(() => verifyAccessApp({ ...good, mfa_config: { mfa_disabled: false } }, { ...inst, mfa: true }, "w1")).not.toThrow();
+  });
+
+  test("token parseArgs refuses unknown flags, --config=..., missing values, and extra args", () => {
+    expect(parseTokenArgs(["list", "--config", "a.json"])).toEqual({ cmd: "list", arg: undefined, flags: { config: "a.json", local: false, persistTo: undefined } });
+    expect(() => parseTokenArgs(["list", "--config=a.json"])).toThrow(/Unknown flag/);
+    expect(() => parseTokenArgs(["list", "--config"])).toThrow(/--config requires a path/);
+    expect(() => parseTokenArgs(["list", "--bogus"])).toThrow(/Unknown flag/);
+    expect(() => parseTokenArgs(["revoke", "0123456789ab", "extra"])).toThrow(/Unexpected argument/);
+  });
+
+  test("edge benchmark args refuse non-finite/negative --gap and cleartext remote --base", () => {
+    expect(parseEdgeBase("https://htmlgate.com/").url).toBe("https://htmlgate.com");
+    expect(parseEdgeBase("http://127.0.0.1:8787").url).toBe("http://127.0.0.1:8787");
+    expect(() => parseEdgeBase("http://htmlgate.com")).toThrow(/https or loopback/);
+    expect(() => parseEdgeBase("https://htmlgate.com|a=1|b=2")).toThrow(/at most one/);
+    expect(() => parseEdgeArgs(["--base", "https://htmlgate.com", "--paths", "/", "--gap", "abc"])).toThrow(/non-negative/);
+    expect(() => parseEdgeArgs(["--base", "https://htmlgate.com", "--paths", "/", "--gap", "-1"])).toThrow(/non-negative/);
   });
 });

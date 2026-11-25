@@ -269,9 +269,19 @@ describe("headers", () => {
     const r = await hit(path, { host: "htmlgate.com", method });
     expect(r.headers["content-security-policy"]).toBe(CSP);
     expect(r.headers["x-content-type-options"]).toBe("nosniff");
+    expect(r.headers["x-frame-options"]).toBe("DENY");
+    expect(r.headers["cross-origin-opener-policy"]).toBe("same-origin");
+    expect(r.headers["cross-origin-resource-policy"]).toBe("same-origin");
+    expect(r.headers["permissions-policy"]).toContain("camera=()");
     expect(r.headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
     // The landing is public and the same for everyone: cacheable, unlike an Instance's no-store pages.
     expect(r.headers["cache-control"]).toBe("public, max-age=300");
+  });
+
+  test("social media assets under /media/ permit cross-origin resource loading for cards", async () => {
+    const r = await hit("/media/htmlgate-15s.jpg", { host: "htmlgate.com" });
+    expect(r.status).toBe(200);
+    expect(r.headers["cross-origin-resource-policy"]).toBe("cross-origin");
   });
 
   test("the canonical host is indexable, and every other host (the workers.dev preview) is not", async () => {
@@ -346,6 +356,7 @@ describe("deploying the landing", () => {
     const pagedApps = (...args: string[]) =>
       args[0] === "workers" ? [] : args.includes("1") ? [{ name: "other" }] : args.includes("2") ? [{ name: "htmlgate: htmlgate-site" }] : [];
     expect(() => checkTarget(live, pagedApps)).toThrow(/Instance/);
+    expect(() => checkTarget(live, cfWith([{ id: "w9", name: "htmlgate-site" }], [{ name: "custom-app", destinations: [{ type: "worker", worker_id: "w9" }] }]))).toThrow(/Access/);
   });
 
   test("going live needs app.htmlgate.com to answer behind its sign-in, so no visitor lands on a dead link", async () => {
@@ -353,6 +364,9 @@ describe("deploying the landing", () => {
     await expect(checkAppGated(answer(302, "https://team.cloudflareaccess.com/cdn-cgi/access/login/app.htmlgate.com?kid=x"))).resolves.toBeUndefined();
     await expect(checkAppGated(answer(200))).rejects.toThrow(/app.htmlgate.com/);
     await expect(checkAppGated(answer(302, "https://evil.example/cloudflareaccess.com"))).rejects.toThrow(/app.htmlgate.com/);
+    await expect(checkAppGated(answer(302, "http://team.cloudflareaccess.com/cdn-cgi/access/login/app.htmlgate.com"))).rejects.toThrow(/app.htmlgate.com/);
+    await expect(checkAppGated(answer(302, "https://a.b.cloudflareaccess.com/cdn-cgi/access/login/app.htmlgate.com"))).rejects.toThrow(/app.htmlgate.com/);
+    await expect(checkAppGated(answer(302, "https://team.cloudflareaccess.com:8443/cdn-cgi/access/login/app.htmlgate.com"))).rejects.toThrow(/app.htmlgate.com/);
     await expect(checkAppGated(async () => { throw new Error("getaddrinfo ENOTFOUND"); })).rejects.toThrow(/app.htmlgate.com/);
   });
 

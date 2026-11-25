@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript-classic";
 import { checkRevokeAllModel, checkStoreModel, type CheckResult, type RevokeBugVariant, type StoreBugVariant } from "./store-lifecycle.model.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -13,10 +14,33 @@ export interface ConformanceFinding {
   detail: string;
 }
 
+function extractBody(source: string, fileName: string, kind: "method" | "function" | "const", name: string): string {
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, fileName.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS);
+  let found = "";
+  const visit = (node: ts.Node) => {
+    if (found) return;
+    if (kind === "method" && ts.isMethodDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
+      found = node.getText(sf);
+      return;
+    }
+    if (kind === "function" && ts.isFunctionDeclaration(node) && node.name?.text === name) {
+      found = node.getText(sf);
+      return;
+    }
+    if (kind === "const" && ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
+      found = node.getText(sf);
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return found;
+}
+
 export function detectCodeDeviationsFromSource(store: string, token: string): ConformanceFinding[] {
   const findings: ConformanceFinding[] = [];
 
-  const expireBlock = store.slice(store.indexOf("async expire("), store.indexOf("async useToken("));
+  const expireBlock = extractBody(store, "src/store.ts", "method", "expire");
   const delViewsAt = expireBlock.indexOf("DELETE FROM share_views");
   const delVersionsAt = expireBlock.indexOf("DELETE FROM versions");
   if (delViewsAt === -1 || delVersionsAt === -1 || delViewsAt > delVersionsAt) {
@@ -28,7 +52,7 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
     });
   }
 
-  const countViewBlock = store.slice(store.indexOf("async countView("), store.indexOf("async viewsBySlug("));
+  const countViewBlock = extractBody(store, "src/store.ts", "method", "countView");
   if (!/WHERE EXISTS\s*\(\s*SELECT 1 FROM shares WHERE slug = \?1 AND \$\{live\(\)\}\s*\)/.test(countViewBlock)) {
     findings.push({
       codeFile: "src/store.ts",
@@ -38,9 +62,10 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
     });
   }
 
-  const addVersionBlock = store.slice(store.indexOf("async addVersion("), store.indexOf("async updateFields("));
-  const updatePart = addVersionBlock.slice(addVersionBlock.indexOf("UPDATE shares SET"));
-  if (updatePart.includes("${live()}")) {
+  const addVersionBlock = extractBody(store, "src/store.ts", "method", "addVersion");
+  const updateAt = addVersionBlock.indexOf("UPDATE shares SET");
+  const updatePart = updateAt === -1 ? "" : addVersionBlock.slice(updateAt);
+  if (!updatePart || updatePart.includes("${live()}")) {
     findings.push({
       codeFile: "src/store.ts",
       symbol: "Store.addVersion",
@@ -49,8 +74,8 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
     });
   }
 
-  const reservedLine = store.match(/const RESERVED = .*?;/)?.[0] ?? "";
-  if (!reservedLine.includes("due_at > ${CLOCK}")) {
+  const reservedDecl = extractBody(store, "src/store.ts", "const", "RESERVED");
+  if (!reservedDecl.includes("due_at > ${CLOCK}")) {
     findings.push({
       codeFile: "src/store.ts",
       symbol: "RESERVED",
@@ -59,28 +84,34 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
     });
   }
 
-  const emptyTrashBlock = store.slice(store.indexOf("async emptyTrash("), store.indexOf("async body("));
-  if (!emptyTrashBlock.includes("DELETE FROM trash WHERE (body_key, due_at) IN")) {
+  const emptyTrashBlock = extractBody(store, "src/store.ts", "method", "emptyTrash");
+  if (!emptyTrashBlock.includes("DELETE FROM trash WHERE (body_key, CAST(due_at AS TEXT) || ':' || nonce) IN")) {
     findings.push({
       codeFile: "src/store.ts",
       symbol: "Store.emptyTrash",
-      detectedVariant: "empty-trash-ignores-due-at",
-      detail: "Store.emptyTrash() must delete trash rows matching both (body_key, due_at).",
+      detectedVariant: emptyTrashBlock.includes("DELETE FROM trash WHERE (body_key, due_at) IN") ? "due-now-two-empty-trash-race" : "empty-trash-ignores-due-at",
+      detail: "Store.emptyTrash() must delete trash rows matching (body_key, due_at, nonce).",
     });
   }
 
-  const dueNowBlock = store.slice(store.indexOf("private async dueNow("), store.indexOf("private async commit("));
-  if (!/ON CONFLICT\s*\(\s*body_key\s*\)\s*DO UPDATE SET\s+due_at\s*=\s*CASE\s+WHEN\s+excluded\.due_at\s*=\s*trash\.due_at\s+THEN\s+excluded\.due_at\s*\+\s*1\s+ELSE\s+excluded\.due_at\s+END/.test(dueNowBlock)) {
+  const trashNonceDecl = extractBody(store, "src/store.ts", "const", "TRASH_NONCE");
+  const dueNowBlock = extractBody(store, "src/store.ts", "method", "dueNow");
+  const writesFreshNonce = trashNonceDecl.includes("randomblob")
+    && (dueNowBlock.includes("${TRASH_NONCE}") || dueNowBlock.includes("randomblob"))
+    && /ON CONFLICT\s*\(\s*body_key\s*\)\s*DO UPDATE SET[\s\S]*\bnonce\s*=\s*excluded\.nonce\b/.test(dueNowBlock)
+    && dueNowBlock.includes("MAX(trash.due_at + 1, excluded.due_at)");
+  if (!writesFreshNonce) {
     findings.push({
       codeFile: "src/store.ts",
       symbol: "Store.dueNow",
-      detectedVariant: "due-now-same-ms-race",
-      detail: "Store.dueNow() must advance due_at by 1ms on conflict when excluded.due_at = trash.due_at so an in-flight emptyTrash() cannot delete the re-ledgered row.",
+      detectedVariant: "due-now-two-empty-trash-race",
+      detail: "Store.dueNow() must advance due_at on already-due conflicts and write a fresh per-write nonce on insert and ON CONFLICT DO UPDATE so concurrent and mixed-version emptyTrash() workers cannot delete a re-ledgered row.",
     });
   }
 
-  const revokeBlock = token.slice(token.indexOf("export function revokeAll("), token.indexOf("function revocationTarget("));
-  const remoteSteps = revokeBlock.slice(revokeBlock.indexOf(": [["));
+  const revokeBlock = extractBody(token, "scripts/token.mjs", "function", "revokeAll");
+  const remoteAt = revokeBlock.indexOf(": [[");
+  const remoteSteps = remoteAt === -1 ? "" : revokeBlock.slice(remoteAt);
   const sessionsAt = remoteSteps.indexOf('"Access sign-ins"');
   const tokensAt = remoteSteps.indexOf('"Tokens"');
   const ticketAt = remoteSteps.indexOf('"Ticket key"');
@@ -118,6 +149,7 @@ export const HISTORICAL_STORE_BUGS: readonly { bug: StoreBugVariant; expectedInv
   { bug: "claim-expired-reservation", expectedInvariant: "NO_DANGLING_VERSION_BODY", source: "mutation #75" },
   { bug: "empty-trash-ignores-due-at", expectedInvariant: "NO_LOST_RELEDGERED_TRASH", source: "Store.emptyTrash race" },
   { bug: "due-now-same-ms-race", expectedInvariant: "NO_LOST_RELEDGERED_TRASH", source: "found by model checker (Store.dueNow same-ms conflict)" },
+  { bug: "due-now-two-empty-trash-race", expectedInvariant: "NO_LOST_RELEDGERED_TRASH", source: "v0.1.23 audit STORE-01 (two concurrent emptyTrash workers racing dueNow)" },
 ];
 
 export const HISTORICAL_REVOKE_BUGS: readonly { bug: RevokeBugVariant; expectedInvariant: string; source: string }[] = [

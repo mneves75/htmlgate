@@ -395,4 +395,34 @@ describe("pages for people", () => {
     const b = await get("/nothing-here");
     expect(shape(a)).toEqual(shape(b));
   });
+
+  test("browser isolation headers (COOP, CORP, Permissions-Policy, X-Frame-Options) protect every route", async () => {
+    const d = await newShare();
+    await call("POST", `/api/shares/${d.slug}/visibility`, { public: true });
+    const home = await as(AUTHOR, "/");
+    expect(home.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+    expect(home.headers.get("cross-origin-resource-policy")).toBe("same-origin");
+    expect(home.headers.get("permissions-policy")).toContain("camera=()");
+    expect(home.headers.get("x-frame-options")).toBe("DENY");
+
+    const raw = await get(`/p/${d.slug}/raw`);
+    expect(raw.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+    expect(raw.headers.get("cross-origin-resource-policy")).toBe("same-origin");
+    expect(raw.headers.get("x-frame-options")).toBeNull();
+
+    const card = await get(`/p/${d.slug}/card.jpg`);
+    expect(card.status).toBe(200);
+    expect(card.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+
+    // Unmatched /p/* routes answer identical 404 without hitting Access JWT verification (even with an Author JWT).
+    const pubBad = await get("/p/not-a-slug");
+    const pubBadAsAuthor = await as(AUTHOR, "/p/not-a-slug");
+    expect(pubBad.status).toBe(404);
+    expect(pubBadAsAuthor.status).toBe(404);
+    expect(pubBadAsAuthor.body).toBe(pubBad.body);
+    expect((await get("/p")).status).toBe(404);
+    // Oversized Access JWT is rejected before verification.
+    const huge = await get("/", { headers: { "cf-access-jwt-assertion": "a".repeat(9000) } });
+    expect(huge.status).toBe(404);
+  });
 });

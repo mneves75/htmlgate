@@ -5,7 +5,8 @@ export type StoreBugVariant =
   | "add-version-rechecks-live"
   | "claim-expired-reservation"
   | "empty-trash-ignores-due-at"
-  | "due-now-same-ms-race";
+  | "due-now-same-ms-race"
+  | "due-now-two-empty-trash-race";
 
 export type RevokeBugVariant = "none" | "revoke-all-sessions-last";
 
@@ -44,6 +45,7 @@ interface TrashRecord {
   bodyKey: string;
   size: number;
   dueAt: number;
+  nonce: number;
 }
 
 interface WriterState {
@@ -55,7 +57,7 @@ interface WriterState {
 
 interface EmptyTrashWorker {
   phase: "idle" | "selected" | "deletedR2";
-  snapshot: { bodyKey: string; dueAt: number }[];
+  snapshot: { bodyKey: string; dueAt: number; nonce: number }[];
 }
 
 interface EraseBodiesWorker {
@@ -67,6 +69,7 @@ interface EraseBodiesWorker {
 interface StoreState {
   clock: number;
   nextBodyId: number;
+  nextTrashNonce: number;
   createdSlugs: Record<string, boolean>;
   shares: Record<string, ShareRecord>;
   versions: VersionRecord[];
@@ -74,7 +77,7 @@ interface StoreState {
   views: Record<string, number>;
   r2: Record<string, boolean>;
   writers: [WriterState, WriterState];
-  emptyTrash: EmptyTrashWorker;
+  emptyTrash: [EmptyTrashWorker, EmptyTrashWorker];
   eraseBodies: EraseBodiesWorker;
   foreignViewsDeleted: boolean;
 }
@@ -100,6 +103,7 @@ function cloneStore(s: StoreState): StoreState {
   return {
     clock: s.clock,
     nextBodyId: s.nextBodyId,
+    nextTrashNonce: s.nextTrashNonce,
     createdSlugs: { ...s.createdSlugs },
     shares: Object.fromEntries(Object.entries(s.shares).map(([k, v]) => [k, { ...v }])),
     versions: s.versions.map((v) => ({ ...v })),
@@ -107,7 +111,10 @@ function cloneStore(s: StoreState): StoreState {
     views: { ...s.views },
     r2: { ...s.r2 },
     writers: [{ ...s.writers[0] }, { ...s.writers[1] }],
-    emptyTrash: { phase: s.emptyTrash.phase, snapshot: s.emptyTrash.snapshot.map((x) => ({ ...x })) },
+    emptyTrash: [
+      { phase: s.emptyTrash[0].phase, snapshot: s.emptyTrash[0].snapshot.map((x) => ({ ...x })) },
+      { phase: s.emptyTrash[1].phase, snapshot: s.emptyTrash[1].snapshot.map((x) => ({ ...x })) },
+    ],
     eraseBodies: { phase: s.eraseBodies.phase, slug: s.eraseBodies.slug, keys: [...s.eraseBodies.keys] },
     foreignViewsDeleted: s.foreignViewsDeleted,
   };
@@ -125,9 +132,19 @@ function canonicalKey(s: StoreState): string {
     .sort((a, b) => (a.slug === b.slug ? a.n - b.n : a.slug < b.slug ? -1 : 1))
     .map((v) => `${v.slug}#${v.n}=${v.bodyKey}`)
     .join(",");
+  // Canonicalize active nonces by their deterministic first-seen order so equivalent histories collapse.
+  const nonceMap = new Map<number, number>();
+  const normNonce = (n: number) => {
+    let id = nonceMap.get(n);
+    if (id === undefined) {
+      id = nonceMap.size;
+      nonceMap.set(n, id);
+    }
+    return id;
+  };
   const trash = Object.keys(s.trash)
     .sort()
-    .map((k) => `${k}@${s.trash[k]!.dueAt}`)
+    .map((k) => `${k}@${s.trash[k]!.dueAt}#${normNonce(s.trash[k]!.nonce)}`)
     .join(",");
   const views = Object.keys(s.views)
     .sort()
@@ -135,7 +152,8 @@ function canonicalKey(s: StoreState): string {
     .join(",");
   const r2 = Object.keys(s.r2).sort().join(",");
   const writers = s.writers.map((w) => `${w.phase}:${w.op}:${w.slug}:${w.bodyKey}`).sort().join("|");
-  const et = `${s.emptyTrash.phase}:${s.emptyTrash.snapshot.map((x) => `${x.bodyKey}@${x.dueAt}`).join(",")}`;
+  const etRaw = s.emptyTrash.map((w) => `${w.phase}:${w.snapshot.map((x) => `${x.bodyKey}@${x.dueAt}#${normNonce(x.nonce)}`).join(",")}`).sort();
+  const et = etRaw.join("|");
   const eb = `${s.eraseBodies.phase}:${s.eraseBodies.slug}:${s.eraseBodies.keys.join(",")}`;
   const cs = Object.keys(s.createdSlugs).sort().join(",");
   return `${s.clock}|${s.nextBodyId}|${cs}|${shares}|${versions}|${trash}|${views}|${r2}|${writers}|${et}|${eb}|${s.foreignViewsDeleted ? 1 : 0}`;
@@ -207,7 +225,7 @@ function checkStoreInvariants(s: StoreState, bounds: ModelBounds): { invariant: 
   const versionKeys = new Set(s.versions.map((v) => v.bodyKey));
   const inFlightWriterKeys = new Set(s.writers.filter((w) => w.phase !== "idle").map((w) => w.bodyKey));
   const inFlightEraseKeys = new Set(s.eraseBodies.phase === "listed" ? s.eraseBodies.keys : []);
-  const inFlightEmptyKeys = new Set(s.emptyTrash.phase === "selected" ? s.emptyTrash.snapshot.map((x) => x.bodyKey) : []);
+  const inFlightEmptyKeys = new Set(s.emptyTrash.flatMap((w) => (w.phase === "selected" ? w.snapshot.map((x) => x.bodyKey) : [])));
   for (const key of Object.keys(s.r2)) {
     if (!versionKeys.has(key) && !s.trash[key] && !inFlightWriterKeys.has(key) && !inFlightEraseKeys.has(key) && !inFlightEmptyKeys.has(key)) {
       // Only flag when the body was previously ledgered (not an upload that outlived its reservation before dueNow).
@@ -225,6 +243,7 @@ function initialStoreState(): StoreState {
   return {
     clock: 0,
     nextBodyId: 1,
+    nextTrashNonce: 1,
     createdSlugs: { S1: true, S2: true },
     shares: {
       S1: { slug: "S1", latestVersion: 1, deletedAt: null, expiresAt: 1 },
@@ -241,7 +260,10 @@ function initialStoreState(): StoreState {
       { phase: "idle", op: "addVersion", slug: "", bodyKey: "" },
       { phase: "idle", op: "addVersion", slug: "", bodyKey: "" },
     ],
-    emptyTrash: { phase: "idle", snapshot: [] },
+    emptyTrash: [
+      { phase: "idle", snapshot: [] },
+      { phase: "idle", snapshot: [] },
+    ],
     eraseBodies: { phase: "idle", slug: "", keys: [] },
     foreignViewsDeleted: false,
   };
@@ -251,6 +273,7 @@ function initialReservationRaceState(): StoreState {
   return {
     clock: 0,
     nextBodyId: 1,
+    nextTrashNonce: 1,
     createdSlugs: { S1: true },
     shares: {
       S1: { slug: "S1", latestVersion: 1, deletedAt: null, expiresAt: 2 },
@@ -263,7 +286,10 @@ function initialReservationRaceState(): StoreState {
       { phase: "idle", op: "addVersion", slug: "", bodyKey: "" },
       { phase: "idle", op: "create", slug: "", bodyKey: "" },
     ],
-    emptyTrash: { phase: "idle", snapshot: [] },
+    emptyTrash: [
+      { phase: "idle", snapshot: [] },
+      { phase: "idle", snapshot: [] },
+    ],
     eraseBodies: { phase: "idle", slug: "", keys: [] },
     foreignViewsDeleted: false,
   };
@@ -291,7 +317,7 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
           const n = cloneStore(s);
           if (op === "create") n.createdSlugs[slug] = true;
           const key = `bodies/${slug}/k${n.nextBodyId++}`;
-          n.trash[key] = { bodyKey: key, size: 1, dueAt: n.clock + bounds.reservationTtl };
+          n.trash[key] = { bodyKey: key, size: 1, dueAt: n.clock + bounds.reservationTtl, nonce: n.nextTrashNonce++ };
           n.writers[wi] = { phase: "reserved", op, slug, bodyKey: key };
           out.push([`W${wi + 1}: Store.putBody reserve(${op}, ${slug}, ${key}, due=${n.clock + bounds.reservationTtl})`, n]);
         }
@@ -306,8 +332,8 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
       // R2 put fails -> Store.dueNow
       const nFail = cloneStore(s);
       const prevFail = nFail.trash[w.bodyKey];
-      const nextFailDue = bug !== "due-now-same-ms-race" && prevFail && prevFail.dueAt === nFail.clock ? nFail.clock + 1 : nFail.clock;
-      nFail.trash[w.bodyKey] = { bodyKey: w.bodyKey, size: 1, dueAt: nextFailDue };
+      const nextFailDue = bug === "due-now-two-empty-trash-race" && prevFail && prevFail.dueAt === nFail.clock ? nFail.clock + 1 : nFail.clock;
+      nFail.trash[w.bodyKey] = { bodyKey: w.bodyKey, size: 1, dueAt: nextFailDue, nonce: nFail.nextTrashNonce++ };
       nFail.writers[wi] = { phase: "idle", op: "addVersion", slug: "", bodyKey: "" };
       out.push([`W${wi + 1}: R2.put(${w.bodyKey}) fails -> Store.dueNow(${w.bodyKey}, due=${nextFailDue})`, nFail]);
     } else if (w.phase === "uploaded") {
@@ -339,7 +365,7 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
               const kept: VersionRecord[] = [];
               for (const v of n.versions) {
                 if (v.slug === w.slug && v.n <= sh!.latestVersion - bounds.keepVersions) {
-                  n.trash[v.bodyKey] = { bodyKey: v.bodyKey, size: 1, dueAt: n.clock };
+                  if (!n.trash[v.bodyKey]) n.trash[v.bodyKey] = { bodyKey: v.bodyKey, size: 1, dueAt: n.clock, nonce: n.nextTrashNonce++ };
                 } else {
                   kept.push(v);
                 }
@@ -352,8 +378,10 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
         if (!inserted) {
           // Store.dueNow(key, cost)
           const prev = n.trash[w.bodyKey];
-          const nextDue = bug !== "due-now-same-ms-race" && prev && prev.dueAt === n.clock ? n.clock + 1 : n.clock;
-          n.trash[w.bodyKey] = { bodyKey: w.bodyKey, size: 1, dueAt: nextDue };
+          const nextDue = prev && prev.dueAt <= n.clock
+            ? (bug === "due-now-same-ms-race" ? n.clock : Math.max(prev.dueAt + 1, n.clock))
+            : n.clock;
+          n.trash[w.bodyKey] = { bodyKey: w.bodyKey, size: 1, dueAt: nextDue, nonce: n.nextTrashNonce++ };
         }
         n.writers[wi] = { phase: "idle", op: "addVersion", slug: "", bodyKey: "" };
         const suffix = midDelta > 0 ? " [mid-batch clock tick]" : "";
@@ -362,33 +390,39 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
     }
   }
 
-  // 3. Store.emptyTrash (3 non-atomic steps: SELECT due -> R2.delete -> DELETE FROM trash)
-  if (s.emptyTrash.phase === "idle") {
-    const due = Object.values(s.trash)
-      .filter((t) => t.dueAt <= s.clock)
-      .sort((a, b) => (a.dueAt !== b.dueAt ? a.dueAt - b.dueAt : a.bodyKey < b.bodyKey ? -1 : 1))
-      .slice(0, bounds.cleanupBatch);
-    if (due.length > 0) {
-      const n = cloneStore(s);
-      n.emptyTrash = { phase: "selected", snapshot: due.map((t) => ({ bodyKey: t.bodyKey, dueAt: t.dueAt })) };
-      out.push([`Store.emptyTrash SELECT due [${due.map((d) => `${d.bodyKey}@${d.dueAt}`).join(",")}]`, n]);
-    }
-  } else if (s.emptyTrash.phase === "selected") {
-    const n = cloneStore(s);
-    for (const row of n.emptyTrash.snapshot) delete n.r2[row.bodyKey];
-    n.emptyTrash.phase = "deletedR2";
-    out.push([`Store.emptyTrash R2.delete [${n.emptyTrash.snapshot.map((d) => d.bodyKey).join(",")}]`, n]);
-  } else if (s.emptyTrash.phase === "deletedR2") {
-    const n = cloneStore(s);
-    for (const row of n.emptyTrash.snapshot) {
-      const cur = n.trash[row.bodyKey];
-      if (!cur) continue;
-      if (bug === "empty-trash-ignores-due-at" || cur.dueAt === row.dueAt) {
-        delete n.trash[row.bodyKey];
+  // 3. Store.emptyTrash — two concurrent workers (3 non-atomic steps: SELECT due -> R2.delete -> DELETE FROM trash)
+  const useDueAtCasOnly = bug === "due-now-same-ms-race" || bug === "due-now-two-empty-trash-race";
+  for (let ei = 0; ei < 2; ei++) {
+    const et = s.emptyTrash[ei]!;
+    if (et.phase === "idle") {
+      // Avoid duplicate idle->selected transitions when both workers are idle.
+      if (ei === 1 && s.emptyTrash[0].phase === "idle") continue;
+      const due = Object.values(s.trash)
+        .filter((t) => t.dueAt <= s.clock)
+        .sort((a, b) => (a.dueAt !== b.dueAt ? a.dueAt - b.dueAt : a.bodyKey < b.bodyKey ? -1 : 1))
+        .slice(0, bounds.cleanupBatch);
+      if (due.length > 0) {
+        const n = cloneStore(s);
+        n.emptyTrash[ei] = { phase: "selected", snapshot: due.map((t) => ({ bodyKey: t.bodyKey, dueAt: t.dueAt, nonce: t.nonce })) };
+        out.push([`E${ei + 1}: Store.emptyTrash SELECT due [${due.map((d) => `${d.bodyKey}@${d.dueAt}`).join(",")}]`, n]);
       }
+    } else if (et.phase === "selected") {
+      const n = cloneStore(s);
+      for (const row of n.emptyTrash[ei]!.snapshot) delete n.r2[row.bodyKey];
+      n.emptyTrash[ei]!.phase = "deletedR2";
+      out.push([`E${ei + 1}: Store.emptyTrash R2.delete [${n.emptyTrash[ei]!.snapshot.map((d) => d.bodyKey).join(",")}]`, n]);
+    } else if (et.phase === "deletedR2") {
+      const n = cloneStore(s);
+      for (const row of n.emptyTrash[ei]!.snapshot) {
+        const cur = n.trash[row.bodyKey];
+        if (!cur) continue;
+        if (bug === "empty-trash-ignores-due-at" || (useDueAtCasOnly ? cur.dueAt === row.dueAt : (cur.dueAt === row.dueAt && cur.nonce === row.nonce))) {
+          delete n.trash[row.bodyKey];
+        }
+      }
+      n.emptyTrash[ei] = { phase: "idle", snapshot: [] };
+      out.push([`E${ei + 1}: Store.emptyTrash DELETE FROM trash`, n]);
     }
-    n.emptyTrash = { phase: "idle", snapshot: [] };
-    out.push([`Store.emptyTrash DELETE FROM trash`, n]);
   }
 
   // 4. Store.expire(now) — atomic D1 batch
@@ -403,7 +437,9 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
     const n = cloneStore(s);
     const batch1 = new Set(selectDueSlugs(n));
     for (const v of n.versions) {
-      if (batch1.has(v.slug)) n.trash[v.bodyKey] = { bodyKey: v.bodyKey, size: 1, dueAt: n.clock };
+      if (batch1.has(v.slug) && !n.trash[v.bodyKey]) {
+        n.trash[v.bodyKey] = { bodyKey: v.bodyKey, size: 1, dueAt: n.clock, nonce: n.nextTrashNonce++ };
+      }
     }
     for (const slug of batch1) {
       const sh = n.shares[slug]!;
@@ -421,6 +457,7 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
     } else {
       for (const slug of batch1) delete n.views[slug];
       n.versions = n.versions.filter((v) => !batch1.has(v.slug));
+      for (const slug of batch1) n.shares[slug]!.expiresAt = null;
     }
     out.push([`Store.expire(t=${n.clock}) purged [${[...batch1].join(",")}]`, n]);
   }
@@ -446,7 +483,7 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
     for (const slug of Object.keys(s.shares).sort()) {
       const n = cloneStore(s);
       const keys = n.versions.filter((v) => v.slug === slug).map((v) => v.bodyKey);
-      for (const key of keys) n.trash[key] = { bodyKey: key, size: 1, dueAt: n.clock };
+      for (const key of keys) n.trash[key] = { bodyKey: key, size: 1, dueAt: n.clock, nonce: n.nextTrashNonce++ };
       n.versions = n.versions.filter((v) => v.slug !== slug);
       delete n.views[slug];
       delete n.shares[slug];
@@ -457,7 +494,7 @@ function nextStoreTransitions(s: StoreState, bounds: ModelBounds, bug: StoreBugV
     const n = cloneStore(s);
     const { slug, keys } = n.eraseBodies;
     for (const key of keys) {
-      if (!n.trash[key]) n.trash[key] = { bodyKey: key, size: 1, dueAt: n.clock };
+      if (!n.trash[key]) n.trash[key] = { bodyKey: key, size: 1, dueAt: n.clock, nonce: n.nextTrashNonce++ };
     }
     for (const key of keys) delete n.r2[key];
     for (const key of keys) delete n.trash[key];

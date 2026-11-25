@@ -4,6 +4,45 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-11-25
+
+### Security
+
+- **Store lifecycle CAS & quota accounting (`migrations/0008_trash_nonce.sql`, `src/store.ts`, `scripts/storage-status.sql`):**
+  - Added per-write random `trash.nonce` (`lower(hex(randomblob(8)))`) and updated `Store.emptyTrash()` to compare `(body_key, due_at, nonce)` via a bijective two-binding tuple across all 50 batch rows (100 D1 parameters, 45 total D1+R2 ops per cron run) while `Store.dueNow()` advances `due_at` on already-due conflicts and writes a fresh `nonce`. Closes two-worker same-millisecond, backward-clock-skew, and rolling mixed-version delete races; formally verified across 791,308 reachable states and 8 historical bug replays (`pnpm run verify:model`).
+  - Enforced `VERSION_FLOOR` (20 KiB) on `trash` rows across `ROOM`, `dueNow()`, `expire()`, `addVersion()`, `eraseShare()`, `eraseBodies()`, and `scripts/storage-status.sql`.
+  - `Store.expire()` now scrubs `title`, `description`, `tags`, and `expires_at` on expired Shares while marking legacy versionless expired rows deleted (`deleted_at = COALESCE(deleted_at, expires_at)`) in bounded batches.
+  - Scoped `Store.versions()` and `Store.version()` by `author` at the SQL layer.
+- **ZIP archive verification (`src/zip.ts`):**
+  - Verifies non-directory macOS metadata entries (`__MACOSX/*`, `.DS_Store`) against size limits and deflate/CRC checks, and blocks directory entries carrying payloads (`csize > 0` beyond a verified 2-byte empty deflate stream).
+  - Enforces POSIX `S_IFMT` symlink and special-file rejection regardless of `madeBy` host OS (including macOS `madeBy=19`).
+  - Rejects polyglot bytes before entry 0, non-zero `diskStart`, LFH/CD encryption/bit-3/CRC/size mismatches, unvalidated bit-3 data descriptors, malformed extra headers, ZIP64 (`0x0001`) and Info-ZIP Unicode Path (`0x7075`) extra fields, and Unicode control/formatting characters in paths.
+- **Browser isolation, HTTP & API hardening (`src/http.ts`, `src/index.ts`, `src/api.ts`, `src/access.ts`, `src/config.ts`, `site/src/worker.ts`):**
+  - Added `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy: same-origin` (preserving `cross-origin` on site files, `/p/<slug>/card.jpg`, and landing `/media/*`), `Permissions-Policy`, and `X-Frame-Options: DENY` on non-raw HTML and JSON responses; added `referrerpolicy="no-referrer"` on the Share viewer iframe and CSS `unicode-bidi: isolate` on user-controlled text.
+  - Hardened `serveTicketFile()` expired-ticket navigation redirects to require a 24h grace window, valid site path, and live Share before issuing `303`.
+  - Short-circuited unmatched `/p`, `/p/*`, and non-GET/HEAD `/robots.txt` before Access JWT verification; capped Access JWT length at 8 KiB, rejected non-`"app"` JWT `type`, and tightened `ACCESS_TEAM_URL` validation.
+  - Added linear pre-parse `checkJsonShape()` bounding nesting depth (`<= 8`) and structural delimiters (`{`, `}`, `[`, `]`, `,`, `:`; `<= 1000`); blocked Unicode `Cc`/`Cf` control and Bidi characters in Share titles and descriptions (allowing `\t`/`\n`/`\r` in descriptions).
+  - Replaced `TYPES` MIME map with a null-prototype dictionary (`Object.create(null)`).
+  - Restricted landing `referer` analytics extraction to `http:`/`https:` URLs.
+- **CLI & operator tooling (`packages/cli/src/*`, `scripts/*`):**
+  - Refused symlinked `.htmlgate` parent directories and target config files (`O_NOFOLLOW`) in CLI project config loading.
+  - Enforced strict same-origin Share URL validation and normalization (`normalizeShareUrl`), terminal control/Bidi sanitization on all text and JSON outputs, and a 500-page ceiling plus non-negative `total_pages` check on `htmlgate list`.
+  - Hardened `scripts/setup.mjs` with `.instance` symlink checks, atomic `0600` config writes (`0700` directory), expanded clean-tree `DEPLOYED` guards (`package.json`, `pnpm-lock.yaml`, `tsconfig.json`), strict flag parsing, `org.auth_domain` host validation, bounded DNS pagination, and fail-closed `verifyAccessApp()` (re-reading partial Access API responses).
+  - Hardened `scripts/cli-install.mjs` (stdin tar bytes without TOCTOU re-read, `refs/tags/` qualification, non-symlink metafile checks), `scripts/site-deploy.mjs` (strict HTTPS Access host check and Worker destination check), `scripts/token.mjs` (strict flag parsing), `scripts/bench.ts` (stripped tokens from browser env, 10-minute expiry on `--live` fixtures, `--site` origin validation), and `scripts/perf/edge.mjs` (`--url` operands, `--base` and `--gap` validation).
+
+### Fixed
+
+- Combined Author home and `/metrics` Share listing with 30-day/all-time view counts into a single atomic CTE query (`Store.recentShares`), preventing concurrent-update zeroed view counts and replacing full `share_views` scans with primary-key lookups while staying within 1 D1 wave.
+- Fixed `POST /erase` re-renders dropping 30-day view counts, aligned the 30-day window to 30 inclusive UTC days (`-29`), unwrapped IPv4-mapped IPv6 addresses in `VIEW_LIMIT` `network()`, and fixed duplicate `expires_at` query parameter detection on ZIP publishes.
+- Fixed `htmlgate list -n <N>` multi-page offset drift (keeping `pageSize` constant across pages), bounded CLI file reads to 64 KiB chunks, closed leaked file descriptors on Linux `readlink` errors, stripped trailing slashes on `publish` paths, skipped `__MACOSX` when zipping folders, forwarded `--title ""` on `update`, mapped `https_required` to exit code `8`, capped interactive stdin reads, and restored raw TTY mode on `SIGINT`/`SIGHUP`.
+- Fixed `scripts/mutate.mjs` replacement `$` handling and expanded the mutation suite to 262 anchors; extended `scripts/lint.mjs` to catch `Response.json`/`redirect`/`error`, trailing fetch spreads, `@ts-nocheck`, and `ctx["access"]`.
+
+### Changed
+
+- Modernized the landing and Instance stylesheets with `color-mix(in oklab, ...)`, `@view-transition`, progressive `::details-content` FAQ animation, accessible `<pre role="region">` code blocks, and updated EN/pt-BR privacy notices (using `tíquete` per `GLOSSARY.md`).
+- Updated `formal/verify.ts` to extract `src/store.ts` and `scripts/token.mjs` symbols via TypeScript AST rather than string slicing, and removed the expired `pnpm-workspace.yaml` release-age exclusion.
+- Pruned redundant historical/mocked tests while preserving all 262 mutation anchors and parallelized stalled-server CLI timeout checks.
+
 ## [0.1.22] - 2026-11-22
 
 ### Fixed

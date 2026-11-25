@@ -49,6 +49,7 @@ export function exitCodeFor(code: string): number {
       return 7;
     case "network_error":
     case "insecure_url":
+    case "https_required":
     case "redirected":
     case "bad_response":
     case "server_error":

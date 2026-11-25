@@ -38,7 +38,7 @@ async function paced(url, init) {
   return fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
 }
 
-const get = (path, init = {}) => paced(base + path, { redirect: "manual", ...init });
+const get = (path, init = {}) => paced(base + path, { ...init, redirect: "manual" });
 async function api(method, path, body) {
   const res = await paced(base + path, {
     method,

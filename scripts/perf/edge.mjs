@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
 const UA = "htmlgate-perf/1 (+https://github.com/mneves75/htmlgate/tree/main/scripts/perf)";
 const FORMAT = '%{json}\\n%header{cf-cache-status}|%header{cf-ray}|%header{age}\\n';
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export function args(argv) {
   const out = { bases: [], paths: [], n: 30, gap: 300, cap: 1500, out: undefined };
@@ -14,7 +17,7 @@ export function args(argv) {
     if (k === "--base") out.bases.push(parseBase(v));
     else if (k === "--paths") out.paths.push(...v.split(","));
     else if (k === "--n") out.n = positive(k, v);
-    else if (k === "--gap") out.gap = Number(v);
+    else if (k === "--gap") out.gap = nonNegative(k, v);
     else if (k === "--cap") out.cap = positive(k, v);
     else if (k === "--out") out.out = v;
     else throw new Error(`unknown option ${k}`);
@@ -27,8 +30,16 @@ export function args(argv) {
 }
 
 export function parseBase(v) {
-  const [url, pin] = v.split("|");
-  const out = { url: url.replace(/\/$/, ""), override: undefined };
+  const parts = v.split("|");
+  if (parts.length > 2) throw new Error(`--base takes at most one |<worker>=<version-id> pin, not ${v}`);
+  const [rawUrl, pin] = parts;
+  let u;
+  try { u = new URL(rawUrl); } catch { throw new Error(`--base is not a URL: ${rawUrl}`); }
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && LOOPBACK.has(u.hostname))) {
+    throw new Error(`--base requires https or loopback http, not ${rawUrl}`);
+  }
+  if (u.username || u.password || u.search || u.hash) throw new Error(`--base cannot carry credentials, query or fragment: ${rawUrl}`);
+  const out = { url: rawUrl.replace(/\/$/, ""), override: undefined };
   if (pin === undefined) return out;
   const m = /^([a-z0-9-]+)=([0-9a-f-]{36})$/.exec(pin);
   if (!m) throw new Error(`a Version pin is <worker>=<version-id>, not ${pin}`);
@@ -46,12 +57,17 @@ function positive(name, v) {
   if (!Number.isInteger(n) || n < 1) throw new Error(`${name} must be a positive integer, not ${v}`);
   return n;
 }
+function nonNegative(name, v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${name} must be a non-negative number, not ${v}`);
+  return n;
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function curl(base, urls) {
   const a = [];
-  for (const [i, u] of urls.entries()) a.push(...(i ? ["--next"] : []), ...armOptions(base), u);
+  for (const [i, u] of urls.entries()) a.push(...(i ? ["--next"] : []), ...armOptions(base), "--url", u);
   const { stdout } = await run("curl", a, { maxBuffer: 1 << 24 });
   const lines = stdout.trim().split("\n");
   const samples = [];
@@ -123,7 +139,7 @@ async function main() {
   console.log(`requests sent: ${sent}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((e) => {
     console.error(`edge: ${e.message}`);
     process.exit(1);

@@ -98,7 +98,7 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
       throw new Error(`Formula/archive at ${formulaPath} differs from the selected candidate ${tag} (${version}).`);
     }
     try {
-      command("git", ["-C", repository, "diff", "--exit-code", `${tag}^{commit}`, "--",
+      command("git", ["-C", repository, "diff", "--exit-code", `refs/tags/${tag}^{commit}`, "--",
         "Formula/htmlgate.rb", `Formula/sources/${verified.archive}`, ...CLI_INPUTS.map((name) => `packages/cli/${name}`)]);
     } catch (e) {
       throw new Error(`Release tag ${tag} differs from the selected formula/archive/source candidate: ${e.message}`);
@@ -124,7 +124,7 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
     const nodePrefix = absolutePath(["--prefix", "node"]);
     const build = temporaryBuild();
     try {
-      tar(["-xf", join(repository, "Formula/sources", verified.archive), "-C", build]);
+      tar(["-xf", "-", "-C", build], verified.bytes);
       command(process.execPath, [join(ROOT, "node_modules/typescript/bin/tsc"), "-p", build,
         "--typeRoots", join(ROOT, "node_modules/@types")]);
       const fileList = (directory, prefix = "") => {
@@ -151,7 +151,10 @@ export function installCli({ root = ROOT, run = spawnSync, read = readFileSync, 
         throw new Error(`Installed artifact mismatch: ${name}`);
       }
       for (const name of ["LICENSE", "README.md"]) {
-        if (!readFileSync(join(installedPrefix, name)).equals(readFileSync(join(build, name)))) throw new Error(`Installed metafile mismatch: ${name}`);
+        const target = join(installedPrefix, name);
+        const stat = lstatSync(target);
+        if (stat.isSymbolicLink() || !stat.isFile()) throw new Error(`Unsafe installed metafile: ${name}`);
+        if (!readFileSync(target).equals(readFileSync(join(build, name)))) throw new Error(`Installed metafile mismatch: ${name}`);
       }
     } finally {
       rmSync(build, { recursive: true, force: true });

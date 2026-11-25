@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { lstat, open, readdir, readlink, type FileHandle } from "node:fs/promises";
-import { isAbsolute, join, normalize, parse, sep } from "node:path";
+import { join, parse, resolve, sep } from "node:path";
 import { CliError } from "./errors.js";
 import { SITE_LIMITS, writeZip, type ZipFile } from "./zip.js";
 
@@ -38,15 +38,24 @@ async function openReal(path: string): Promise<FileHandle> {
     throw e.code === "ELOOP" ? linked() : e;
   });
   // Linux has no O_NOFOLLOW_ANY: confirm the opened descriptor's resolved path matches what was requested.
-  if (process.platform === "linux" && (await readlink(`/proc/self/fd/${fh.fd}`)) !== path) {
-    await fh.close();
-    throw linked();
+  if (process.platform === "linux") {
+    let resolved: string;
+    try {
+      resolved = await readlink(`/proc/self/fd/${fh.fd}`);
+    } catch (e) {
+      await fh.close();
+      throw e;
+    }
+    if (resolved !== path) {
+      await fh.close();
+      throw linked();
+    }
   }
   return fh;
 }
 
 export async function loadPublishable(file: string): Promise<{ filePath: string; content: Content }> {
-  const filePath = normalize(isAbsolute(file) ? file : join(process.cwd(), file));
+  const filePath = resolve(file);
   const isZip = /\.zip$/i.test(filePath);
   const cap = isZip ? SITE_LIMITS.zipBytes : MAX_HTML_BYTES;
   const read = await readReal(filePath, file, cap, isZip ? "a site's zip" : "a Share", true);
@@ -73,15 +82,19 @@ async function readReal(filePath: string, shown: string, cap: number, what: stri
       hint: "Inline less, or compress images.",
     });
     if (st.size > cap) throw tooLarge(st.size);
-    const buf = Buffer.alloc(cap + 1);
+    const chunks: Buffer[] = [];
     let n = 0;
+    const chunkSize = Math.min(Math.max(st.size + 1, 4096), 64 * 1024);
     for (;;) {
-      const { bytesRead } = await fh.read(buf, n, buf.length - n, n);
+      const want = Math.min(chunkSize, cap + 1 - n);
+      const buf = Buffer.allocUnsafe(want);
+      const { bytesRead } = await fh.read(buf, 0, want, n);
       if (bytesRead === 0) break;
       n += bytesRead;
       if (n > cap) throw tooLarge("more than " + cap);
+      chunks.push(buf.subarray(0, bytesRead));
     }
-    return buf.subarray(0, n);
+    return chunks.length === 1 ? chunks[0]! : Buffer.concat(chunks, n);
   } finally {
     await fh.close();
   }
@@ -95,6 +108,7 @@ async function zipFolder(root: string, shown: string): Promise<Uint8Array> {
     const entries = (await readdir(dir, { withFileTypes: true })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     for (const e of entries) {
       if (e.name.startsWith(".")) continue;
+      if (prefix === "" && e.name === "__MACOSX") continue;
       const path = prefix + e.name;
       if (e.isSymbolicLink()) {
         throw new CliError("unsafe_path", `${join(shown, path)} is a symbolic link. A site is published from real files only.`, {
@@ -106,6 +120,9 @@ async function zipFolder(root: string, shown: string): Promise<Uint8Array> {
         continue;
       }
       if (!e.isFile()) throw new CliError("unsafe_path", `${join(shown, path)} is not a regular file.`);
+      if (Buffer.byteLength(path) > SITE_LIMITS.pathBytes) {
+        throw new CliError("site_invalid", `${join(shown, path)} is too long: a path is at most ${SITE_LIMITS.pathBytes} bytes.`);
+      }
       if (files.length === SITE_LIMITS.files) throw tooLarge(`${shown} has more than ${SITE_LIMITS.files} files; a site has at most ${SITE_LIMITS.files}.`);
       const data = await readReal(join(dir, e.name), join(shown, path), SITE_LIMITS.fileBytes, "a site's file", false);
       if (data === "folder") throw new CliError("unsafe_path", `${join(shown, path)} changed into a folder while it was read.`);

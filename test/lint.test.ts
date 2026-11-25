@@ -24,6 +24,9 @@ describe("repository structural lint", () => {
     const siteAssetHits = lintSource("site/src/worker.ts", "export default { async fetch(req: Request, env: Env) { return await env.ASSETS.fetch(req); } };");
     expect(siteAssetHits.map((h: { rule: string }) => h.rule)).toContain("no-raw-response");
     expect(siteAssetHits[0].message).toContain("withHeaders");
+
+    const staticRespHits = lintSource("src/api.ts", 'export function f() { return Response.json({ ok: true }); } export function g() { return Response.redirect("https://a.example"); }');
+    expect(staticRespHits.filter((h: { rule: string }) => h.rule === "no-raw-response")).toHaveLength(2);
   });
 
   test("no-unsafe-fetch catches missing redirect/signal at call sites and inside bench.send() and smoke.paced()", () => {
@@ -57,6 +60,9 @@ describe("repository structural lint", () => {
 
     const undefinedSmokeDeadline = lintSource("scripts/smoke.mjs", "async function paced(url, init) { return fetch(url, { ...init, signal: undefined }); }");
     expect(undefinedSmokeDeadline.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
+
+    const spreadAfterRedirect = lintSource("scripts/smoke.mjs", 'const get = (p, init = {}) => paced(p, { redirect: "manual", ...init });');
+    expect(spreadAfterRedirect.map((h: { rule: string }) => h.rule)).toContain("no-unsafe-fetch");
   });
 
   test("no-unpaginated-cf-list catches direct cf applications/workers/buckets list outside scripts/setup.mjs helpers", () => {
@@ -83,15 +89,15 @@ describe("repository structural lint", () => {
     expect(hits[0].message).toContain("Number.isFinite");
   });
 
-  test("no-access-identity-bypass catches ctx.access and unverified Access headers (issue #18)", () => {
-    const hits = lintSource("src/index.ts", 'export function who(req: Request, ctx: { access?: string }) { return ctx.access ?? req.headers.get("cf-access-authenticated-user-email"); }');
-    expect(hits.filter((h: { rule: string }) => h.rule === "no-access-identity-bypass")).toHaveLength(2);
+  test("no-access-identity-bypass catches ctx.access, ctx['access'], and unverified Access headers (issue #18)", () => {
+    const hits = lintSource("src/index.ts", 'export function who(req: Request, ctx: { access?: string }) { return ctx.access ?? ctx["access"] ?? req.headers.get("cf-access-authenticated-user-email"); }');
+    expect(hits.filter((h: { rule: string }) => h.rule === "no-access-identity-bypass")).toHaveLength(3);
     expect(hits[0].message).toContain("src/access.ts");
   });
 
-  test("no-any-or-ts-suppression catches explicit any and @ts-ignore in source", () => {
-    const hits = lintSource("src/api.ts", "// @ts-ignore\nexport function f(x: any) { return x; }");
-    expect(hits.filter((h: { rule: string }) => h.rule === "no-any-or-ts-suppression")).toHaveLength(2);
+  test("no-any-or-ts-suppression catches explicit any, @ts-ignore, and @ts-nocheck in source", () => {
+    const hits = lintSource("src/api.ts", "// @ts-nocheck\n// @ts-ignore\nexport function f(x: any) { return x; }");
+    expect(hits.filter((h: { rule: string }) => h.rule === "no-any-or-ts-suppression")).toHaveLength(3);
   });
 
   test("no-proto-pollutable-dict catches {} in queryFields and parseMetadata", () => {

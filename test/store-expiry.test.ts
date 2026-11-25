@@ -27,12 +27,16 @@ test.each(["create", "update", "late upload"])("an expired %s cannot claim its b
   let delayCommit = false;
   let lateStarted = false;
   let lateOvershoot = false;
+  let barrierHit = false;
   const prepare = (sql: string, values: SQLInputValue[] = []): Statement => ({
     sql, values,
     bind: (...bound) => prepare(sql, bound),
     run: async () => {
       // Cleanup's ledger delete waits, so the claim commits while cleanup still holds its row.
-      if (cleanup && sql.startsWith("DELETE FROM trash WHERE (body_key, due_at)")) await released;
+      if (cleanup && sql.startsWith("DELETE FROM trash WHERE (body_key, ")) {
+        barrierHit = true;
+        await released;
+      }
       return { meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } };
     },
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }),
@@ -101,10 +105,22 @@ test.each(["create", "update", "late upload"])("an expired %s cannot claim its b
       // Documented lease-overrun limit: the late object exceeds the cap until the refused write's cleanup.
       expect(lateOvershoot).toBe(true);
       expect(sqlite.prepare("SELECT COUNT(*) AS n FROM trash").get()!.n).toBe(1);
+    } else {
+      expect(barrierHit).toBe(true);
     }
     await store.emptyTrash();
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM trash").get()!.n).toBe(0);
     expect(objects.size).toBe(versions.length);
+    if (operation === "create") {
+      // A legacy versionless Share with an expired expires_at must be marked deleted, never resurrected, when expire() clears expires_at.
+      const past = Date.now() - 10_000;
+      sqlite.prepare("INSERT INTO shares (slug, author, title, description, tags, public, latest_version, created_at, updated_at, changed_by, changed_at, expires_at, expiry_set) VALUES ('Legacy000001', 'author@example.com', 'legacy', 'desc', '{\"a\":\"1\"}', 0, 1, ?, ?, 'abcdefabcdef', ?, ?, 1)")
+        .run(past, past, past, past);
+      expect(await store.expire(Date.now())).toBeGreaterThanOrEqual(1);
+      const legacy = sqlite.prepare("SELECT deleted_at, expires_at, title, description, tags FROM shares WHERE slug = 'Legacy000001'").get() as { deleted_at: number | null; expires_at: number | null; title: string; description: string | null; tags: string };
+      expect(legacy).toEqual({ deleted_at: past, expires_at: null, title: "", description: null, tags: "{}" });
+      expect((await store.recentShares("author@example.com", 10)).shares.map((s) => s.slug)).not.toContain("Legacy000001");
+    }
   } finally {
     releaseCleanup();
     sqlite.close();

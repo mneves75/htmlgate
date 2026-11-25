@@ -28,11 +28,11 @@ async function refusal(path: string): Promise<CliError> {
 }
 
 describe("publishing a folder", () => {
-  test("zips its files, leaving out every name that starts with a dot", async () => {
+  test("zips its files, leaving out dotfiles and __MACOSX, and accepts a trailing slash on the folder path", async () => {
     const dir = folder("site", {
-      "index.html": "<!doctype html><title>t</title>", "css/a.css": "p{}", ".env": "SECRET=1", ".git/config": "x", "img/.DS_Store": "x",
+      "index.html": "<!doctype html><title>t</title>", "css/a.css": "p{}", ".env": "SECRET=1", ".git/config": "x", "img/.DS_Store": "x", "__MACOSX/._index.html": "junk",
     });
-    const { content } = await loadPublishable(dir);
+    const { content } = await loadPublishable(dir + "/");
     expect(content.kind).toBe("site");
     const site = await readSite((content as { zip: Uint8Array }).zip);
     expect(site.map((e) => e.path).sort()).toEqual(["css/a.css", "index.html"]);
@@ -74,7 +74,7 @@ describe("--expires", () => {
     expect(parseExpires(raw, now)).toBe(at);
   });
 
-  test.each(["", "0d", "30", "30m", "tomorrow", "2026-13-40", "2026-12-31T18:00:00"])("%j is refused", (raw) => {
+  test.each(["", "0d", "-1d", "30", "30m", "1w", "tomorrow", "2026-13-40", "2026-02-31", "2026-02-30", "2026-04-31", "2026-11-31", "2026-12-31T18:00:00"])("%j is refused", (raw) => {
     expect(() => parseExpires(raw, now)).toThrow(CliError);
   });
 });

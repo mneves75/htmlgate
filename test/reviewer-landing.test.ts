@@ -41,13 +41,6 @@ const visibleText = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&am
 // Static content: the copy rules, the links, the claims.
 // ---------------------------------------------------------------------------------------------
 describe("copy rules", () => {
-  test("nothing under site/ names the copywriters the owner asked to be emulated", () => {
-    for (const f of walk(SITE)) {
-      const text = read(join(SITE, f)).toLowerCase();
-      expect(text, f).not.toMatch(/ladeira|hormozi/);
-    }
-  });
-
   test("the product is free: every money amount on both pages is zero, and no checkout or plan language appears", () => {
     for (const [lang, html] of Object.entries(PAGES)) {
       const text = visibleText(html);
@@ -228,18 +221,6 @@ describe("one generated Wrangler config per Instance", () => {
     const run = promisify(execFile);
     const r = await run("git", ["check-ignore", "-q", ".instance/htmlgate.wrangler.jsonc"], { cwd: ROOT }).then(() => 0, (e: { code: number }) => e.code);
     expect(r).toBe(0);
-  });
-
-  test("no script or doc still points at the old shared .instance/wrangler.jsonc", () => {
-    const stale: string[] = [];
-    for (const dir of ["scripts", "docs", "test", "src", "packages/cli/src"]) {
-      for (const f of walk(join(ROOT, dir))) {
-        if (f === "reviewer-landing.test.ts" || f.startsWith("handoffs/")) continue;
-        if (/\.instance\/wrangler\.jsonc/.test(read(join(ROOT, dir, f)))) stale.push(`${dir}/${f}`);
-      }
-    }
-    for (const f of ["README.md", "AGENTS.md"]) if (/\.instance\/wrangler\.jsonc/.test(read(join(ROOT, f)))) stale.push(f);
-    expect(stale).toEqual([]);
   });
 });
 

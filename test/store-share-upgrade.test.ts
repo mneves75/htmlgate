@@ -47,7 +47,8 @@ test("migration 0005 preserves every Share, Version, legacy body, trash row, and
     expect(env.sqlite.prepare("SELECT * FROM shares ORDER BY slug").all()).toEqual(shares);
     expect(env.sqlite.prepare("SELECT * FROM versions ORDER BY slug, n").all()).toEqual(versions);
     expect(env.sqlite.prepare("SELECT * FROM versions_d1_legacy ORDER BY slug, n").all()).toEqual(legacy);
-    expect(env.sqlite.prepare("SELECT * FROM trash ORDER BY body_key").all()).toEqual(trash);
+    expect(env.sqlite.prepare("SELECT body_key, size, due_at FROM trash ORDER BY body_key").all()).toEqual(trash);
+    expect(env.sqlite.prepare("SELECT nonce FROM trash ORDER BY body_key").all()).toEqual([{ nonce: "" }]);
     expect(env.sqlite.prepare("SELECT * FROM tokens ORDER BY id").all()).toEqual(tokens);
     expect(env.sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'shares_%' ORDER BY name").all())
       .toEqual([{ name: "shares_by_author" }, { name: "shares_by_expiry" }]);

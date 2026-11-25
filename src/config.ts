@@ -32,13 +32,13 @@ export interface Config {
 const DEFAULT_STORAGE_LIMIT = 5 * 1000 * 1000 * 1000;
 const DEFAULT_EXPIRY_DAYS = 30;
 const MAX_EXPIRY_DAYS = 3650;
-const TEAM_URL = /^(https:\/\/[^/]+|http:\/\/(127\.0\.0\.1|localhost)(:[0-9]+)?)$/;
+const TEAM_URL = /^(https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+|http:\/\/(127\.0\.0\.1|localhost)(:[0-9]{1,5})?)$/i;
 
 export function readConfig(env: Env): Config | null {
   const teamUrl = env.ACCESS_TEAM_URL?.trim().replace(/\/+$/, "");
   const aud = env.ACCESS_AUD?.trim();
   const author = env.AUTHOR_EMAIL?.trim().toLowerCase();
-  if (!teamUrl || !TEAM_URL.test(teamUrl) || !aud || !author || !EMAIL.test(author)) return null;
+  if (!teamUrl || !TEAM_URL.test(teamUrl) || !URL.canParse(teamUrl) || !aud || !author || !EMAIL.test(author)) return null;
   const allowlist = new Set<string>([author]);
   for (const raw of (env.ALLOWLIST ?? "").split(",")) {
     const e = raw.trim().toLowerCase();

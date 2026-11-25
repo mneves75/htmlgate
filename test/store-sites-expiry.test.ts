@@ -78,8 +78,8 @@ describe("expiry", () => {
     expect((await store.listShares(AUTHOR, { tags: [], sort: "updated_at", page: 1, pageSize: 50 })).total).toBe(0);
     expect(await store.recentShares(AUTHOR, 50)).toEqual({ total: 0, publicTotal: 0, shares: [] });
     expect(await store.viewableVersion(AUTHOR, a, false, null)).toBeNull();
-    expect(await store.versions(a)).toEqual([]);
-    expect(await store.version(a, 1)).toBeNull();
+    expect(await store.versions(AUTHOR, a)).toEqual([]);
+    expect(await store.version(AUTHOR, a, 1)).toBeNull();
     expect(await store.addVersion(version(a, now))).toBe("gone");
     await store.updateFields(AUTHOR, a, { title: "changed" }, "tok", now);
     await store.setPublic(AUTHOR, a, true, "tok", now);

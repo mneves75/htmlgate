@@ -17,7 +17,7 @@ async function serve() {
     req.on("data", (c) => (b += c));
     req.on("end", () => {
       bodies.push(b);
-      res.writeHead(201, { "content-type": "application/json" }).end(JSON.stringify({ slug: "S00000000001", title: "t", url: "x/s/1", public: false, metadata: {}, updated_at: 1, latest_version: 1 }));
+      res.writeHead(201, { "content-type": "application/json" }).end(JSON.stringify({ slug: "S00000000001", title: "t", url: "/s/1", public: false, metadata: {}, updated_at: 1, latest_version: 1 }));
     });
   });
   await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));

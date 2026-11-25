@@ -7,6 +7,10 @@ interface Env {
 
 const HEADERS: Record<string, string> = {
   "content-security-policy": "default-src 'none'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "x-frame-options": "DENY",
+  "cross-origin-opener-policy": "same-origin",
+  "cross-origin-resource-policy": "same-origin",
+  "permissions-policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), focus-without-user-activation=()",
   "x-content-type-options": "nosniff",
   "referrer-policy": "strict-origin-when-cross-origin",
   "strict-transport-security": "max-age=31536000; includeSubDomains",
@@ -29,6 +33,7 @@ export default {
     if (url.pathname === "/app" || url.pathname === "/app/") return redirect(env.APP_URL, 302);
 
     const res = withHeaders(await env.ASSETS.fetch(req));
+    if (url.pathname.startsWith("/media/")) res.headers.set("cross-origin-resource-policy", "cross-origin");
     if (url.hostname !== site.hostname) res.headers.set("x-robots-tag", "noindex");
     else if (req.method === "GET") countView(req, url, res, site, env.PAGE_VIEWS);
     return res;
@@ -44,7 +49,8 @@ function countView(req: Request, url: URL, res: Response, site: URL, dataset: An
     const country = String(req.cf?.country ?? "");
     let from = "";
     try {
-      from = new URL(req.headers.get("referer") ?? "").hostname.slice(0, 128);
+      const ref = new URL(req.headers.get("referer") ?? "");
+      if (ref.protocol === "https:" || ref.protocol === "http:") from = ref.hostname.slice(0, 128);
     } catch {}
     if (from === site.hostname || from === `www.${site.hostname}`) from = "";
     dataset.writeDataPoint({ indexes: [page], blobs: [page, String(res.status), country, from] });

@@ -210,13 +210,13 @@ There are two surfaces. The Instance pages (`src/pages.ts`) are for operating: t
 
 Instance pages speak one language per Instance: English (`en`, the default) or pt-BR, set by the Operator as `language` in instance.json. Both string tables in `src/pages.ts` have the same type (`ptBR: typeof en`), so a string added to one must be added to the other. The landing is pt-BR at `/` and en-US at `/en/`.
 
-- **Author home (`/`).** The page title "Your Shares", a counts line, and the yellow "New token" action with its arrow. Then the Shares board. Below it sit two notes: "Publish a Share" (three steps on a quiet panel) and "Who can open a Share" (the Gated and Public legend).
+- **Author home (`/`).** The page title "Your Shares", a counts line, and the yellow "New token" action with its arrow alongside a quiet "Metrics" link. Then the Shares board. Below it sit three panels: "Publish a Share" (three steps on a quiet panel), "Who can open a Share" (the Gated and Public legend), and "Erase a Share" (paste a Share link or slug for two-step permanent erasure).
   - **Bounds.** The board lists the 50 most recently updated live Shares (`HOME_SHARES`). They are ordered by update time, newest first, then by slug. The counts line ("N Shares · P public") counts every live Share, not only the 50 shown.
   - **Truncation.** When there are more live Shares than rows, a hint under the board says "Showing the 50 most recently updated of N." and names `htmlgate list` as the command that lists every Share.
   - **Who sees it.** The Author only. The home gets a list only for the Author, and the list's presence picks the layout. A Viewer's home lists nothing.
-  - **Fields.** Status (Gated or Public), the Share (title as a link, slug on flaps under it), Version (on flaps), Updated (the UTC hour and minute on flaps, the date under them) and By.
+  - **Fields.** Six columns: Status (Gated or Public), the Share (title as a link, slug on flaps under it), Version (on flaps), 30 days (tabular view count), Updated (the UTC hour and minute on flaps, the date under them) and By.
   - **By.** The token name of the last change of any kind to that Share: publish, a new Version, an edit to its title, description or tags, make public, or gate. Making a Share public or gated changes By but not Updated, so By can be newer than Updated. A cell is blank when the token no longer resolves.
-  - **Mobile priority.** Below a 40rem board width the header row hides and each row stacks. State and Version share the first line. Then the Share. Then Updated. Then By. The hidden field labels become visible on that layout.
+  - **Mobile priority.** Below a 40rem board width the header row hides and each row stacks. State and Version share the first line. Then the Share. Then 30 days. Then Updated. Then By. The hidden field labels become visible on that layout.
   - **Empty.** With no Shares, the board panel itself holds "No Shares yet", the gated-by-default lead and the three publish steps. The publish note below is dropped, since the steps are already the page.
 - **Viewer home (`/`).** "You're signed in" and one lead: open a Share with the link its Author sent. No navigation, no list, nothing to browse. The top bar's navigation appears only for the Author.
 - **Tokens (`/tokens`).** What a token can do, a refusal notice when the form was refused, the create form, and the list of tokens with a revoke confirm on each live one.
@@ -335,7 +335,7 @@ Times use tabular figures. On the Instance they are sans (`2026-10-09 14:02 UTC`
 
 Instance pages are one centered column, at most 64rem wide, with a fluid gutter (gutter) and 1.5rem between blocks (stack). The top bar runs full width. The page heading sits on one line with its action, and wraps the action under it when narrow. Notes under the board flow into as many 22rem-minimum columns as fit.
 
-The Shares board is a timetable. Its columns are fixed for Status (7.5rem), Version (4.5rem) and Updated (10.5rem), with the Share taking the rest and By capped at 8rem. It is a container: below 40rem of its own width, rows stack in the mobile priority order above. The token list does the same below 44rem: name and action on the first line, then created, last used and state.
+The Shares board is a timetable. Its six columns are fixed for Status (7.5rem), Version (4.5rem), 30 days (5rem) and Updated (10.5rem), with the Share taking the rest and By capped at 8rem. It is a container: below 40rem of its own width, rows stack in the mobile priority order above. The token list does the same below 44rem: name and action on the first line, then created, last used and state.
 
 The viewer is a full-height column: bar, optional older-Version band, then the iframe filling what is left. The page itself never scrolls.
 
@@ -345,7 +345,7 @@ The landing is a 76rem wrap with a wider fluid gutter (gutter-landing). Sections
 
 ## Elevation & Depth
 
-Flat. Depth comes from the graphite and white contrast, not shadow. Panels are outlined (rule) or sunken; boards are graphite with a dark-mode edge. The only shadows sit under the two floating menus: the revoke confirm (`0 14px 30px -12px oklch(0% 0 0 / .35)`) and the Versions menu (`0 12px 28px -10px oklch(0% 0 0 / .5)`).
+Flat. Depth comes from the graphite and white contrast, not shadow. Panels are outlined (rule) or sunken; boards are graphite with a dark-mode edge. The only shadows sit under the three floating popovers: the revoke confirm and viewer erase confirm (`0 14px 30px -12px oklch(0% 0 0 / .35)`) and the Versions menu (`0 12px 28px -10px oklch(0% 0 0 / .5)`).
 
 **The Flat Board Rule.** Surfaces never lift. A shadow appears only under something that floats over content, and only a soft one.
 
@@ -397,7 +397,7 @@ A Public Share's link unfurls with the landing's 1600×900 poster (`site/public/
 The version an Operator is running, in mono at 0.75rem: a footer under every Instance page, and a chip in the viewer bar's meta so it never overlays the Share. The landing carries the same number in its footer, in mono at 0.8125rem next to the wordmark. One line, muted, never an action.
 
 ### Metrics report
-`/metrics` is a data table on the light ground, not a board: the Share's title with its slug under it in mono at 0.75rem and muted (never the board's dark flap cells, which need the graphite surface to be legible), then 30 days and all time right-aligned under their headings in tabular figures, then the way in. A zero is a real number in a quieter tone, so the column never reads as broken; phones drop the all-time column and keep the 30-day count beside the button.
+`/metrics` is a data table on the light ground, not a board: the Share's title with its slug under it in mono at 0.75rem and muted (never the board's dark flap cells, which need the graphite surface to be legible), then 30 days and all time right-aligned under their headings in tabular figures, then the way in. A zero is a real number in a quieter tone, so the column never reads as broken; phones stack both the 30-day and all-time counts with inline labels beside the button.
 
 ### Revoke confirm
 An outlined red summary. Open, it fills red and drops a ground-colored popover naming who stops working, with the red button inside.

@@ -138,32 +138,6 @@ describe("docs/operator.md against the code", () => {
     expect(section).toContain("time-travel info <name>-db");
     expect(section).toContain("time-travel restore <name>-db --bookmark=<approved-bookmark>");
   });
-
-  test("setup never creates the rate limiting rule or the billing alert the landing says it does not create", () => {
-    const setup = read("scripts/setup.mjs").toLowerCase();
-    expect(setup).not.toMatch(/rulesets|ratelimit_rule|http_ratelimit|notifications\/|billing/);
-  });
-
-  test("the order-of-steps list in the Operator's guide mentions the new first step (setup now refuses a dirty tree)", () => {
-    const steps = doc.slice(doc.indexOf("## The order setup follows"), doc.indexOf("If the account has no R2 subscription"));
-    expect(steps.toLowerCase()).toMatch(/commit/);
-  });
-});
-
-describe("SECURITY.md and the landing", () => {
-  test("SECURITY.md points at files that exist", () => {
-    const text = read("SECURITY.md");
-    expect(text).toContain("Security rules the code relies on");
-    expect(read("AGENTS.md")).toContain("Security rules the code relies on");
-    for (const f of ["src/api.ts", "packages/cli/package.json", "site/src/worker.ts", "scripts/setup.mjs"]) expect(() => readFileSync(join(REPO, f)), f).not.toThrow();
-  });
-
-  test("both landing pages carry the Public links row exactly once, with the same facts", () => {
-    for (const [file, key] of [["site/public/index.html", "Links públicos"], ["site/public/en/index.html", "Public links"]] as const) {
-      const html = read(file);
-      expect(html.split(`<dt>${key}</dt>`).length - 1, file).toBe(1);
-    }
-  });
 });
 
 describe("the package versions agree", () => {

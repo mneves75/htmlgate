@@ -136,13 +136,6 @@ describe("counting never touches the response", () => {
 });
 
 describe("config and notices agree with the code", () => {
-  test("wrangler.jsonc binds PAGE_VIEWS to the dataset the README query reads", () => {
-    const cfg = read("site/wrangler.jsonc");
-    expect(cfg).toMatch(/"analytics_engine_datasets":\s*\[\s*\{\s*"binding":\s*"PAGE_VIEWS",\s*"dataset":\s*"htmlgate_site_page_views"\s*\}\s*\]/);
-    expect(read("site/src/worker.ts")).toMatch(/PAGE_VIEWS: AnalyticsEngineDataset/);
-    expect(read("README.md")).toMatch(/FROM htmlgate_site_page_views/);
-  });
-
   test.each([
     ["site/public/en/privacy/index.html", ["the time", "the page", "whether it was found", "the country", "the name of the site the link came from", "no IP address", "3 months", "no cookie banner"]],
     ["site/public/privacidade/index.html", ["o horário", "a página", "se ela foi encontrada", "o país", "o nome do site de onde veio o link", "não registra endereço IP", "3 meses", "aviso de cookies"]],

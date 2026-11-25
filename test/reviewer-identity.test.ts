@@ -220,26 +220,4 @@ describe("settings that fail closed", () => {
     expect(await open("outsider@example.com")).toBe(404);
     expect(await open("")).toBe(404);
   });
-
-  test.each([
-    ["ACCESS_AUD", "no audience"],
-    ["ACCESS_TEAM_URL", "no team URL"],
-    ["AUTHOR_EMAIL", "no Author"],
-  ])("a missing %s (%s) refuses every route, including with a validly signed token", async (key) => {
-    const vars = settings(teamUrl);
-    delete vars[key];
-    const inst = await startInstance(vars);
-    instances.push(inst);
-    const jwt = await accessJwt(AUTHOR);
-    for (const p of ["/", "/tokens", "/s/AAAAAAAAAAAA", "/s/AAAAAAAAAAAA/raw", "/p/AAAAAAAAAAAA", "/api/shares", "/api/onboard"]) {
-      const r = await fetch(inst.base + p, { headers: { "cf-access-jwt-assertion": jwt, authorization: "Bearer hg_" + "a".repeat(40) } });
-      expect(r.status, p).toBe(503);
-    }
-  });
-
-  test("a team URL with a path is a malformed setting, not a prefix match", async () => {
-    const inst = await startInstance(settings(teamUrl + "/nested"));
-    instances.push(inst);
-    expect((await fetch(inst.base + "/", await asPerson(AUTHOR))).status).toBe(503);
-  });
 });

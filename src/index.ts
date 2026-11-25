@@ -13,7 +13,7 @@ import { siteRequestPath } from "./zip";
 
 async function html(status: number, page: PageResult | Promise<PageResult>): Promise<Response> {
   const p = await page;
-  return text(status, p.body, "text/html; charset=utf-8", { "content-security-policy": p.csp });
+  return text(status, p.body, "text/html; charset=utf-8", { "content-security-policy": p.csp, "x-frame-options": "DENY" });
 }
 
 const notFound = (lang: Language, opts: { signInPath?: string; home?: "author" | "viewer" } = {}) => html(404, notFoundPage(lang, opts));
@@ -28,6 +28,7 @@ const dayFrom = (ms: number, offsetDays: number) => new Date(ms + offsetDays * 8
 const PUBLIC_FILE = /^\/p\/([A-Za-z0-9]{12})\/([1-9][0-9]{0,8})\/(.*)$/;
 const TICKET_FILE = /^\/f\/([A-Za-z0-9_-]{40,1024})\/(.*)$/;
 const MAX_FORM_BYTES = 4 * 1024;
+const TICKET_REDIRECT_GRACE_MS = 24 * 60 * 60 * 1000;
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -42,10 +43,11 @@ export default {
   },
 
   /**
-   * Hourly (wrangler.jsonc triggers): purge expired Shares, then delete due bodies. At most 3 purge batches (4 D1
-   * queries each) and 10 trash rounds (2 each): 32 queries, under Workers Free's 50 per invocation. What is left
-   * waits for the next hour. Each step runs whatever the other did, and a failure is logged by name before the run
-   * fails: an Instance logs errors only, so an unlogged failure would show up first as a full storage cap.
+   * Hourly (wrangler.jsonc triggers): purge expired Shares, then delete due bodies. At most 3 purge batches (5 D1
+   * queries each) and 10 trash rounds (2 D1 + 1 R2 each, 50 rows per round): 45 operations, under Workers Free's 50
+   * per invocation. What is left waits for the next hour. Each step runs whatever the other did, and a failure is
+   * logged by name before the run fails: an Instance logs errors only, so an unlogged failure would show up first as
+   * a full storage cap.
    */
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const store = new Store(env.DB, env.BODIES);
@@ -79,7 +81,9 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   const insecure = cleartext(req, url);
   if (insecure) return insecure;
 
-  if (path === "/robots.txt" && req.method === "GET") return text(200, ROBOTS, "text/plain; charset=utf-8");
+  if (path === "/robots.txt" && (req.method === "GET" || req.method === "HEAD")) {
+    return text(200, req.method === "HEAD" ? "" : ROBOTS, "text/plain; charset=utf-8");
+  }
 
   const cfg = readConfig(env);
   if (!cfg) return fail(503, "server_misconfigured", "This Instance is missing its settings. The Operator must run setup.");
@@ -88,7 +92,7 @@ async function route(req: Request, env: Env, ctx: ExecutionContext): Promise<Res
   if (card && (req.method === "GET" || req.method === "HEAD")) {
     const share = await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, card[1]!, true, null);
     if (!share) return notFound(cfg.language, { signInPath: `/s/${card[1]}` });
-    return bytes(ogPoster, OG_IMAGE_TYPE, { "cache-control": "public, max-age=31536000, immutable" });
+    return bytes(ogPoster, OG_IMAGE_TYPE, { "cache-control": "public, max-age=31536000, immutable", "cross-origin-resource-policy": "cross-origin" });
   }
 
 
@@ -110,6 +114,7 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
     if (req.method !== "GET") return notFound(cfg.language, { signInPath: `/s/${pub[1]}` });
     return (await serveSiteFile(env, cfg, pub[1]!, Number(pub[2]), pub[3]!, true)) ?? notFound(cfg.language, { signInPath: `/s/${pub[1]}` });
   }
+  if (path === "/p" || path.startsWith("/p/") || path === "/robots.txt") return notFound(cfg.language);
   const ticket = TICKET_FILE.exec(path);
   if (ticket) return req.method === "GET" ? await serveTicketFile(req, env, cfg, ticket[1]!, ticket[2]!) : await notFound(cfg.language);
   if (path.startsWith("/f/")) return notFound(cfg.language);
@@ -124,12 +129,11 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   if (path === "/" && req.method === "GET") {
     const erased = url.searchParams.get("erased");
     const asked = isAuthor && erased !== null && SLUG.test(erased);
-    const [target, shares, views] = await Promise.all([
+    const [target, recent] = await Promise.all([
       asked ? store.eraseTarget(cfg.author, erased) : null,
-      isAuthor ? store.recentShares(cfg.author, HOME_SHARES) : null,
-      isAuthor ? store.viewsBySlug(dayFrom(Date.now(), -30)) : undefined,
+      isAuthor ? store.recentSharesWithViews(cfg.author, HOME_SHARES, dayFrom(Date.now(), -29)) : null,
     ]);
-    return html(200, homePage(visitor, shares, asked && !target ? { erased } : undefined, views));
+    return html(200, homePage(visitor, recent, asked && !target ? { erased } : undefined, recent?.views));
   }
 
   if (view && req.method === "GET") {
@@ -139,7 +143,10 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
 
   if (path === "/erase") {
     if (!isAuthor || req.method !== "POST") return lost();
-    const again = async (status: number, note: HomeNote) => html(status, homePage(visitor, await store.recentShares(cfg.author, HOME_SHARES), note));
+    const again = async (status: number, note: HomeNote) => {
+      const recent = await store.recentSharesWithViews(cfg.author, HOME_SHARES, dayFrom(Date.now(), -29));
+      return html(status, homePage(visitor, recent, note, recent.views));
+    };
     if (!sameOrigin(req, url)) return again(403, { error: "refused" });
     const form = await readCapped(req, MAX_FORM_BYTES);
     if (form === null) return again(413, { error: "too-large" });
@@ -157,8 +164,8 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   if (path === "/metrics") {
     if (!isAuthor) return lost();
     if (req.method !== "GET") return lost();
-    const [recent, views] = await Promise.all([store.recentShares(cfg.author, METRICS_SHARES), store.viewsBySlug(dayFrom(Date.now(), -30))]);
-    return html(200, metricsPage(visitor, recent.shares, views));
+    const recent = await store.recentSharesWithViews(cfg.author, METRICS_SHARES, dayFrom(Date.now(), -29));
+    return html(200, metricsPage(visitor, recent.shares, recent.views));
   }
 
   if (path === "/tokens" || path.startsWith("/tokens/")) {
@@ -217,7 +224,6 @@ function sameOrigin(req: Request, url: URL): boolean {
 
 const RAW_HEADERS = {
   "content-security-policy": `sandbox ${SHARE_SANDBOX}; frame-ancestors 'self'`,
-  "cross-origin-resource-policy": "same-origin",
   "referrer-policy": "no-referrer",
 };
 
@@ -292,11 +298,24 @@ function counted(req: Request, env: Env, ctx: ExecutionContext, slug: string, ra
 function network(address: string): string {
   if (!address.includes(":")) return address;
   const [head = "", tail] = address.split("::");
-  const groups = (part: string) => (part ? part.split(":").flatMap((g) => (g.includes(".") ? ["0", "0"] : [g])) : []);
+  const groups = (part: string) =>
+    part ? part.split(":").flatMap((g) => {
+      if (!g.includes(".")) return [g];
+      const parts = g.split(".");
+      if (parts.length === 4 && parts.every((o) => /^(?:0|[1-9][0-9]{0,2})$/.test(o) && Number(o) <= 255)) {
+        const octets = parts.map(Number);
+        return [((octets[0]! << 8) | octets[1]!).toString(16), ((octets[2]! << 8) | octets[3]!).toString(16)];
+      }
+      return ["0", "0"];
+    }) : [];
   const left = groups(head);
   const right = tail === undefined ? [] : groups(tail);
   const all = tail === undefined ? left : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
-  return all.slice(0, 4).map((g) => (parseInt(g, 16) || 0).toString(16)).join(":") + "::/64";
+  const nums = all.slice(0, 8).map((g) => parseInt(g, 16) || 0);
+  if (nums.length === 8 && nums.slice(0, 5).every((n) => n === 0) && nums[5] === 0xffff) {
+    return `${(nums[6]! >> 8) & 0xff}.${nums[6]! & 0xff}.${(nums[7]! >> 8) & 0xff}.${nums[7]! & 0xff}`;
+  }
+  return nums.slice(0, 4).map((n) => n.toString(16)).join(":") + "::/64";
 }
 
 async function serveSiteFile(env: Env, cfg: Config, slug: string, n: number, rest: string, publicOnly: boolean): Promise<Response | null> {
@@ -314,9 +333,13 @@ async function serveTicketFile(req: Request, env: Env, cfg: Config, sealed: stri
   if (!key) return fail(503, "server_misconfigured", "This Instance's ticket key is malformed. The Operator must run setup.");
   const t = await openTicket(key, cfg.aud, sealed);
   if (!t || !cfg.allowlist.has(t.email)) return notFound(cfg.language);
-  if (t.exp <= Date.now()) {
+  const now = Date.now();
+  if (t.exp <= now) {
     const navigating = req.headers.get("sec-fetch-mode") === "navigate" && req.headers.get("sec-fetch-dest") === "document";
-    return navigating ? redirect(`/s/${t.slug}`) : notFound(cfg.language);
+    const recent = now - t.exp <= TICKET_REDIRECT_GRACE_MS && siteRequestPath(rest) !== null;
+    const live = navigating && recent ? await new Store(env.DB, env.BODIES).viewableVersion(cfg.author, t.slug, false, null) : null;
+    if (!live) return notFound(cfg.language);
+    return redirect(`/s/${t.slug}`);
   }
   return (await serveSiteFile(env, cfg, t.slug, t.n, rest, false)) ?? notFound(cfg.language);
 }

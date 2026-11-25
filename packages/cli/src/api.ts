@@ -53,13 +53,44 @@ type Obj = Record<string, unknown>;
 
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 
-const isTime = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+const MAX_TIME_MS = 8.64e15;
+const isTime = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= MAX_TIME_MS;
 
-function asShare(v: unknown): Share {
+const UNSAFE_URL_CHARS = /[\s\\\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+const HTTP_ORIGIN = /^https?:\/\//i;
+
+function normalizeShareUrl(raw: string, origin: string): string | null {
+  if (!raw || UNSAFE_URL_CHARS.test(raw) || raw.startsWith("//")) return null;
+  const absolute = HTTP_ORIGIN.test(raw);
+  if (!absolute && !raw.startsWith("/")) return null;
+  let u: URL;
+  let base: URL;
+  try {
+    base = new URL(origin);
+    u = absolute ? new URL(raw) : new URL(raw, base);
+  } catch {
+    return null;
+  }
+  if ((u.protocol !== "https:" && u.protocol !== "http:") || u.username || u.password) return null;
+  if (u.origin !== base.origin) return null;
+  return u.href;
+}
+
+function asShare(v: unknown, origin: string): Share {
   if (!isObj(v) || typeof v.slug !== "string" || typeof v.url !== "string" || typeof v.title !== "string" || typeof v.public !== "boolean" || !isTime(v.updated_at)) {
     throw badShape("a Share");
   }
-  return v as unknown as Share;
+  if (v.expires_at !== undefined && v.expires_at !== null && !isTime(v.expires_at)) throw badShape("a Share");
+  const normalized = normalizeShareUrl(v.url, origin);
+  if (normalized === null) {
+    throw new CliError("bad_response", `The Instance returned an unexpected Share URL: ${v.url}`);
+  }
+  return { ...(v as unknown as Share), url: normalized };
+}
+
+function safeSlugPath(slug: string): string {
+  if (!slug || slug === "." || slug === "..") throw new CliError("invalid_slug", `"${slug}" is not a valid Share slug.`);
+  return encodeURIComponent(slug);
 }
 
 function badShape(what: string): CliError {
@@ -88,15 +119,15 @@ export class InstanceApi {
   constructor(private readonly origin: string, private readonly token: string) {}
 
   publish(content: Content, fields: Fields & { title: string }): Promise<Share> {
-    return this.send("POST", "/api/shares", content, fields).then(asShare);
+    return this.send("POST", "/api/shares", content, fields).then((v) => asShare(v, this.origin));
   }
 
   getShare(slug: string): Promise<Share> {
-    return this.call("GET", `/api/shares/${encodeURIComponent(slug)}`).then(asShare);
+    return this.call("GET", `/api/shares/${safeSlugPath(slug)}`).then((v) => asShare(v, this.origin));
   }
 
   replace(slug: string, content: Content, fields: Fields): Promise<Share> {
-    return this.send("PUT", `/api/shares/${encodeURIComponent(slug)}`, content, fields).then(asShare);
+    return this.send("PUT", `/api/shares/${safeSlugPath(slug)}`, content, fields).then((v) => asShare(v, this.origin));
   }
 
   private send(method: "POST" | "PUT", path: string, content: Content, fields: Fields): Promise<unknown> {
@@ -111,15 +142,15 @@ export class InstanceApi {
   }
 
   patch(slug: string, body: Fields): Promise<Share> {
-    return this.call("PATCH", `/api/shares/${encodeURIComponent(slug)}`, body).then(asShare);
+    return this.call("PATCH", `/api/shares/${safeSlugPath(slug)}`, body).then((v) => asShare(v, this.origin));
   }
 
   async remove(slug: string): Promise<void> {
-    await this.call("DELETE", `/api/shares/${encodeURIComponent(slug)}`);
+    await this.call("DELETE", `/api/shares/${safeSlugPath(slug)}`);
   }
 
   setPublic(slug: string, isPublic: boolean): Promise<Share> {
-    return this.call("POST", `/api/shares/${encodeURIComponent(slug)}/visibility`, { public: isPublic }).then(asShare);
+    return this.call("POST", `/api/shares/${safeSlugPath(slug)}/visibility`, { public: isPublic }).then((v) => asShare(v, this.origin));
   }
 
   async listShares(q: { page?: number; pageSize?: number; metadata?: Record<string, string>; public?: boolean } = {}): Promise<SharePage> {
@@ -130,15 +161,18 @@ export class InstanceApi {
     if (q.public !== undefined) qs.set("public", String(q.public));
     for (const [k, v] of Object.entries(q.metadata ?? {})) qs.append(`metadata.${k}`, v);
     const body = await this.call("GET", `/api/shares?${qs}`);
-    if (!isObj(body) || !Array.isArray(body.data) || !isObj(body.pagination) || typeof body.pagination.total_pages !== "number") {
+    if (!isObj(body) || !Array.isArray(body.data) || !isObj(body.pagination)
+      || typeof body.pagination.total_pages !== "number" || !Number.isSafeInteger(body.pagination.total_pages) || body.pagination.total_pages < 0) {
       throw badShape("a list of Shares");
     }
-    const total = typeof body.pagination.total === "number" ? body.pagination.total : body.data.length;
-    return { data: body.data.map(asShare), total, totalPages: body.pagination.total_pages };
+    const total = typeof body.pagination.total === "number" && Number.isSafeInteger(body.pagination.total) && body.pagination.total >= 0
+      ? body.pagination.total
+      : body.data.length;
+    return { data: body.data.map((v) => asShare(v, this.origin)), total, totalPages: body.pagination.total_pages };
   }
 
   async versions(slug: string): Promise<Version[]> {
-    const body = await this.call("GET", `/api/shares/${encodeURIComponent(slug)}/versions`);
+    const body = await this.call("GET", `/api/shares/${safeSlugPath(slug)}/versions`);
     if (!isObj(body) || !Array.isArray(body.data) || !body.data.every((v) => isObj(v) && typeof v.n === "number" && typeof v.size === "number" && isTime(v.created_at) && isObj(v.token) && (v.token.name === null || typeof v.token.name === "string"))) {
       throw badShape("a list of Versions");
     }
@@ -164,6 +198,7 @@ export class InstanceApi {
     try {
       res = await fetch(url, {
         method,
+        ...(body !== undefined ? { body: zip ?? JSON.stringify(body) } : {}),
         redirect: "manual",
         signal: AbortSignal.timeout(TIMEOUT_MS),
         headers: {
@@ -171,7 +206,6 @@ export class InstanceApi {
           authorization: `Bearer ${this.token}`,
           ...(body !== undefined ? { "content-type": zip ? "application/zip" : "application/json" } : {}),
         },
-        ...(body !== undefined ? { body: zip ?? JSON.stringify(body) } : {}),
       });
     } catch (e) {
       throw new CliError("network_error", `Could not reach ${this.origin}.`, { cause: e });

@@ -68,16 +68,19 @@ export function lintSource(relPath, content) {
   if (isStrictTs) {
     const lines = content.split("\n");
     for (let i = 0; i < lines.length; i++) {
-      if (/@ts-(?:ignore|expect-error)\b/.test(lines[i])) {
-        report("no-any-or-ts-suppression", i + 1, "Do not suppress TypeScript errors with @ts-ignore or @ts-expect-error in source. Fix the types instead.");
+      if (/@ts-(?:ignore|expect-error|nocheck)\b/.test(lines[i])) {
+        report("no-any-or-ts-suppression", i + 1, "Do not suppress TypeScript errors with @ts-ignore, @ts-expect-error or @ts-nocheck in source. Fix the types instead.");
       }
     }
   }
 
   const visit = (node) => {
-    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Response") {
+    const isStaticResponseFactory = ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+      && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "Response"
+      && (node.expression.name.text === "json" || node.expression.name.text === "redirect" || node.expression.name.text === "error");
+    if ((ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Response") || isStaticResponseFactory) {
       if (inWorkerSrc && relPath !== "src/http.ts") {
-        report("no-raw-response", lineOf(sf, node.getStart(sf)), "Do not call `new Response(...)` outside src/http.ts. Use text(), json(), fail(), redirect(), noContent(), stream(), bytes(), or copyResponse() from ./http so BASE hardening headers are never dropped.");
+        report("no-raw-response", lineOf(sf, node.getStart(sf)), "Do not construct raw Response objects outside src/http.ts. Use text(), json(), fail(), redirect(), noContent(), stream(), bytes(), or copyResponse() from ./http so BASE hardening headers are never dropped.");
       }
       if (inSiteSrc && !isInsideFunction(node, "withHeaders")) {
         const wrapped = node.parent && ts.isCallExpression(node.parent) && ts.isIdentifier(node.parent.expression) && node.parent.expression.text === "withHeaders";
@@ -138,8 +141,10 @@ export function lintSource(relPath, content) {
           } else {
             const redir = objectProperty(init, "redirect");
             const sig = objectProperty(init, "signal");
-            if (stringLiteral(redir) !== "manual") {
-              report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), 'Set `redirect: "manual"` on fetch() so credentials and tokens are never forwarded across redirects.');
+            const redirIdx = init.properties.findIndex((p) => ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text === "redirect");
+            const trailingSpread = init.properties.some((p, idx) => ts.isSpreadAssignment(p) && idx > redirIdx);
+            if (stringLiteral(redir) !== "manual" || trailingSpread) {
+              report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), 'Set `redirect: "manual"` on fetch() after any spread so credentials and tokens are never forwarded across redirects.');
             }
             if (!sig && !hasObjectSpread(init)) {
               report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), "Set a deadline `signal` (e.g. `AbortSignal.timeout(...)`) on fetch() so a stalled endpoint cannot hang indefinitely.");
@@ -149,8 +154,12 @@ export function lintSource(relPath, content) {
       }
       if ((callee === "paced" && relPath === "scripts/smoke.mjs") || (callee === "send" && relPath === "scripts/bench.ts")) {
         const init = node.arguments[1];
-        if (!init || !ts.isObjectLiteralExpression(init) || stringLiteral(objectProperty(init, "redirect")) !== "manual") {
-          report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), `Pass \`redirect: "manual"\` to ${callee}() so authenticated or probe requests never silently follow redirects.`);
+        const redirIdx = init && ts.isObjectLiteralExpression(init)
+          ? init.properties.findIndex((p) => ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) && p.name.text === "redirect")
+          : -1;
+        const trailingSpread = init && ts.isObjectLiteralExpression(init) && init.properties.some((p, idx) => ts.isSpreadAssignment(p) && idx > redirIdx);
+        if (!init || !ts.isObjectLiteralExpression(init) || stringLiteral(objectProperty(init, "redirect")) !== "manual" || trailingSpread) {
+          report("no-unsafe-fetch", lineOf(sf, node.getStart(sf)), `Pass \`redirect: "manual"\` after any spread to ${callee}() so authenticated or probe requests never silently follow redirects.`);
         }
       }
     }
@@ -200,7 +209,8 @@ export function lintSource(relPath, content) {
     }
 
     if (inWorkerSrc) {
-      if (ts.isPropertyAccessExpression(node) && node.name.text === "access" && ts.isIdentifier(node.expression) && node.expression.text === "ctx") {
+      if ((ts.isPropertyAccessExpression(node) && node.name.text === "access" && ts.isIdentifier(node.expression) && node.expression.text === "ctx")
+        || (ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "ctx" && stringLiteral(node.argumentExpression) === "access")) {
         report("no-access-identity-bypass", lineOf(sf, node.getStart(sf)), "Never read identity from ctx.access. Verify Cf-Access-Jwt-Assertion through person() in src/access.ts.");
       }
       const lit = stringLiteral(node)?.toLowerCase();

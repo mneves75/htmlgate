@@ -43,7 +43,8 @@ async function send(url: string, init: RequestInit): Promise<Response> {
 const SITE = arg("--site");
 const LANDING: [string, string, number][] = [["landing (pt-BR)", "/", 200], ["landing (en-US)", "/en/", 200]];
 
-const ab = async (...args: string[]) => (await run(BIN, ["--session", SESSION, ...args], { timeout: 30_000 })).stdout.trim();
+const { HTMLGATE_TOKEN: _t, CLOUDFLARE_API_TOKEN: _c, ...BROWSER_ENV } = process.env;
+const ab = async (...args: string[]) => (await run(BIN, ["--session", SESSION, ...args], { timeout: 30_000, env: BROWSER_ENV })).stdout.trim();
 
 function sampleShare(): string {
   const rows = Array.from({ length: 300 }, (_, i) => `<tr><td>${i}</td><td>item ${i}</td><td>${(i * 37) % 1000}</td><td>ok</td></tr>`).join("");
@@ -78,9 +79,9 @@ const pct = (xs: number[], p: number) => {
   return s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)]!;
 };
 
-async function publish(base: string, token: string, makePublic: boolean, created: (slug: string) => void = () => {}): Promise<string> {
+async function publish(base: string, token: string, makePublic: boolean, created: (slug: string) => void = () => {}, expiresAt?: number): Promise<string> {
   const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
-  const r = await send(`${base}/api/shares`, { method: "POST", headers, redirect: "manual", body: JSON.stringify({ html: sampleShare(), title: "Weekly report" }) });
+  const r = await send(`${base}/api/shares`, { method: "POST", headers, redirect: "manual", body: JSON.stringify({ html: sampleShare(), title: "Weekly report", ...(expiresAt !== undefined ? { expires_at: expiresAt } : {}) }) });
   const slug = await createdSlug(r, "publish");
   created(slug);
   if (makePublic) await makeSharePublic(base, token, slug);
@@ -189,20 +190,24 @@ async function instancePages(): Promise<number> {
   }
 }
 
-async function live(url: string): Promise<number> {
+function parseOrigin(url: string, flag: string): string {
   const target = new URL(url);
   if (target.protocol !== "https:" && !(target.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(target.hostname))) {
-    throw new Error("--live requires HTTPS or loopback HTTP.");
+    throw new Error(`${flag} requires HTTPS or loopback HTTP.`);
   }
   if (target.username || target.password || target.search || target.hash || target.pathname !== "/") {
-    throw new Error("--live requires an Instance origin without credentials, path, query or fragment.");
+    throw new Error(`${flag} requires an origin without credentials, path, query or fragment.`);
   }
-  const base = target.origin;
+  return target.origin;
+}
+
+async function live(url: string): Promise<number> {
+  const base = parseOrigin(url, "--live");
   const token = process.env.HTMLGATE_TOKEN;
   if (!token) throw new Error("--live needs a token for that Instance in HTMLGATE_TOKEN.");
   let created: string | undefined;
   try {
-    const slug = await publish(base, token, true, (slug) => { created = slug; });
+    const slug = await publish(base, token, true, (slug) => { created = slug; }, Date.now() + 10 * 60 * 1000);
     return await measure(base, [
       ["viewer (public, with its frame)", `/p/${slug}`, 200],
       ["raw (public)", `/p/${slug}/raw`, 200],
@@ -218,7 +223,7 @@ async function live(url: string): Promise<number> {
 
 async function main() {
   try {
-    const site = SITE && new URL(SITE).origin;
+    const site = SITE && parseOrigin(SITE, "--site");
     const over = LIVE ? await live(LIVE) : site ? await measure(site, LANDING, {}, site) : await local();
     if (!over) {
       console.log(`\nEvery page loads under ${BUDGET_MS} ms (p95).`);

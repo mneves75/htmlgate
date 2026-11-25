@@ -6,7 +6,7 @@ WITH clock(now_ms) AS (
   FROM versions
 ), trash_totals AS (
   SELECT COUNT(*) AS trash_count,
-         COALESCE(SUM(size), 0) AS trash_bytes,
+         COALESCE(SUM(MAX(size, 20 * 1024)), 0) AS trash_bytes,
          COUNT(*) FILTER (WHERE due_at <= now_ms) AS due_trash_count,
          MIN(due_at) FILTER (WHERE due_at <= now_ms) AS oldest_due_trash_at_ms
   FROM trash CROSS JOIN clock
@@ -15,6 +15,7 @@ WITH clock(now_ms) AS (
          EXISTS (SELECT 1 FROM versions WHERE versions.slug = shares.slug) AS has_versions
   FROM shares CROSS JOIN clock
   WHERE expires_at <= now_ms
+     OR (deleted_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM versions WHERE versions.slug = shares.slug))
 ), expiry_totals AS (
   SELECT COUNT(*) AS retained_expired_share_count,
          COUNT(*) FILTER (WHERE deleted_at IS NOT NULL AND NOT has_versions) AS expired_tombstone_count,

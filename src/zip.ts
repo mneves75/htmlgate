@@ -152,7 +152,7 @@ export async function readSite(zip: Uint8Array): Promise<SiteEntry[]> {
     if (u16(start + 8) !== method || localName.length !== nameBytes.length || !localName.every((b, k) => b === nameBytes[k])) {
       throw invalid(`${quoted(raw)}: its local header disagrees with the zip's directory.`);
     }
-    if ((localFlags & 0x41) !== 0 || (localFlags & 0x08) !== (flags & 0x08)) {
+    if ((localFlags & 0x41) !== 0 || localFlags !== flags) {
       throw invalid(`${quoted(raw)}: its local header disagrees with the zip's directory.`);
     }
     if ((flags & 0x08) === 0 && (u32(start + 14) !== crc || u32(start + 18) !== csize || u32(start + 22) !== size)) {

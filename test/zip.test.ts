@@ -282,6 +282,7 @@ describe("a site zip that is refused", () => {
     await refused(rawZip([INDEX], { prepend: enc.encode("GIF89a") }), "site_invalid", "before its first entry");
     await refused(rawZip([INDEX, { name: "a.txt", data: "x", diskStart: 1 }]), "site_invalid", "split");
     await refused(rawZip([INDEX, { name: "a.txt", data: "x", localFlags: 0x0808 }]), "site_invalid", "local header disagrees");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "x", flags: 0x0800, localFlags: 0x0000 }]), "site_invalid", "local header disagrees");
     await refused(rawZip([INDEX, { name: "a.txt", data: "x", flags: 0x0808, localFlags: 0x0808, localCrc: 0, localCsize: 0, localSize: 0 }]), "site_invalid", "data descriptor");
     await refused(rawZip([INDEX, { name: "a.txt", data: "x", localFlags: 0x0801 }]), "site_invalid", "local header disagrees");
     await refused(rawZip([INDEX, { name: "a.txt", data: "x", localCrc: 9999 }]), "site_invalid", "local header disagrees");

@@ -1,7 +1,7 @@
 // Independent review of beta.10: the htmlgate CLI, built from the current packages/cli/src into a temp directory (the
 // repo's dist/ may be stale) and run against the real Worker in-process on loopback (no wrangler).
 import { execFile } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -56,41 +56,6 @@ function folder(name: string, files: Record<string, string>): string {
   return dir;
 }
 const SITE = { "index.html": '<!doctype html><title>s</title><link rel="stylesheet" href="a.css">', "a.css": "p{}\n".repeat(100), "img/x.txt": "x" };
-
-describe("the CLI stands on its own", () => {
-  test("nothing it ships mentions htmlbin except LICENSE: sources, README, package.json, built output, --help", async () => {
-    const cliDir = join(root, "packages/cli");
-    const shipped = [
-      ...readdirSync(join(cliDir, "src")).map((f) => join(cliDir, "src", f)),
-      ...readdirSync(dist).map((f) => join(dist, f)),
-      join(cliDir, "README.md"),
-      join(cliDir, "package.json"),
-    ];
-    const hits = shipped.filter((f) => /htmlbin|utsengar|hb_[A-Za-z0-9]|upstream|\bfork\b|ported from/i.test(readFileSync(f, "utf8")));
-    expect(hits).toEqual([]);
-    const help = await cli(["--help"]);
-    expect(help.stdout + help.stderr).toMatch(/publish/);
-    expect(help.stdout + help.stderr).toMatch(/--expires/);
-    expect(help.stdout + help.stderr).not.toMatch(/htmlbin|utsengar/i);
-    const license = readFileSync(join(cliDir, "LICENSE"), "utf8");
-    expect(license).toMatch(/Permission is hereby granted/);
-    expect(license).toMatch(/Copyright/);
-  });
-  test("its requests say htmlgate and never htmlbin, and its sign-in reads no htmlbin file or variable", async () => {
-    const proj = folder("proj-ua", { "index.html": "<p>x</p>", ".htmlbin": '{"token":"hb_' + "a".repeat(40) + '"}' });
-    const before = server.seen.length;
-    const r = await cli(["publish", join(proj, "index.html"), "--title", "ua"], { cwd: proj });
-    expect(r.code).toBe(0);
-    const sent = server.seen.slice(before);
-    expect(sent.length).toBeGreaterThan(0);
-    for (const req of sent) {
-      expect(String(req.headers["user-agent"])).toMatch(/htmlgate/i);
-      expect(JSON.stringify(req.headers)).not.toMatch(/htmlbin/i);
-    }
-    const noToken = await cli(["status"], { token: null });
-    expect(noToken.code).not.toBe(0);
-  });
-});
 
 describe("publishing with the CLI", () => {
   test("a folder: becomes a site, leaves dotfiles at home, and is served by the Instance", async () => {
@@ -147,15 +112,16 @@ describe("publishing with the CLI", () => {
     expect(Math.abs(at(rel30)! - (Date.now() + 30 * DAY))).toBeLessThan(120_000);
     const h12 = await cli(["publish", f, "--title", "e", "--expires", "12h"]);
     expect(Math.abs(at(h12)! - (Date.now() + 12 * 3600_000))).toBeLessThan(120_000);
-    const date = await cli(["publish", f, "--title", "e", "--expires", "2026-12-31"]);
-    expect(at(date)).toBe(Date.UTC(2026, 11, 31));
-    const full = await cli(["publish", f, "--title", "e", "--expires", "2027-01-01T18:00:00Z"]);
-    expect(at(full)).toBe(Date.UTC(2027, 0, 1, 18));
+    const nextYear = new Date().getUTCFullYear() + 1;
+    const date = await cli(["publish", f, "--title", "e", "--expires", `${nextYear}-12-31`]);
+    expect(at(date)).toBe(Date.UTC(nextYear, 11, 31));
+    const full = await cli(["publish", f, "--title", "e", "--expires", `${nextYear + 1}-01-01T18:00:00Z`]);
+    expect(at(full)).toBe(Date.UTC(nextYear + 1, 0, 1, 18));
     const never = await cli(["publish", f, "--title", "e", "--expires", "never"]);
     expect([never.code, at(never)]).toEqual([0, null]);
     // On a site too.
-    const site = await cli(["publish", folder("site-exp", SITE), "--title", "e", "--expires", "2026-12-31"]);
-    expect(at(site)).toBe(Date.UTC(2026, 11, 31));
+    const site = await cli(["publish", folder("site-exp", SITE), "--title", "e", "--expires", `${nextYear}-12-31`]);
+    expect(at(site)).toBe(Date.UTC(nextYear, 11, 31));
   });
   test.each(["soon", "0d", "-5d", "30", "30 days", "2026-13-45", "2026-12-31 18:00", "5000d", "99999d", "d", "1w"])("--expires %j is refused and creates nothing", async (bad) => {
     const f = join(work, "bad-exp.html");

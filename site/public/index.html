@@ -174,7 +174,7 @@
 <h2 id="perguntas-titulo">Perguntas que todo mundo faz</h2>
 </div>
 <div class="faq">
-<details><summary>É código aberto?</summary><p>Sim, com licença MIT. O repositório fica público na versão 0.1.</p></details>
+<details><summary>É código aberto?</summary><p>Sim, com licença MIT. O repositório é público no GitHub.</p></details>
 <details><summary>Preciso saber programar?</summary><p>Precisa se virar num terminal: instalar Node 26 e pnpm, entrar na Cloudflare e rodar o setup. Se você já usa um agente de código, ele faz isso junto com você.</p></details>
 <details><summary>E se um token vazar?</summary><p>Revogue na página de tokens: ele para no pedido seguinte. Depois liste os Shares públicos com <code>htmlgate list --public</code> e veja quem mexeu por último em cada um. Revogar não desfaz o que o token já fez.</p></details>
 <details><summary>Um Share consegue roubar dados de quem abre?</summary><p>Ele roda isolado, sem acesso aos cookies e à sessão de quem abre. Ele ainda pode mandar pra outro site o que ele mesmo contém. O isolamento protege quem abre, e o conteúdo do Share é responsabilidade de quem publica.</p></details>
@@ -191,14 +191,14 @@
 <h2 id="instalar-titulo">Bora colocar no ar?</h2>
 <p>Você precisa de uma conta Cloudflare com R2 e Zero Trust ativados, Node 26, pnpm e as CLIs <code>wrangler</code> e <code>cf</code> logadas na mesma conta. O resto está aqui embaixo, e o guia do operador explica cada passo.</p>
 </div>
-<pre tabindex="0" aria-label="Comandos de instalação"><code>git clone https://github.com/mneves75/htmlgate
+<pre tabindex="0" aria-label="Comandos de instalação" role="region"><code>git clone https://github.com/mneves75/htmlgate
 cd htmlgate &amp;&amp; pnpm install
 cp instance.example.json instance.json   # edite: seu nome, seu e-mail, quem pode abrir
 pnpm run setup
 pnpm run token create laptop               # mostra o token uma vez
 pnpm run build:cli &amp;&amp; npm install -g ./packages/cli
 htmlgate login https://sua-instancia.example.com</code></pre>
-<p class="note">O repositório fica público na versão 0.1. O guia do operador explica cada passo e o que ele muda na sua conta.</p>
+<p class="note">O repositório é público no GitHub. O guia do operador explica cada passo e o que ele muda na sua conta.</p>
 <div class="actions">
 <a class="button" href="https://github.com/mneves75/htmlgate">Ver no GitHub</a>
 <a class="button" href="https://github.com/mneves75/htmlgate/blob/main/docs/operator.md">Guia do operador</a>
@@ -209,7 +209,7 @@ htmlgate login https://sua-instancia.example.com</code></pre>
 
 <footer>
 <div class="wrap">
-<p>htmlgate. <span class="version">0.1.22</span></p>
+<p>htmlgate. <span class="version">0.1.23</span></p>
 <nav aria-label="Rodapé">
 <a href="/privacidade/">Privacidade</a>
 <a href="/en/" hreflang="en-US" lang="en-US">English</a>

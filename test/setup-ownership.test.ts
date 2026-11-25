@@ -90,7 +90,7 @@ const page = pageAt < 0 ? 1 : Number(args[pageAt + 1]);
     if (args[3] === 'list') return json(s.lateApp
       ? (page === 1 ? [{ id: 'unrelated', name: 'unrelated', destinations: [] }] : page === 2 ? s.apps : [])
       : (s.endlessApps || page === 1 ? s.apps : []));
-    return json({ aud: 'aud-control' });
+    return json({ aud: 'aud-control', same_site_cookie_attribute: 'lax', http_only_cookie_attribute: true, destinations: [{ type: 'worker', worker_id: 'worker-control' }] });
   }
   if (args[0] === 'r2') {
     if (s.r2Error) throw new Error(s.r2Error);

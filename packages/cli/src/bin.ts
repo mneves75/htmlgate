@@ -61,11 +61,13 @@ const redact = (s: string) => s.replace(/hg_[A-Za-z0-9]{40}/g, "hg_…");
 
 let json = detectAgent(process.env) !== null;
 
-const printable = (s: string) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "");
+const printable = (s: string) => s.replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "");
 const cell = (s: string) => s.replace(/[\t\n]/g, " ");
+const safeJson = (v: unknown) =>
+  JSON.stringify(v).replace(/[\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 
 function emit(payload: unknown, text: () => string): void {
-  process.stdout.write(redact(json ? JSON.stringify(payload) + "\n" : printable(text())));
+  process.stdout.write(redact(json ? safeJson(payload) + "\n" : printable(text())));
 }
 
 function die(err: unknown): never {
@@ -74,7 +76,7 @@ function die(err: unknown): never {
     const body: Record<string, unknown> = { code: e.code, message: e.message };
     if (e.hint) body.hint = e.hint;
     if (e.details) body.details = e.details;
-    process.stderr.write(redact(JSON.stringify({ error: body })) + "\n");
+    process.stderr.write(redact(safeJson({ error: body })) + "\n");
   } else {
     let out = `error: ${cell(e.message)}  [${cell(e.code)}]\n`;
     if (e.hint) out += `hint:  ${cell(e.hint)}\n`;
@@ -127,6 +129,10 @@ function arg(args: string[], i: number, what: string): string {
   return v;
 }
 
+function maxArgs(args: string[], max: number): void {
+  if (args.length > max) throw new CliError("invalid_arg", `Unexpected argument "${args[max]}".`, { hint: "Run `htmlgate --help`." });
+}
+
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 const list = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
 const defaultTitle = (file: string) => basename(file, extname(file)) || "untitled";
@@ -146,6 +152,7 @@ async function signedIn(p: Paths) {
 }
 
 async function login(p: Paths, args: string[], values: Record<string, unknown>) {
+  maxArgs(args, 1);
   const envUrl = process.env.HTMLGATE_URL?.trim();
   const envToken = process.env.HTMLGATE_TOKEN?.trim();
   const raw = args[0] ?? envUrl;
@@ -170,6 +177,7 @@ async function login(p: Paths, args: string[], values: Record<string, unknown>) 
 }
 
 async function publish(p: Paths, args: string[], v: Record<string, unknown>) {
+  maxArgs(args, 1);
   const file = arg(args, 0, "the HTML file, .zip or folder to publish");
   const slug = str(v.slug);
   if (slug === "") throw new CliError("invalid_arg", "--slug needs the Share's slug.");
@@ -200,17 +208,18 @@ async function publish(p: Paths, args: string[], v: Record<string, unknown>) {
   const fields: Fields = { ...(given ? { title: given } : {}), ...(description ? { description } : {}), ...expiry };
   const d = target ? await api.replace(target, content, matched ? fields : { ...fields, ...(hasMeta ? { metadata } : {}) }) : await api.publish(content, created);
   emit({ url: d.url, slug: d.slug, kind: content.kind, expires_at: d.expires_at, ...(matched !== undefined ? { matched } : {}) },
-    () => d.url + "\n" + (process.stdout.isTTY ? `expires: ${expiresText(d.expires_at)}\n` : ""));
+    () => cell(d.url) + "\n" + (process.stdout.isTTY ? `expires: ${expiresText(d.expires_at)}\n` : ""));
 }
 
 async function update(p: Paths, args: string[], v: Record<string, unknown>) {
+  maxArgs(args, 1);
   const slug = arg(args, 0, "the Share's slug");
   const meta = list(v.metadata);
   if (meta.length && v["clear-metadata"]) throw new CliError("invalid_arg", "--metadata and --clear-metadata are mutually exclusive.");
   const metadata = v["clear-metadata"] ? {} : meta.length ? parseMetadata(meta) : undefined;
   const title = str(v.title);
   const description = str(v.description);
-  const fields: Fields = { ...(title ? { title } : {}), ...(description !== undefined ? { description } : {}), ...(metadata ? { metadata } : {}), ...expiresOf(v) };
+  const fields: Fields = { ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}), ...(metadata ? { metadata } : {}), ...expiresOf(v) };
   const file = str(v.file);
   if (!file && Object.keys(fields).length === 0) {
     throw new CliError("invalid_arg", "update needs --file, --title, --description, --metadata, --clear-metadata or --expires.");
@@ -222,10 +231,13 @@ async function update(p: Paths, args: string[], v: Record<string, unknown>) {
   const api = await connect(p);
   const d = content !== undefined ? await api.replace(slug, content, fields) : await api.patch(slug, fields);
   const mode = content !== undefined ? "put" : "patch";
-  emit({ url: d.url, slug: d.slug, mode }, () => `${mode === "put" ? "updated (new version)" : "patched"}: ${d.url}\n`);
+  emit({ url: d.url, slug: d.slug, mode }, () => `${mode === "put" ? "updated (new version)" : "patched"}: ${cell(d.url)}\n`);
 }
 
-async function listShares(p: Paths, v: Record<string, unknown>) {
+const MAX_LIST_PAGES = 500;
+
+async function listShares(p: Paths, args: string[], v: Record<string, unknown>) {
+  maxArgs(args, 0);
   if (v.public && v.gated) throw new CliError("invalid_arg", "--public and --gated are mutually exclusive.");
   const limitRaw = str(v.limit);
   if (limitRaw !== undefined && !/^[1-9][0-9]*$/.test(limitRaw)) throw new CliError("invalid_arg", `-n must be a positive whole number (got ${limitRaw}).`);
@@ -233,8 +245,10 @@ async function listShares(p: Paths, v: Record<string, unknown>) {
   const metadata = parseMetadata(list(v.metadata));
   const api = await connect(p);
   const rows: Share[] = [];
+  const pageSize = Number.isFinite(limit) ? Math.min(200, limit) : 200;
   for (let page = 1; rows.length < limit; page++) {
-    const res = await api.listShares({ page, pageSize: 200, metadata, ...(v.public ? { public: true } : v.gated ? { public: false } : {}) });
+    if (page > MAX_LIST_PAGES) throw new CliError("bad_response", `The Instance kept returning pages past ${MAX_LIST_PAGES}.`);
+    const res = await api.listShares({ page, pageSize, metadata, ...(v.public ? { public: true } : v.gated ? { public: false } : {}) });
     rows.push(...res.data);
     if (page >= res.totalPages || res.data.length === 0) break;
   }
@@ -262,6 +276,7 @@ function table(cells: string[][], head: string[]): string {
 async function tokens(p: Paths, args: string[]) {
   const sub = arg(args, 0, "tokens list or tokens revoke <id>");
   if (sub !== "list" && sub !== "revoke") throw new CliError("invalid_arg", `Unknown tokens command "${sub}". Use list or revoke.`);
+  maxArgs(args, sub === "list" ? 1 : 2);
   const id = sub === "revoke" ? arg(args, 1, "the token id from `htmlgate tokens list`") : "";
   if (sub === "revoke" && !/^[0-9a-f]{12}$/.test(id)) throw new CliError("invalid_token_id", `"${id}" is not a token id: 12 hex characters, from \`htmlgate tokens list\`.`);
   const api = await connect(p);
@@ -290,11 +305,13 @@ async function main(): Promise<void> {
     case "login":
       return login(p, args, values);
     case "logout": {
+      maxArgs(args, 1);
       const origin = args[0] ? instanceOrigin(args[0]) : (await selectInstance(p, process.env)).api_url;
       const removed = await forget(p, origin);
       return emit({ removed, api_url: origin }, () => (removed ? `Signed out of ${origin}. The token still works until it is revoked.\n` : `Not signed in to ${origin}.\n`));
     }
     case "status": {
+      maxArgs(args, 0);
       const c = await signedIn(p);
       await c.api.listShares({ pageSize: 1 });
       return emit({ api_url: c.api_url, instance_from: c.instanceFrom, token_from: c.tokenFrom },
@@ -305,25 +322,29 @@ async function main(): Promise<void> {
     case "update":
       return update(p, args, values);
     case "list":
-      return listShares(p, values);
+      return listShares(p, args, values);
     case "url": {
+      maxArgs(args, 1);
       const d = await (await connect(p)).getShare(arg(args, 0, "the Share's slug"));
-      return emit({ url: d.url, slug: d.slug }, () => d.url + "\n");
+      return emit({ url: d.url, slug: d.slug }, () => cell(d.url) + "\n");
     }
     case "delete": {
+      maxArgs(args, 1);
       const slug = arg(args, 0, "the Share's slug");
       await (await connect(p)).remove(slug);
       return emit({ deleted: true, slug }, () => `deleted ${slug}\n`);
     }
     case "public":
     case "gate": {
+      maxArgs(args, 1);
       const api = await connect(p);
       const slug = arg(args, 0, "the Share's slug");
       if (cmd === "public" && !json && process.stdin.isTTY && process.stderr.isTTY) process.stderr.write(PUBLIC_SCOPE + "\n");
       const d = await api.setPublic(slug, cmd === "public");
-      return emit(brief(d), () => `${d.public ? "public" : "gated"}: ${d.url}\n`);
+      return emit(brief(d), () => `${d.public ? "public" : "gated"}: ${cell(d.url)}\n`);
     }
     case "versions": {
+      maxArgs(args, 1);
       const all = await (await connect(p)).versions(arg(args, 0, "the Share's slug"));
       return emit(all, () => table(all.map((x) => [`v${x.n}`, x.kind, `${x.size} B`, minute(x.created_at), x.token.name ?? "-"]), ["VERSION", "KIND", "SIZE", "CREATED", "TOKEN"]));
     }

@@ -62,7 +62,7 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
         if (method === "PATCH") return await patch(req, store, cfg, token, b, url);
         if (method === "DELETE") return await remove(store, cfg, token, b);
       } else if (c === "versions" && d === undefined && method === "GET") {
-        const read = store.versions(b).then((rows) => ({ rows }), (error: unknown) => ({ error }));
+        const read = store.versions(cfg.author, b).then((rows) => ({ rows }), (error: unknown) => ({ error }));
         await mustShare(store, cfg, b);
         const versions = await read;
         if ("error" in versions) throw versions.error;
@@ -70,7 +70,7 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
         return json(200, { data: rows.map((v) => ({ n: v.n, kind: v.kind, size: v.size, created_at: v.created_at, token: { id: v.token_id, name: v.token_name } })) });
       } else if (c === "versions" && d !== undefined && POSITIVE.test(d) && method === "GET") {
         await mustShare(store, cfg, b);
-        const v = await store.version(b, Number(d));
+        const v = await store.version(cfg.author, b, Number(d));
         if (!v) return fail(404, "version_not_found", "That Version does not exist or is no longer kept.");
         const common = { n: v.n, kind: v.kind, size: v.size, created_at: v.created_at, token_id: v.token_id };
         return json(200, v.kind === "site" ? { ...common, files: v.files } : { ...common, html: v.body });
@@ -166,6 +166,45 @@ async function mustShare(store: Store, cfg: Config, slug: string): Promise<Share
   return d;
 }
 
+const MAX_JSON_DEPTH = 8;
+const MAX_JSON_STRUCT = 1000;
+
+function checkJsonShape(raw: string): void {
+  let depth = 0;
+  let tokens = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw.charCodeAt(i);
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === 92) escaped = true; // \
+      else if (ch === 34) inString = false; // "
+      continue;
+    }
+    if (ch === 34) {
+      inString = true;
+    } else if (ch === 123 || ch === 91) { // { or [
+      depth++;
+      tokens++;
+      if (depth > MAX_JSON_DEPTH || tokens > MAX_JSON_STRUCT) {
+        throw new HttpError(400, "invalid_json", "The JSON body is too deeply nested or complex.");
+      }
+    } else if (ch === 125 || ch === 93) { // } or ]
+      depth--;
+      tokens++;
+      if (depth < 0 || tokens > MAX_JSON_STRUCT) {
+        throw new HttpError(400, "invalid_json", "The body is not valid JSON.");
+      }
+    } else if (ch === 44 || ch === 58) { // , or :
+      tokens++;
+      if (tokens > MAX_JSON_STRUCT) {
+        throw new HttpError(400, "invalid_json", "The JSON body is too deeply nested or complex.");
+      }
+    }
+  }
+}
+
 async function readBody(req: Request, fieldsOnly = false): Promise<Record<string, unknown>> {
   const raw = await readCapped(req, fieldsOnly ? MAX_FIELDS_BYTES : MAX_REQUEST_BYTES);
   if (raw === null) {
@@ -173,6 +212,7 @@ async function readBody(req: Request, fieldsOnly = false): Promise<Record<string
       ? new HttpError(413, "body_too_large", `This request is at most ${MAX_FIELDS_BYTES} bytes.`)
       : new HttpError(413, "html_too_large", `A Share is at most ${MAX_HTML_BYTES} bytes.`);
   }
+  checkJsonShape(raw);
   let body: unknown;
   try {
     body = JSON.parse(raw);
@@ -208,8 +248,8 @@ function queryFields(url: URL): Record<string, unknown> {
   for (const [k, v] of url.searchParams) {
     if (k === "html") throw new HttpError(400, "invalid_arg", "A zip publish carries its files in the zip, not html.");
     if (k.startsWith("metadata.")) metadata[k.slice("metadata.".length)] = v;
-    else if (k === "expires_at") out.expires_at = v === "never" ? null : /^[0-9]{1,16}$/.test(v) ? Number(v) : v;
     else if (Object.hasOwn(out, k)) throw new HttpError(400, "invalid_arg", `'${k}' is given twice.`);
+    else if (k === "expires_at") out.expires_at = v === "never" ? null : /^[0-9]{1,16}$/.test(v) ? Number(v) : v;
     else out[k] = v;
   }
   if (Object.keys(metadata).length) out.metadata = metadata;
@@ -221,11 +261,14 @@ function expiryOf(f: Fields, cfg: Config, now: number): Expiry {
   return { at: cfg.expiryDays > 0 ? now + cfg.expiryDays * DAY_MS : null, set: false };
 }
 
+const BAD_TITLE_CHARS = /(?![\u200c\u200d])[\p{Cc}\p{Cf}]/u;
+const BAD_DESC_CHARS = /(?![\t\n\r\u200c\u200d])[\p{Cc}\p{Cf}]/u;
+
 function parseFields(body: Record<string, unknown>, allowed: (keyof Fields)[]): Fields & { size?: number } {
   for (const key of Object.keys(body)) {
     if (key === "public") throw new HttpError(400, "invalid_arg", "Publishing never changes the gate. Use POST /api/shares/:slug/visibility.");
     if (key === "passcode") throw new HttpError(400, "invalid_arg", "htmlgate has no passcodes. Shares are gated; use POST /api/shares/:slug/visibility to make one public.");
-    if (key === "html" && !allowed.includes("html")) throw new HttpError(400, "metadata_only_on_patch", "PATCH changes title, description and metadata only. Use PUT for new HTML.");
+    if (key === "html" && !allowed.includes("html")) throw new HttpError(400, "metadata_only_on_patch", "PATCH changes title, description, metadata and expires_at only. Use PUT for new HTML.");
     if (!(allowed as string[]).includes(key)) throw new HttpError(400, "invalid_arg", `Unknown field '${key}'.`);
   }
   const out: Fields & { size?: number } = {};
@@ -239,11 +282,13 @@ function parseFields(body: Record<string, unknown>, allowed: (keyof Fields)[]): 
   if (body.title !== undefined) {
     if (typeof body.title !== "string" || body.title.trim() === "") throw new HttpError(400, "title_required", "title must be a non-empty string.");
     if (body.title.length > MAX_TITLE) throw new HttpError(400, "title_too_long", `title is at most ${MAX_TITLE} characters.`);
+    if (BAD_TITLE_CHARS.test(body.title)) throw new HttpError(400, "invalid_arg", "title cannot contain control or formatting characters.");
     out.title = body.title;
   }
   if (body.description !== undefined && body.description !== null) {
     if (typeof body.description !== "string") throw new HttpError(400, "invalid_arg", "description must be a string.");
     if (body.description.length > MAX_DESCRIPTION) throw new HttpError(400, "description_too_long", `description is at most ${MAX_DESCRIPTION} characters.`);
+    if (BAD_DESC_CHARS.test(body.description)) throw new HttpError(400, "invalid_arg", "description cannot contain control or formatting characters.");
     out.description = body.description;
   } else if (body.description === null) {
     out.description = null;
@@ -319,7 +364,7 @@ async function patch(req: Request, store: Store, cfg: Config, token: TokenRow, s
 
 async function zipOf(store: Store, cfg: Config, slug: string, n: number) {
   await mustShare(store, cfg, slug);
-  const v = await store.version(slug, n);
+  const v = await store.version(cfg.author, slug, n);
   if (!v || v.kind !== "site") return fail(404, "version_not_found", "That Version does not exist, is no longer kept, or is a page.");
   const body = await store.bodyStream(v.body_key);
   if (!body) console.error("missing body", v.body_key);

@@ -19,9 +19,11 @@ const CALLER_CAUSED = /^ERR_(JWT_|JWS_|JOSE_ALG_NOT_ALLOWED$|JOSE_NOT_SUPPORTED$
  * Only a verified Cf-Access-Jwt-Assertion counts. ctx.access, cookies and unverified headers can all be
  * present without a sign-in on Access's public paths (issue #18), so none of them is read.
  */
+const MAX_JWT_BYTES = 8192;
+
 export async function person(req: Request, cfg: Config): Promise<string | null> {
   const token = req.headers.get("cf-access-jwt-assertion");
-  if (!token) return null;
+  if (!token || token.length > MAX_JWT_BYTES) return null;
   try {
     const { payload } = await jwtVerify(token, keys(cfg.teamUrl), {
       issuer: cfg.teamUrl,
@@ -29,6 +31,7 @@ export async function person(req: Request, cfg: Config): Promise<string | null> 
       algorithms: ["RS256"],
       requiredClaims: ["exp", "email"],
     });
+    if (payload.type !== undefined && payload.type !== "app") return null;
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
     return cfg.allowlist.has(email) ? email : null;
   } catch (e) {

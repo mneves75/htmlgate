@@ -39,10 +39,12 @@ const tooLarge = (message: string) => new SiteError("site_too_large", message);
 const EOCD = 0x06054b50;
 const CENTRAL = 0x02014b50;
 const LOCAL = 0x04034b50;
+const DATA_DESC = 0x08074b50;
 const ZIP64_LOCATOR = 0x07064b50;
 const FULL16 = 0xffff;
 const FULL32 = 0xffffffff;
-const UNIX = 3;
+const EXTRA_ZIP64 = 0x0001;
+const EXTRA_UNICODE_PATH = 0x7075;
 const S_IFMT = 0o170000;
 const S_IFREG = 0o100000;
 const S_IFDIR = 0o040000;
@@ -51,6 +53,20 @@ const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const enc = new TextEncoder();
 
 const quoted = (name: string) => JSON.stringify(name.length > 80 ? name.slice(0, 80) + "…" : name);
+
+function checkExtra(view: DataView, start: number, length: number, raw: string): void {
+  const end = start + length;
+  let pos = start;
+  while (pos < end) {
+    if (pos + 4 > end) throw invalid(`${quoted(raw)} has a damaged extra header.`);
+    const id = view.getUint16(pos, true);
+    const size = view.getUint16(pos + 2, true);
+    if (pos + 4 + size > end) throw invalid(`${quoted(raw)} has a damaged extra header.`);
+    if (id === EXTRA_ZIP64) throw invalid(`${quoted(raw)} needs ZIP64, which is not accepted.`);
+    if (id === EXTRA_UNICODE_PATH) throw invalid(`${quoted(raw)} uses an alternate Unicode path header, which is not accepted.`);
+    pos += 4 + size;
+  }
+}
 
 export async function readSite(zip: Uint8Array): Promise<SiteEntry[]> {
   if (zip.length > SITE_LIMITS.zipBytes) throw tooLarge(`A site's zip is at most ${SITE_LIMITS.zipBytes} bytes; this one is ${zip.length}.`);
@@ -77,23 +93,25 @@ export async function readSite(zip: Uint8Array): Promise<SiteEntry[]> {
   if (cdStart + cdSize < eocd) throw invalid("The zip has data between its directory and its end record.");
   if (count > 2 * SITE_LIMITS.files) throw tooLarge(`A site's zip has at most ${2 * SITE_LIMITS.files} entries; this one has ${count}.`);
 
-  type Found = SiteEntry & { start: number; end: number; skip: boolean; crc: number };
+  type Found = SiteEntry & { start: number; end: number; isDir: boolean; skip: boolean; crc: number };
   const found: Found[] = [];
   let at = cdStart;
   for (let i = 0; i < count; i++) {
     if (!within(at, 46) || u32(at) !== CENTRAL) throw invalid("The zip's directory is damaged.");
-    const madeBy = u16(at + 4) >> 8;
     const flags = u16(at + 8);
     const method = u16(at + 10);
     const crc = u32(at + 16);
     const csize = u32(at + 20);
     const size = u32(at + 24);
     const nameLength = u16(at + 28);
-    const recordLength = 46 + nameLength + u16(at + 30) + u16(at + 32);
+    const extraLength = u16(at + 30);
+    const recordLength = 46 + nameLength + extraLength + u16(at + 32);
+    const diskStart = u16(at + 34);
     const mode = u32(at + 38) >>> 16;
     const start = u32(at + 42);
     if (!within(at, recordLength) || at + recordLength > cdStart + cdSize) throw invalid("The zip's directory is damaged.");
     const nameBytes = zip.subarray(at + 46, at + 46 + nameLength);
+    const extraStart = at + 46 + nameLength;
     at += recordLength;
 
     let raw: string;
@@ -102,15 +120,17 @@ export async function readSite(zip: Uint8Array): Promise<SiteEntry[]> {
     } catch {
       throw invalid("A file name in the zip is not UTF-8. Zip it again with a tool that writes UTF-8 names.");
     }
+    if (diskStart !== 0) throw invalid("Zips split across several files are not accepted.");
     if (csize === FULL32 || size === FULL32 || start === FULL32) throw invalid(`${quoted(raw)} needs ZIP64, which is not accepted.`);
     if (flags & 0x41) throw invalid(`${quoted(raw)} is encrypted. Zip the site without a password.`);
     if (method !== 0 && method !== 8) throw invalid(`${quoted(raw)} uses compression method ${method}; only stored and deflate are accepted.`);
+    checkExtra(view, extraStart, extraLength, raw);
 
     const isDir = raw.endsWith("/");
     // A zip made from "." (macOS tar, `zip -r site.zip ./`) names its entries "./index.html": read them from the top.
     const name = raw.replace(/^(?:\.\/)+/, "");
     const topFolder = isDir && name === "";
-    if (madeBy === UNIX && mode !== 0) {
+    if (mode !== 0) {
       const type = mode & S_IFMT;
       if (type === S_IFLNK) throw invalid(`${quoted(raw)} is a symbolic link. A site holds regular files only.`);
       if (type !== S_IFREG && !(type === S_IFDIR && isDir) && type !== 0) throw invalid(`${quoted(raw)} is not a regular file.`);
@@ -118,41 +138,73 @@ export async function readSite(zip: Uint8Array): Promise<SiteEntry[]> {
     const path = (isDir ? name.slice(0, -1) : name).normalize("NFC");
     if (!topFolder) checkPath(path, raw);
 
-    // The local header must agree with the directory on method and name (its sizes and CRC may be zero, with the real
-    // ones in a data descriptor after the bytes: flag bit 3), and the file's bytes must end before the directory.
+    // The local header must agree with the directory on flags, method, name, and (unless bit 3 defers them to a
+    // data descriptor) CRC and sizes, and the file's bytes must end before the directory.
     if (!within(start, 30) || u32(start) !== LOCAL) throw invalid(`${quoted(raw)} has no local header where the directory says.`);
+    const localFlags = u16(start + 6);
     const localNameLength = u16(start + 26);
-    const dataStart = start + 30 + localNameLength + u16(start + 28);
+    const localExtraLength = u16(start + 28);
+    const dataStart = start + 30 + localNameLength + localExtraLength;
+    if (!within(start, 30 + localNameLength + localExtraLength) || dataStart > cdStart) {
+      throw invalid(`${quoted(raw)} runs into the zip's directory.`);
+    }
     const localName = zip.subarray(start + 30, start + 30 + localNameLength);
     if (u16(start + 8) !== method || localName.length !== nameBytes.length || !localName.every((b, k) => b === nameBytes[k])) {
       throw invalid(`${quoted(raw)}: its local header disagrees with the zip's directory.`);
     }
+    if ((localFlags & 0x41) !== 0 || (localFlags & 0x08) !== (flags & 0x08)) {
+      throw invalid(`${quoted(raw)}: its local header disagrees with the zip's directory.`);
+    }
+    if ((flags & 0x08) === 0 && (u32(start + 14) !== crc || u32(start + 18) !== csize || u32(start + 22) !== size)) {
+      throw invalid(`${quoted(raw)}: its local header disagrees with the zip's directory.`);
+    }
+    if ((flags & 0x08) !== 0) {
+      const lCrc = u32(start + 14), lCsize = u32(start + 18), lSize = u32(start + 22);
+      if ((lCrc !== 0 && lCrc !== crc) || (lCsize !== 0 && lCsize !== csize) || (lSize !== 0 && lSize !== size)) {
+        throw invalid(`${quoted(raw)}: its local header disagrees with the zip's directory.`);
+      }
+    }
+    checkExtra(view, start + 30 + localNameLength, localExtraLength, raw);
     if (dataStart + csize > cdStart) throw invalid(`${quoted(raw)} runs into the zip's directory.`);
+    let entryEnd = dataStart + csize;
+    if ((flags & 0x08) !== 0) {
+      const signed = entryEnd + 16 <= cdStart && u32(entryEnd) === DATA_DESC
+        && u32(entryEnd + 4) === crc && u32(entryEnd + 8) === csize && u32(entryEnd + 12) === size;
+      const unsigned = !signed && entryEnd + 12 <= cdStart
+        && u32(entryEnd) === crc && u32(entryEnd + 4) === csize && u32(entryEnd + 8) === size;
+      if (!signed && !unsigned) throw invalid(`${quoted(raw)}: its data descriptor disagrees with the zip's directory.`);
+      entryEnd += signed ? 16 : 12;
+    }
     if (method === 0 && csize !== size) throw invalid(`${quoted(raw)} is stored, but its two sizes differ.`);
 
     const segments = path.split("/");
     const skip = isDir || segments[0] === "__MACOSX" || segments[segments.length - 1] === ".DS_Store";
-    if (isDir && size !== 0) throw invalid(`${quoted(raw)} is a folder with content.`);
-    found.push({ path, offset: dataStart, csize, size, method: method as 0 | 8, start, end: dataStart + csize, skip, crc });
+    if (isDir && (size !== 0 || (csize !== 0 && !(method === 8 && csize === 2)))) throw invalid(`${quoted(raw)} is a folder with content.`);
+    found.push({ path, offset: dataStart, csize, size, method: method as 0 | 8, start, end: entryEnd, isDir, skip, crc });
   }
   if (at !== cdStart + cdSize) throw invalid("The zip's directory is damaged.");
 
   const byStart = [...found].sort((a, b) => a.start - b.start);
+  if ((byStart.length === 0 ? cdStart : byStart[0]!.start) !== 0) throw invalid("The zip has data before its first entry.");
   for (let i = 1; i < byStart.length; i++) {
     if (byStart[i]!.start < byStart[i - 1]!.end) throw invalid(`${quoted(byStart[i]!.path)} and ${quoted(byStart[i - 1]!.path)} overlap in the zip.`);
   }
 
-  let files = found.filter((e) => !e.skip);
-  if (files.length > SITE_LIMITS.files) throw tooLarge(`A site has at most ${SITE_LIMITS.files} files; this one has ${files.length}.`);
-  const seen = new Set<string>();
   let total = 0;
-  for (const e of files) {
-    if (seen.has(e.path)) throw invalid(`${quoted(e.path)} is in the zip twice.`);
-    seen.add(e.path);
+  for (const e of found) {
+    if (e.isDir) continue;
     if (e.size > SITE_LIMITS.fileBytes) throw tooLarge(`${quoted(e.path)} is ${e.size} bytes; a site's file is at most ${SITE_LIMITS.fileBytes}.`);
     total += e.size;
   }
   if (total > SITE_LIMITS.totalBytes) throw tooLarge(`A site holds at most ${SITE_LIMITS.totalBytes} bytes once unzipped; this one holds ${total}.`);
+
+  let files = found.filter((e) => !e.skip);
+  if (files.length > SITE_LIMITS.files) throw tooLarge(`A site has at most ${SITE_LIMITS.files} files; this one has ${files.length}.`);
+  const seen = new Set<string>();
+  for (const e of files) {
+    if (seen.has(e.path)) throw invalid(`${quoted(e.path)} is in the zip twice.`);
+    seen.add(e.path);
+  }
 
   if (!seen.has("index.html")) {
     const top = files[0]?.path.split("/")[0];
@@ -163,13 +215,16 @@ export async function readSite(zip: Uint8Array): Promise<SiteEntry[]> {
     }
   }
 
-  for (const e of files) await verifyBytes(zip.subarray(e.offset, e.offset + e.csize), e, e.crc);
+  // Verify every non-directory entry (including skipped macOS metadata) and any directory carrying compressed bytes.
+  for (const e of found) {
+    if (!e.isDir || e.csize > 0) await verifyBytes(zip.subarray(e.offset, e.offset + e.csize), e, e.crc);
+  }
   return files.map(({ path, offset, csize, size, method }) => ({ path, offset, csize, size, method }));
 }
 
 function checkPath(path: string, raw: string): void {
   if (path.includes("\\")) throw invalid(`${quoted(raw)} has a backslash in its path. Use / between folders.`);
-  if (/[\u0000-\u001f\u007f]/.test(path)) throw invalid(`${quoted(raw)} has a control character in its name.`);
+  if (/(?![\u200c\u200d])[\p{Cc}\p{Cf}]/u.test(path)) throw invalid(`${quoted(raw)} has a control character in its name.`);
   if (enc.encode(path).length > SITE_LIMITS.pathBytes) throw invalid(`${quoted(raw)} is too long: a path is at most ${SITE_LIMITS.pathBytes} bytes.`);
   if (path.startsWith("/") || path.split("/").some((s) => s === "" || s === "." || s === "..")) {
     throw invalid(`${quoted(raw)} points outside the site, or has an empty, "." or ".." part.`);

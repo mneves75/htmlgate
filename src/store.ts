@@ -48,7 +48,8 @@ const CLOCK = "CAST(unixepoch('subsec') * 1000 AS INTEGER)";
 export const VERSION_FLOOR = 20 * 1024;
 const COST = `MAX(size + LENGTH(CAST(COALESCE(files, '') AS BLOB)), ${VERSION_FLOOR})`;
 const costOf = (size: number, files: string | null) => Math.max(size + new TextEncoder().encode(files ?? "").length, VERSION_FLOOR);
-const ROOM = `(SELECT COALESCE(SUM(${COST}), 0) FROM versions) + (SELECT COALESCE(SUM(size), 0) FROM trash) + ? <= ?`;
+const ROOM = `(SELECT COALESCE(SUM(${COST}), 0) FROM versions) + (SELECT COALESCE(SUM(MAX(size, ${VERSION_FLOOR})), 0) FROM trash) + ? <= ?`;
+const TRASH_NONCE = "lower(hex(randomblob(8)))";
 const WROTE = "EXISTS (SELECT 1 FROM versions WHERE body_key = ?)";
 const RESERVED = `EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > ${CLOCK})`;
 const FIELDS = "title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags)";
@@ -66,7 +67,7 @@ export class Store {
 
   private async putBody(slug: string, b: Body, cost: number, limit: number): Promise<string | null> {
     const key = `bodies/${slug}/${randomHex(16)}`;
-    const reserved = await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT ?, ?, ${CLOCK} + ? WHERE ${ROOM}`)
+    const reserved = await this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) SELECT ?, ?, ${CLOCK} + ?, ${TRASH_NONCE} WHERE ${ROOM}`)
       .bind(key, cost, RESERVATION_TTL_MS, cost, limit).run();
     if (!reserved.meta.changes) return null;
     try {
@@ -79,8 +80,8 @@ export class Store {
   }
 
   private async dueNow(key: string, size: number): Promise<void> {
-    await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) VALUES (?, ?, ${CLOCK}) ON CONFLICT (body_key) DO UPDATE SET due_at = CASE WHEN excluded.due_at = trash.due_at THEN excluded.due_at + 1 ELSE excluded.due_at END`)
-      .bind(key, size).run();
+    await this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) VALUES (?, ?, ${CLOCK}, ${TRASH_NONCE}) ON CONFLICT (body_key) DO UPDATE SET due_at = CASE WHEN trash.due_at <= excluded.due_at THEN MAX(trash.due_at + 1, excluded.due_at) ELSE excluded.due_at END, size = MAX(trash.size, excluded.size), nonce = excluded.nonce`)
+      .bind(key, Math.max(size, VERSION_FLOOR)).run();
   }
 
   private async commit(key: string, cost: number, statements: D1PreparedStatement[]): Promise<boolean> {
@@ -91,12 +92,13 @@ export class Store {
   }
 
   async emptyTrash(): Promise<number> {
-    const rows = (await this.db.prepare(`SELECT body_key, due_at FROM trash WHERE due_at <= ${CLOCK} ORDER BY due_at LIMIT ?`).bind(CLEANUP_BATCH)
-      .all<{ body_key: string; due_at: number }>()).results;
+    const rows = (await this.db.prepare(`SELECT body_key, due_at, nonce FROM trash WHERE due_at <= ${CLOCK} ORDER BY due_at LIMIT ?`).bind(CLEANUP_BATCH)
+      .all<{ body_key: string; due_at: number; nonce: string }>()).results;
     if (rows.length === 0) return 0;
     await this.bodies.delete(rows.map((r) => r.body_key));
-    await this.db.prepare(`DELETE FROM trash WHERE (body_key, due_at) IN (VALUES ${rows.map(() => "(?, ?)").join(", ")})`)
-      .bind(...rows.flatMap((r) => [r.body_key, r.due_at])).run();
+    // Bijective 2-param CAS (due_at integer + ':' + hex nonce) checks both fields across all 50 rows within D1's 100-param ceiling.
+    await this.db.prepare(`DELETE FROM trash WHERE (body_key, CAST(due_at AS TEXT) || ':' || nonce) IN (VALUES ${rows.map(() => "(?, ?)").join(", ")})`)
+      .bind(...rows.flatMap((r) => [r.body_key, `${r.due_at}:${r.nonce}`])).run();
     return rows.length;
   }
 
@@ -112,12 +114,13 @@ export class Store {
   async expire(now: number): Promise<number> {
     const due = "SELECT slug FROM shares WHERE expires_at <= ? AND slug IN (SELECT slug FROM versions) ORDER BY expires_at, slug LIMIT ?";
     const results = await this.db.batch([
-      this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ? FROM versions WHERE slug IN (${due})`).bind(now, now, CLEANUP_BATCH),
-      this.db.prepare(`UPDATE shares SET deleted_at = COALESCE(deleted_at, expires_at) WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
+      this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) SELECT body_key, MAX(size, ${VERSION_FLOOR}), ?, ${TRASH_NONCE} FROM versions WHERE slug IN (${due}) ON CONFLICT (body_key) DO NOTHING`).bind(now, now, CLEANUP_BATCH),
+      this.db.prepare(`UPDATE shares SET deleted_at = COALESCE(deleted_at, expires_at), title = '', description = NULL, tags = '{}' WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
       this.db.prepare(`DELETE FROM share_views WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
       this.db.prepare(`DELETE FROM versions WHERE slug IN (${due})`).bind(now, CLEANUP_BATCH),
+      this.db.prepare("UPDATE shares SET deleted_at = COALESCE(deleted_at, expires_at), expires_at = NULL, title = '', description = NULL, tags = '{}' WHERE slug IN (SELECT slug FROM shares WHERE expires_at <= ? AND slug NOT IN (SELECT slug FROM versions) ORDER BY expires_at, slug LIMIT ?)").bind(now, CLEANUP_BATCH),
     ]);
-    return results[1]?.meta.changes ?? 0;
+    return Math.max(results[1]?.meta.changes ?? 0, results[4]?.meta.changes ?? 0);
   }
 
   async useToken(digest: string, now: number): Promise<TokenRow | null> {
@@ -168,14 +171,6 @@ export class Store {
       .run();
   }
 
-  async viewsBySlug(sinceDay: string): Promise<Map<string, { total: number; recent: number }>> {
-    const r = await this.db
-      .prepare("SELECT slug, SUM(views) AS total, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS recent FROM share_views GROUP BY slug")
-      .bind(sinceDay)
-      .all<{ slug: string; total: number; recent: number }>();
-    return new Map(r.results.map((row) => [row.slug, { total: row.total, recent: row.recent }]));
-  }
-
   async share(author: string, slug: string): Promise<ShareRow | null> {
     return this.db
       .prepare(`SELECT ${SHARE_COLUMNS} FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by
@@ -218,7 +213,7 @@ export class Store {
       this.db.prepare(`UPDATE shares SET latest_version = latest_version + 1, ${FIELDS}, ${EXPIRY},
           updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND ${WROTE}`)
         .bind(title ?? null, description !== undefined ? 1 : 0, description ?? null, tags ?? null, ...expiryArgs(expiry), now, tokenId, now, slug, author, key),
-      this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ? FROM versions WHERE ${pruned}`)
+      this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) SELECT body_key, MAX(size, ${VERSION_FLOOR}), ?, ${TRASH_NONCE} FROM versions WHERE ${pruned} ON CONFLICT (body_key) DO NOTHING`)
         .bind(now, slug, slug),
       this.db.prepare(`DELETE FROM versions WHERE ${pruned}`).bind(slug, slug),
     ]);
@@ -262,8 +257,8 @@ export class Store {
     const own = "SELECT slug FROM shares WHERE slug = ? AND author = ?";
     const legacy = await this.hasLegacyD1BodiesTable();
     const results = await this.db.batch([
-      this.db.prepare(`INSERT INTO trash (body_key, size, due_at) SELECT body_key, size, ${CLOCK} FROM versions WHERE slug IN (${own})
-        ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at`).bind(slug, author),
+      this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) SELECT body_key, MAX(size, ${VERSION_FLOOR}), ${CLOCK}, ${TRASH_NONCE} FROM versions WHERE slug IN (${own})
+        ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at, size = MAX(trash.size, excluded.size), nonce = excluded.nonce`).bind(slug, author),
       this.db.prepare(`DELETE FROM versions WHERE slug IN (${own})`).bind(slug, author),
       ...(legacy ? [this.db.prepare(`DELETE FROM versions_d1_legacy WHERE slug IN (${own})`).bind(slug, author)] : []),
       this.db.prepare(`DELETE FROM share_views WHERE slug IN (${own})`).bind(slug, author),
@@ -282,18 +277,18 @@ export class Store {
   }
 
   async eraseBodies(slug: string, keys: string[]): Promise<void> {
-    const found = new Map<string, number>(keys.map((k) => [k, 0]));
+    const found = new Map<string, number>(keys.map((k) => [k, VERSION_FLOOR]));
     let cursor: string | undefined;
     do {
       const page = await this.bodies.list({ prefix: `bodies/${slug}/`, cursor });
-      for (const o of page.objects) found.set(o.key, o.size);
+      for (const o of page.objects) found.set(o.key, Math.max(o.size, VERSION_FLOOR));
       cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);
     const all = [...found];
     // Two bound parameters a row: half a cleanup batch keeps one statement within D1's 100.
     for (let i = 0; i < all.length; i += CLEANUP_BATCH / 2) {
       const chunk = all.slice(i, i + CLEANUP_BATCH / 2);
-      await this.db.prepare(`INSERT INTO trash (body_key, size, due_at) VALUES ${chunk.map(() => `(?, ?, ${CLOCK})`).join(", ")}
+      await this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) VALUES ${chunk.map(() => `(?, ?, ${CLOCK}, ${TRASH_NONCE})`).join(", ")}
         ON CONFLICT (body_key) DO NOTHING`).bind(...chunk.flat()).run();
     }
     const names = all.map(([k]) => k);
@@ -328,37 +323,53 @@ export class Store {
   }
 
   async recentShares(author: string, limit: number) {
+    const { total, publicTotal, shares } = await this.recentSharesWithViews(author, limit, "9999-99-99");
+    return { total, publicTotal, shares };
+  }
+
+  async recentSharesWithViews(author: string, limit: number, sinceDay: string) {
     const rows = await this.db
-      .prepare(`SELECT d.slug, d.title, d.public, d.latest_version, d.updated_at, t.name AS changed_by_name,
+      .prepare(`WITH top AS (
+          SELECT d.slug, d.title, d.public, d.latest_version, d.updated_at, t.name AS changed_by_name
+          FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by
+          WHERE d.author = ?1 AND ${live("d.")} ORDER BY d.updated_at DESC, d.slug LIMIT ?2
+        )
+        SELECT top.*,
           (SELECT COUNT(*) FROM shares WHERE author = ?1 AND ${live()}) AS total,
-          (SELECT COUNT(*) FROM shares WHERE author = ?1 AND ${live()} AND public = 1) AS public_total
-        FROM shares d LEFT JOIN tokens t ON t.id = d.changed_by
-        WHERE d.author = ?1 AND ${live("d.")} ORDER BY d.updated_at DESC, d.slug LIMIT ?2`)
-      .bind(author, limit)
-      .all<{ slug: string; title: string; public: number; latest_version: number; updated_at: number; changed_by_name: string | null; total: number; public_total: number }>();
+          (SELECT COUNT(*) FROM shares WHERE author = ?1 AND ${live()} AND public = 1) AS public_total,
+          COALESCE((SELECT SUM(views) FROM share_views WHERE slug = top.slug), 0) AS views_total,
+          COALESCE((SELECT SUM(views) FROM share_views WHERE slug = top.slug AND day >= ?3), 0) AS views_recent
+        FROM top`)
+      .bind(author, limit, sinceDay)
+      .all<{ slug: string; title: string; public: number; latest_version: number; updated_at: number; changed_by_name: string | null; total: number; public_total: number; views_total: number; views_recent: number }>();
     const first = rows.results[0];
+    const views = new Map<string, { total: number; recent: number }>();
+    for (const r of rows.results) {
+      if (r.views_total > 0 || r.views_recent > 0) views.set(r.slug, { total: r.views_total, recent: r.views_recent });
+    }
     return {
       total: first?.total ?? 0,
       publicTotal: first?.public_total ?? 0,
-      shares: rows.results.map(({ total: _t, public_total: _p, ...d }) => d),
+      shares: rows.results.map(({ total: _t, public_total: _p, views_total: _vt, views_recent: _vr, ...d }) => d),
+      views,
     };
   }
 
-  async versions(slug: string) {
+  async versions(author: string, slug: string) {
     const r = await this.db
       .prepare(`SELECT v.n, v.kind, v.size, v.created_at, v.token_id, t.name AS token_name FROM versions v
-        JOIN shares d ON d.slug = v.slug AND ${live("d.")}
+        JOIN shares d ON d.slug = v.slug AND d.author = ? AND ${live("d.")}
         LEFT JOIN tokens t ON t.id = v.token_id WHERE v.slug = ? ORDER BY v.n DESC`)
-      .bind(slug)
+      .bind(author, slug)
       .all<{ n: number; kind: Kind; size: number; created_at: number; token_id: string; token_name: string | null }>();
     return r.results;
   }
 
-  async version(slug: string, n: number) {
+  async version(author: string, slug: string, n: number) {
     const row = await this.db
       .prepare(`SELECT v.n, v.kind, v.body_key, v.files, v.size, v.created_at, v.token_id FROM versions v
-        JOIN shares d ON d.slug = v.slug AND ${live("d.")} WHERE v.slug = ? AND v.n = ?`)
-      .bind(slug, n)
+        JOIN shares d ON d.slug = v.slug AND d.author = ? AND ${live("d.")} WHERE v.slug = ? AND v.n = ?`)
+      .bind(author, slug, n)
       .first<{ n: number; kind: Kind; body_key: string; files: string | null; size: number; created_at: number; token_id: string }>();
     if (!row) return null;
     const meta = { n: row.n, kind: row.kind, body_key: row.body_key, size: row.size, created_at: row.created_at, token_id: row.token_id };

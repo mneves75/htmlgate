@@ -1,215 +1,57 @@
 {
-  "baseline": "1b13090ff24a7d101dc1f15de1599abc26ed57fe",
-  "toolchain": {
-    "node": "26.12.1",
-    "pnpm": "12.9.1",
-    "cccc": "1.8.0"
+  "version": "0.1.23",
+  "baselineCommit": "070c9fa",
+  "updatedAt": "2026-11-25",
+  "complexityPolicy": {
+    "tool": "cccc",
+    "rule": "Do not add unit tests exclusively for functions with cognitive complexity <= 5 unless they contain regular expressions.",
+    "measuredFunctions": 401,
+    "aboveThreshold": 97,
+    "atOrBelowThreshold": 304,
+    "status": "PASS"
   },
-  "newTestPolicy": {
-    "minimumCognitiveComplexity": 6,
-    "regexException": true,
-    "pruneLedger": [
-      {
-        "removed": "test/version.test.ts — src/version.ts carries the package version",
-        "category": "duplicate implementation assertion",
-        "keeper": "test/version.test.ts — a viewer page carries it in the bar, not over the Share",
-        "equivalence": "The keeper renders the same imported VERSION and compares it with the version read from package.json. The home, token, and not-found rendering assertions check the same invariant in their surfaces.",
-        "baselinePassed": 10,
-        "afterPassed": 9
-      },
-      {
-        "removed": "test/token-revoke-all.test.ts — the command's account step is setup's own check of Wrangler's and cf's logins",
-        "category": "implementation assertion",
-        "keeper": "test/setup-ownership.test.ts — revoke-all refuses a different provider account before any provider write",
-        "equivalence": "The keeper runs the actual command with differing provider accounts and requires a failure with zero writes. The existing mutation is re-anchored to this behavior."
-      }
-    ]
+  "remediations": {
+    "STORE-01": { "status": "fixed", "migration": "migrations/0008_trash_nonce.sql", "evidence": "formal/verify.ts (791,308 states, 8/8 bug replays caught)" },
+    "STORE-02": { "status": "fixed", "evidence": "test/storage-cost.test.ts" },
+    "STORE-03": { "status": "fixed", "evidence": "test/reviewer-erase.test.ts, test/store-expiry.test.ts" },
+    "ZIP-01": { "status": "fixed", "evidence": "test/zip.test.ts, test/cli-site.test.ts" },
+    "ZIP-02": { "status": "fixed", "evidence": "test/zip.test.ts" },
+    "ZIP-03": { "status": "fixed", "evidence": "test/zip.test.ts" },
+    "AUTH-01": { "status": "fixed", "evidence": "test/sites.test.ts" },
+    "AUTH-02": { "status": "fixed", "evidence": "test/viewer.test.ts, test/api.test.ts, test/config.test.ts" },
+    "CS-01": { "status": "fixed", "evidence": "test/viewer.test.ts, test/site.test.ts" },
+    "CS-03": { "status": "fixed", "evidence": "test/viewer.test.ts, test/site.test.ts" },
+    "CS-06": { "status": "fixed", "evidence": "test/api.test.ts, test/zip.test.ts" },
+    "API-02": { "status": "fixed", "evidence": "test/api.test.ts" },
+    "CLI-01": { "status": "fixed", "evidence": "test/cli-safety.test.ts" },
+    "CLI-02": { "status": "fixed", "evidence": "test/cli-safety.test.ts, test/cli-metadata.test.ts" },
+    "CLI-03": { "status": "fixed", "evidence": "test/cli-safety.test.ts" },
+    "SETUP-01": { "status": "fixed", "evidence": "scripts/setup.mjs, test/operator.test.ts, test/setup-ownership.test.ts" },
+    "PROTO-01": { "status": "fixed", "evidence": "test/sites.test.ts" },
+    "HARD-01": { "status": "fixed", "evidence": "test/store-sites-expiry.test.ts" },
+    "TECH-01": { "status": "fixed", "evidence": "test/site.test.ts" },
+    "PERF-01": { "status": "fixed", "evidence": "docs/perf/raw/d1-roundtrips.md, test/roundtrips.test.ts" },
+    "PERF-02": { "status": "fixed", "evidence": "packages/cli/src/files.ts" },
+    "PERF-03": { "status": "fixed", "evidence": "test/cli-safety.test.ts" },
+    "ARCH-01": { "status": "fixed", "evidence": "formal/verify.ts, test/formal-verification.test.ts" },
+    "DOC-01": { "status": "fixed", "evidence": "DESIGN.md" },
+    "DOC-02": { "status": "fixed", "evidence": "site/public/index.html, site/public/en/index.html" },
+    "DOC-03": { "status": "fixed", "evidence": "docs/operator.md, docs/privacy.md, skills/htmlgate/SKILL.md, wrangler.jsonc, src/api.ts, src/pages.ts" }
   },
-  "checks": {
-    "frozenInstall": "pass",
-    "typecheck": {"status": "pass", "candidate": "8209a59"},
-    "dependencyAudit": "pass at high severity threshold",
-    "focused": {
-      "sharing": {"passed": 9},
-      "operatorAndReleaseTools": {"passed": 31, "skippedByFilter": 168},
-      "operatorAndRevocationAfterReview": {"passed": 260, "files": 4},
-      "interactivePublicWarning": "pass in a pseudo-terminal against a loopback API fixture",
-      "localStorageStatus": "pass on empty and populated D1 with seven migrations"
-    },
-    "integration": {"candidate": "8209a59", "passed": 1390, "files": 74, "tagDependentSkips": 2},
-    "browser": {"passed": 10, "skippedByFilter": 57, "files": 3},
-    "mutations": {"candidate": "c6b54ae", "uniqueAnchors": 250, "caught": 250, "run": 44926834212},
-    "benchmark": {
-      "local": {"status": "inconclusive", "hostLoad": 279.3, "budgetMs": 50, "gatedSiteP95Ms": 57.1},
-      "ci": {"status": "pass", "candidate": "c6b54ae", "run": 44926834212, "pages": 12, "budgetMs": 150, "gatedSiteP95Ms": 89.9}
-    },
-    "independentVerification": {"status": "pass", "model": "gpt-6.2-astra", "frozenBehaviorChecks": 30, "additionalChecks": 6, "storageReport": "pass on seven-migration local D1"},
-    "releaseArtifact": {"version": "0.1.19", "revision": 1, "candidateArchive": "pass", "sha256": "4dff69ef0b3cf02fd4dacf92383e9d912a78cb1b478f012a79f2399941d72e98"},
-    "remoteMain": {"mergeReceipt": "https://github.com/mneves75/htmlgate/pull/27", "taggedValidation": "https://github.com/mneves75/htmlgate/actions/workflows/release-validation.yml"},
-    "remoteTag": {"ref": "refs/tags/v0.1.19", "expectedTarget": "merge commit of PR 27"}
-  },
-  "productionRelease": {
-    "candidateVersion": "0.1.20",
-    "baseline": "e8fd5b91c27f322e58a7f821fa559a11a9d99718",
-    "redControls": ["first staging setup schedules cron", "staging update schedules cron"],
-    "candidateChecks": {
-      "typecheck": "pass",
-      "dependencyAuditHigh": "pass",
-      "mutationAnchors": 250,
-      "independentSetup": {"status": "pass", "tests": 142, "model": "gpt-6.2-astra", "provider": "synthetic"},
-      "cliArchiveSha256": "f8a686d053d2a49c55c78e36895f6013450b3a6f9c2e466725d27f5a6b3d03d7",
-      "cccc": {"readInstance": 24, "workerConfig": 5, "setupMain": 54}
-    },
-    "initialIntegration": {
-      "candidate": "6f6db9af28639245bcf7f6e29ea37f531001f310",
-      "passed": 1391,
-      "tagDependentSkips": 2,
-      "browserCommandFailures": 3,
-      "status": "fail"
-    },
-    "focusedRerun": {
-      "browser": "installed Chrome",
-      "browserCases": 11,
-      "files": 6,
-      "passed": 87,
-      "status": "pass"
-    },
-    "finalIntegration": {
-      "candidate": "6be9b9fee5397be51c2146fc29d33f45c1260bc4",
-      "status": "pass",
-      "files": 74,
-      "passed": 1394,
-      "tagDependentSkips": 2,
-      "taggedArchivePassed": 12
-    },
-    "production": {
-      "status": "deployed",
-      "servedVersion": "0.1.20",
-      "tag": "v0.1.20",
-      "releaseMerge": "287b4b54a95375751f1aa38062dd395898340c0f",
-      "pendingMigrations": 0,
-      "securityVerdict": "waived",
-      "smokePassed": 16,
-      "independentReadbackPassed": 11,
-      "landingP95Ms": {"pt-BR": 16.6, "en-US": 17.9},
-      "instanceBenchmark": {"status": "inconclusive", "peakOneMinuteLoad": 281.8, "exitCode": 2},
-      "releaseValidation": {"run": 44968705590, "statusAtCloseout": "in_progress"}
-    },
-    "staging": {
-      "status": "off",
-      "instanceFound": false,
-      "instanceStorageFound": false,
-      "landingPreviewIngress": false,
-      "landingPreviewCrons": 0,
-      "landingPreviewRequests24h": 0
-    }
-  },
-  "potetoHardening": {
-    "pr1PreventRecurringMistakes": {
-      "status": "passed",
-      "lintRules": 10,
-      "lintTestsPassed": 11,
-      "focusedSuitesPassed": 132,
-      "affectedMutationsCaught": 4,
-      "mutationAnchors": 250
-    },
-    "pr2NoComments": {
-      "status": "passed",
-      "commentBlocksDeleted": 278,
-      "verifiedKeepComments": 39,
-      "holdComments": 1,
-      "reanchoredMutationsCaught": 4,
-      "safeHtmlMutationsCaught": 2,
-      "encodedConstraints": [
-        "SafeHtml branded type in src/pages.ts",
-        "MAX_UNBIASED_BYTE in src/ids.ts",
-        "fromCanonicalBase64url in src/ticket.ts",
-        "RESERVATION_TTL_MS and hasLegacyD1BodiesTable in src/store.ts",
-        "HOME_SHARES - 4 in scripts/bench.ts",
-        "storage-status.sql parity test in test/storage-cost.test.ts"
-      ]
-    },
-    "pr3FormalVerification": {
-      "status": "passed",
-      "storeReachableStates": 104068,
-      "storeTransitions": 328065,
-      "revokeReachableStates": 8,
-      "historicalBugReplaysCaught": 7,
-      "realBugFoundAndFixed": "Store.dueNow same-millisecond conflict with Store.emptyTrash deleting re-ledgered R2 row",
-      "formalTestsPassed": 10
-    },
-    "pr4PruneTests": {
-      "status": "passed",
-      "files": 71,
-      "testsPassed": 1349,
-      "pruned": [
-        {
-          "removed": "test/reviewer-share-gate-and-docs.test.ts + test/fixtures/pre-share-mutations.json",
-          "category": "The past + Implementation + Duplicate",
-          "keeper": "test/share-term.test.ts + scripts/mutate.mjs --check + test/mutation-gate.test.ts"
-        },
-        {
-          "removed": "test/reviewer-share-surface.test.ts",
-          "category": "The past",
-          "keeper": "test/share-term.test.ts + test/api.test.ts + test/viewer.test.ts + test/erase.test.ts"
-        },
-        {
-          "removed": "test/reviewer-share-migration.test.ts",
-          "category": "Duplicate",
-          "keeper": "test/store-share-upgrade.test.ts (folded EXPLAIN QUERY PLAN and PRAGMA integrity/foreign_key checks)"
-        },
-        {
-          "removed": "test/reviewer-beta10-inproc.test.ts (Share route cutover describe)",
-          "category": "The past",
-          "keeper": "test/share-term.test.ts + test/api.test.ts + test/viewer.test.ts"
-        },
-        {
-          "removed": "test/reviewer-hostname-logs.test.ts (main() regex, 4-anchor check, old CHANGELOG/doc phrasing, duplicate workerConfig/deploymentUrls)",
-          "category": "The implementation + The past + Duplicate",
-          "keeper": "test/operator.test.ts + surviving Wrangler schema & privacy-notice checks in test/reviewer-hostname-logs.test.ts"
-        },
-        {
-          "removed": "test/site-metrics.test.ts",
-          "category": "Duplicate (mocked ASSETS)",
-          "keeper": "test/reviewer-page-metrics.test.ts (real asset server + folded www referer check)"
-        },
-        {
-          "removed": "test/version.test.ts (5 static landing HTML checks)",
-          "category": "Duplicate",
-          "keeper": "scripts/lint.mjs version-in-sync + test/lint.test.ts"
-        },
-        {
-          "removed": "test/harness-failure.test.ts",
-          "category": "The implementation (mocked Node builtins testing test harness)",
-          "keeper": "test/harness.test.ts"
-        }
-      ],
-      "mutationAnchors": 250
-    },
-    "pr5Release0121": {
-      "version": "0.1.21",
-      "status": "candidate_ready",
-      "cliArchiveSha256": "2137f1181022d64a727a8d73324898752ec483318b1a3e01dbe1023d62fb5e83",
-      "lintViolations": 0,
-      "formalStates": 104068,
-      "formalBugReplaysCaught": 7,
-      "typecheck": "pass",
-      "mutationAnchors": 250,
-      "dependencyAuditHigh": "pass",
-      "integration": {
-        "files": 71,
-        "passed": 1347,
-        "tagDependentSkips": 2,
-        "failed": 0
-      },
-      "benchmarkLocal": {
-        "status": "pass",
-        "budgetMs": 50,
-        "peakOneMinuteLoad": 28.2,
-        "maxP95Ms": 27.3,
-        "landingPtBrP95Ms": 9.2,
-        "landingEnUsP95Ms": 8.8
-      }
-    }
+  "gates": {
+    "pnpmAudit": { "status": "pass", "vulnerabilitiesHighOrAbove": 0 },
+    "lint": { "status": "pass", "violations": 0 },
+    "verifyModel": { "status": "pass", "states": 791308, "transitions": 3140212, "bugReplaysCaught": 8 },
+    "typecheck": { "status": "pass" },
+    "mutateCheck": { "status": "pass", "anchors": 262 },
+    "fullCheck": { "status": "pass", "filesPassed": 71, "testsPassed": 1340, "testsSkippedPreTag": 2, "testsFailed": 0 },
+    "bench": { "status": "pass", "budgetMs": 50, "maxInstanceP95Ms": 41.6, "landingPtBrP95Ms": 15.8, "landingEnUsP95Ms": 16.2 },
+    "mutateTargetedNewAndUpdated": { "status": "pass", "caught": 17, "missed": 0, "broken": 0 },
+    "mutateFull": { "status": "pending-ci-candidate", "anchors": 262 },
+    "crossModelVerify": { "status": "pending" },
+    "securityDeployGate": { "status": "pending" },
+    "productionDeploy": { "status": "pending" },
+    "liveVerification": { "status": "pending" },
+    "stagingDisabled": { "status": "pending" }
   }
 }

@@ -48,9 +48,12 @@ export function checkToken(token: string): string {
 }
 
 async function readText(path: string): Promise<string | null> {
-  // O_NONBLOCK prevents opening a FIFO from blocking before fstat.
-  const fh = await open(path, constants.O_RDONLY | constants.O_NONBLOCK).catch((e: NodeJS.ErrnoException) => {
+  await refuseLink(dirname(path));
+  await refuseLink(path);
+  // O_NONBLOCK prevents opening a FIFO from blocking before fstat; O_NOFOLLOW blocks symlinks.
+  const fh = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW).catch((e: NodeJS.ErrnoException) => {
     if (e.code === "ENOENT") return null;
+    if (e.code === "ELOOP") throw new CliError("unsafe_path", `${path} is a symbolic link. The CLI does not read config or credentials through one.`);
     throw new CliError("unsafe_path", `Cannot read ${path}: ${e.message}`);
   });
   if (fh === null) return null;
@@ -150,7 +153,7 @@ export async function resolve(p: Paths, env: NodeJS.ProcessEnv): Promise<Resolve
   const chosen = await selectInstance(p, env);
   const token = (await readStore(p.store))[chosen.api_url];
   if (!token) {
-    throw new CliError("auth_required", `Not signed in to ${chosen.api_url}.`, { hint: `Run \`htmlgate login ${chosen.api_url}\`.` });
+    throw new CliError("auth_required", `Not signed in to ${chosen.api_url} (from ${chosen.instanceFrom}).`, { hint: `Run \`htmlgate login ${chosen.api_url}\`.` });
   }
   return { ...chosen, token: checkToken(token), tokenFrom: "credentials" };
 }
@@ -163,7 +166,7 @@ async function refuseLink(path: string): Promise<void> {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
     throw new CliError("unsafe_path", `Cannot check ${path}: ${(e as Error).message}`);
   }
-  if (st.isSymbolicLink()) throw new CliError("unsafe_path", `${path} is a symbolic link. The CLI does not write credentials through one.`);
+  if (st.isSymbolicLink()) throw new CliError("unsafe_path", `${path} is a symbolic link. The CLI does not use config or credentials through one.`);
 }
 
 export async function checkWritable(p: Paths): Promise<void> {

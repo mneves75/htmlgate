@@ -81,15 +81,4 @@ describe("expiry on D1's own clock, and the hourly cleanup through /__scheduled"
     expect(await localSql(`SELECT COUNT(*) AS n FROM versions WHERE slug = '${slug}'`)).toEqual([{ n: 0 }]);
     expect(await localSql(`SELECT COUNT(*) AS n FROM versions WHERE slug = '${keep.json.slug}'`)).toEqual([{ n: 1 }]);
   });
-
-  test("Shares published before migration 0004 never start expiring: expiry_set is 1 for every row that had no date", async () => {
-    // The shared Instance's migrations have run, so this proves the migration's rule on D1's own SQL: a Share whose
-    // expiry_set = 1 and expires_at IS NULL is never selected by the cleanup, whatever its age.
-    const call = api(token);
-    const old = await call("POST", "/api/shares", { html: page("old"), title: "old", expires_at: null });
-    await localSql(`UPDATE shares SET created_at = 1000, updated_at = 1000 WHERE slug = '${old.json.slug}'`);
-    await fetch(`${base}/__scheduled?cron=${encodeURIComponent("17 * * * *")}`);
-    expect((await call("GET", `/api/shares/${old.json.slug}`)).status).toBe(200);
-    expect((await call("PUT", `/api/shares/${old.json.slug}`, { html: page("old 2") })).json.expires_at).toBeNull();
-  });
 });

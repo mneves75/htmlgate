@@ -244,5 +244,22 @@ describe("a Gated site", () => {
     const ta = await ticketFor(again, 1);
     await call("DELETE", `/api/shares/${again}`);
     expect((await fetch(`${base}/f/${ta}/`)).status).toBe(404);
+    // An expired ticket on a deleted Share or invalid path answers 404 even on browser navigation (no redirect oracle).
+    const expiredDeleted = await ticketFor(again, 1, AUTHOR, Date.now() - 1000);
+    const navDeleted = await fetch(`${base}/f/${expiredDeleted}/`, { redirect: "manual", headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } });
+    expect(navDeleted.status).toBe(404);
+    const live = (await publishZip(zipOf(SITE))).json.slug;
+    const stale = await ticketFor(live, 1, AUTHOR, Date.now() - 25 * 60 * 60 * 1000);
+    expect((await fetch(`${base}/f/${stale}/`, { redirect: "manual", headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } })).status).toBe(404);
+    const badPath = await ticketFor(live, 1, AUTHOR, Date.now() - 1000);
+    expect((await fetch(`${base}/f/${badPath}/..`, { redirect: "manual", headers: { "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } })).status).toBe(404);
+    // Extensions matching Object.prototype properties must fall back to application/octet-stream (null-prototype MIME map).
+    const protoPub = await publishZip(zipOf({ ...SITE, "x.constructor": "hello", "y.toString": "world" }));
+    expect(protoPub.status).toBe(201);
+    await call("POST", `/api/shares/${protoPub.json.slug}/visibility`, { public: true });
+    const protoRes = await fetch(`${base}/p/${protoPub.json.slug}/1/x.constructor`);
+    expect(protoRes.status).toBe(200);
+    expect(protoRes.headers.get("content-type")).toBe("application/octet-stream");
+    expect(await protoRes.text()).toBe("hello");
   });
 });

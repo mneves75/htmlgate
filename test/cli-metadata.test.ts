@@ -18,7 +18,8 @@ test.each([false, true])("CLI publication (upsert=%s) preserves literal metadata
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(Buffer.from(chunk));
     payload = JSON.parse(Buffer.concat(chunks).toString());
-    res.writeHead(201, { "content-type": "application/json" }).end(JSON.stringify({ slug: "Metadata0001", title: "metadata", description: null, metadata: {}, url: "https://instance.example/s/Metadata0001", public: false, latest_version: 1, updated_at: 1, created_at: 1 }));
+    const port = (server.address() as { port: number }).port;
+    res.writeHead(201, { "content-type": "application/json" }).end(JSON.stringify({ slug: "Metadata0001", title: "metadata", description: null, metadata: {}, url: `http://127.0.0.1:${port}/s/Metadata0001`, public: false, latest_version: 1, updated_at: 1, created_at: 1 }));
   });
   const dir = mkdtempSync(join(tmpdir(), "htmlgate-cli-metadata-"));
   try {

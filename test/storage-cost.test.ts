@@ -103,4 +103,31 @@ describe("what the storage cap counts", () => {
     expect(report.version_bytes).toBe(VERSION_FLOOR + zip.length + idx);
     expect(report.tracked_bytes).toBe(report.version_bytes);
   });
+
+  test("expired or pruned empty Shares queued in trash keep VERSION_FLOOR charged against the cap until deleted", async () => {
+    const i = await startInstance({ STORAGE_LIMIT_BYTES: String(2 * VERSION_FLOOR - 1) });
+    const first = await i.api("POST", "/api/shares", { html: "", title: "empty" });
+    expect(first.status).toBe(201);
+    i.fake.sqlite.prepare("UPDATE shares SET expires_at = 1 WHERE slug = ?").run(first.json.slug);
+    await i.store.expire(Date.now());
+    // Hold R2 delete back while testing the backlog window: the trashed empty Share still occupies VERSION_FLOOR.
+    i.fake.hooks.failBucketDelete = true;
+    const blocked = await i.api("POST", "/api/shares", { html: "", title: "bypass" });
+    expect(blocked.status).toBe(507);
+    const sql = readFileSync("scripts/storage-status.sql", "utf8");
+    const report = i.fake.sqlite.prepare(sql).get() as { trash_count: number; trash_bytes: number; expired_tombstone_count: number };
+    expect(report.trash_count).toBe(1);
+    expect(report.trash_bytes).toBe(VERSION_FLOOR);
+    expect(report.expired_tombstone_count).toBe(1);
+    i.fake.hooks.failBucketDelete = false;
+    await i.store.emptyTrash();
+    // A pre-existing legacy trash row with size < VERSION_FLOOR still counts as VERSION_FLOOR in ROOM and storage-status.sql.
+    i.fake.sqlite.prepare("INSERT INTO trash (body_key, size, due_at) VALUES ('bodies/legacy/1', 1, 1)").run();
+    i.fake.hooks.failBucketDelete = true;
+    expect((await i.api("POST", "/api/shares", { html: "", title: "legacy-bypass" })).status).toBe(507);
+    expect((i.fake.sqlite.prepare(sql).get() as { trash_bytes: number }).trash_bytes).toBe(VERSION_FLOOR);
+    i.fake.hooks.failBucketDelete = false;
+    await i.store.emptyTrash();
+    expect((await i.api("POST", "/api/shares", { html: "", title: "after-empty" })).status).toBe(201);
+  });
 });

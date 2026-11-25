@@ -162,7 +162,7 @@ const ptBR: typeof en = {
   requestsListed: "Todos os pedidos estão listados em",
   viewerTitle: "Você entrou",
   viewerLead: "Abra um Share pelo link que o autor mandou. Esta Instância não mostra uma lista de Shares, então não há nada para navegar aqui.",
-  cardLead: "Publicada com o htmlgate, na conta Cloudflare do próprio autor.",
+  cardLead: "Publicado com o htmlgate, na conta Cloudflare do próprio autor.",
   cardImageAlt: "A marca htmlgate e o endereço htmlgate.com.",
   metrics: "Métricas",
   metricsTitle: "Métricas",
@@ -270,7 +270,8 @@ const CSS = `
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; min-height: 100dvh; background: var(--ground); color: var(--ink); font: 400 1rem/1.55 var(--sans); accent-color: var(--signal); caret-color: currentColor; }
 ::selection { background: var(--signal); color: var(--signal-ink); }
-a { color: inherit; text-decoration-color: color-mix(in oklch, currentColor 50%, transparent); text-underline-offset: .22em; text-decoration-thickness: 1px; }
+a { color: inherit; text-decoration-color: color-mix(in oklab, currentColor 50%, transparent); text-underline-offset: .22em; text-decoration-thickness: 1px; }
+.c-share a, .c-by, .m-title, .t-name, .bar h1, .ask strong, .notice strong, .pass.reveal h2, .danger-pop strong { unicode-bidi: isolate; }
 a:hover { text-decoration-color: currentColor; text-decoration-thickness: 2px; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
 h1, h2 { text-wrap: balance; margin: 0; }
@@ -455,7 +456,7 @@ details.confirm[open] summary { background: var(--danger); color: var(--danger-i
 details.confirm .ask { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 2; width: min(18rem, 80vw); padding: .9rem 1rem; display: grid; gap: .65rem; font-size: .875rem; background: var(--ground); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 14px 30px -12px oklch(0% 0 0 / .35); }
 p.empty { color: var(--muted); }
 /* The release an Operator is running: a footer under the Instance's pages, a chip in the viewer's bar. */
-.foot { padding: .9rem clamp(1rem, 4vw, 2rem) 1.5rem; }
+.foot { max-width: 64rem; margin: 0 auto; padding: .9rem clamp(1rem, 4vw, 2rem) 1.5rem; color: var(--muted); font-family: var(--mono); font-size: .75rem; }
 p.ver, .bar .ver { margin: 0; color: var(--muted); font-family: var(--mono); font-size: .75rem; }
 .bar .ver { color: var(--board-dim); }
 
@@ -850,5 +851,5 @@ ${erase ? `<details class="confirm">
 </details>
 ` : ""}</div>
 </header>
-${shown === latest ? "" : `<p class="older" role="status">${t.older(shown, latest)} <a href="${latestHref}">${t.showLatest}</a></p>\n`}<iframe class="share" sandbox="${SHARE_SANDBOX}" src="${escapeHtml(frame ?? raw)}" id="share" title="${escapeHtml(d.title)}"></iframe>`, { bodyClass: "viewer", frames: true, ...(card ? { card } : {}) });
+${shown === latest ? "" : `<p class="older" role="status">${t.older(shown, latest)} <a href="${latestHref}">${t.showLatest}</a></p>\n`}<iframe class="share" sandbox="${SHARE_SANDBOX}" src="${escapeHtml(frame ?? raw)}" referrerpolicy="no-referrer" id="share" title="${escapeHtml(d.title)}"></iframe>`, { bodyClass: "viewer", frames: true, ...(card ? { card } : {}) });
 }

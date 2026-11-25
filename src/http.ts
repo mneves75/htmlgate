@@ -5,12 +5,15 @@ export const BASE: Record<string, string> = {
   // Origin: null, which the token page would refuse (found in a real browser on staging).
   "referrer-policy": "same-origin",
   "strict-transport-security": "max-age=31536000",
+  "cross-origin-opener-policy": "same-origin",
+  "cross-origin-resource-policy": "same-origin",
+  "permissions-policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=(), focus-without-user-activation=()",
 };
 
 export function json(status: number, body: unknown, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...BASE, "content-type": "application/json; charset=utf-8", "content-security-policy": "default-src 'none'; frame-ancestors 'none'", ...extra },
+    headers: { ...BASE, "content-type": "application/json; charset=utf-8", "content-security-policy": "default-src 'none'; frame-ancestors 'none'", "x-frame-options": "DENY", ...extra },
   });
 }
 
@@ -42,7 +45,7 @@ export function copyResponse(res: Response, headers: Headers): Response {
   return new Response(res.body, { status: res.status, headers });
 }
 
-const TYPES: Record<string, string> = {
+const TYPES: Record<string, string> = Object.assign(Object.create(null) as Record<string, string>, {
   html: "text/html; charset=utf-8", htm: "text/html; charset=utf-8", css: "text/css; charset=utf-8",
   js: "text/javascript; charset=utf-8", mjs: "text/javascript; charset=utf-8", json: "application/json; charset=utf-8",
   map: "application/json; charset=utf-8", txt: "text/plain; charset=utf-8", md: "text/markdown; charset=utf-8",
@@ -51,7 +54,7 @@ const TYPES: Record<string, string> = {
   ico: "image/x-icon", bmp: "image/bmp", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf", otf: "font/otf",
   mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", mp4: "video/mp4", webm: "video/webm", pdf: "application/pdf",
   wasm: "application/wasm",
-};
+});
 
 export function contentTypeFor(path: string): string {
   const dot = path.lastIndexOf(".");
@@ -65,7 +68,8 @@ export async function readCapped(req: Request, max: number): Promise<string | nu
 }
 
 export async function readCappedBytes(req: Request, max: number): Promise<Uint8Array | null> {
-  if (Number(req.headers.get("content-length") ?? 0) > max) return null;
+  const cl = req.headers.get("content-length")?.trim();
+  if (cl && /^[0-9]+$/.test(cl) && Number(cl) > max) return null;
   const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of req.body ?? []) {
@@ -73,6 +77,7 @@ export async function readCappedBytes(req: Request, max: number): Promise<Uint8A
     if (size > max) return null;
     chunks.push(chunk);
   }
+  if (chunks.length === 1) return chunks[0]!;
   const all = new Uint8Array(size);
   let at = 0;
   for (const c of chunks) {

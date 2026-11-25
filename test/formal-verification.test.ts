@@ -48,7 +48,7 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
     expect(env.rows("SELECT slug FROM share_views ORDER BY slug")).toEqual([{ slug: "Expire000002" }]);
   });
 
-  test("real SQLite: dueNow() in the same millisecond as emptyTrash()'s snapshot keeps the re-ledgered row for retry", async () => {
+  test("real SQLite: two concurrent emptyTrash() workers racing dueNow() in the same millisecond keep the re-ledgered row for retry", async () => {
     const env = fakeEnv();
     const origPrepare = env.db.prepare.bind(env.db);
     const FIXED_NOW = 1_800_000_000_000;
@@ -58,33 +58,42 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
     } as unknown as D1Database;
 
     const origDelete = env.bucket.delete.bind(env.bucket);
-    let ranDueNow = false;
+    let deleteCount = 0;
+    let releaseWorker2!: () => void;
+    const worker2Gate = new Promise<void>((r) => { releaseWorker2 = r; });
     const racingBucket = {
       ...env.bucket,
       delete: async (keys: string | string[]) => {
+        const n = ++deleteCount;
         await origDelete(keys);
-        if (!ranDueNow) {
-          ranDueNow = true;
-          await env.bucket.put("bodies/S1/k1", "<p>late upload</p>");
-          await (store as unknown as { dueNow: (key: string, size: number) => Promise<void> }).dueNow("bodies/S1/k1", 100);
-        }
+        if (n === 2) await worker2Gate;
       },
     } as unknown as R2Bucket;
 
     const store = new Store(pinnedDb, racingBucket);
-    env.sqlite.prepare("INSERT INTO trash (body_key, size, due_at) VALUES (?, ?, ?)").run("bodies/S1/k1", 100, FIXED_NOW);
+    env.sqlite.prepare("INSERT INTO trash (body_key, size, due_at, nonce) VALUES (?, ?, ?, ?)").run("bodies/S1/k1", 100, FIXED_NOW, "n0");
 
-    await store.emptyTrash();
+    // Both workers snapshot ("bodies/S1/k1", "n0") at the same millisecond.
+    const w1 = store.emptyTrash();
+    const w2 = store.emptyTrash();
+    await w1;
+    // Worker 1 deleted both R2 and the trash row. Now a late upload completes and dueNow() re-ledgers k1 in the same ms.
+    await env.bucket.put("bodies/S1/k1", "<p>late upload</p>");
+    await (store as unknown as { dueNow: (key: string, size: number) => Promise<void> }).dueNow("bodies/S1/k1", 100);
+    // Worker 2 finishes its stale DELETE FROM trash using its old nonce "n0": must NOT delete the fresher row!
+    releaseWorker2();
+    await w2;
+
     expect(env.objects.has("bodies/S1/k1")).toBe(true);
     expect(env.rows("SELECT body_key FROM trash WHERE body_key = 'bodies/S1/k1'")).toEqual([{ body_key: "bodies/S1/k1" }]);
   });
 
-  test("code-to-model conformance rejects src/store.ts when dueNow() drops the + 1 conflict bump", () => {
+  test("code-to-model conformance rejects src/store.ts when dueNow() drops the fresh nonce update", () => {
     const storeSrc = readFileSync(join(process.cwd(), "src/store.ts"), "utf8");
     const tokenSrc = readFileSync(join(process.cwd(), "scripts/token.mjs"), "utf8");
-    const brokenStore = storeSrc.replace("THEN excluded.due_at + 1 ELSE excluded.due_at END", "THEN excluded.due_at ELSE excluded.due_at END");
+    const brokenStore = storeSrc.replace("nonce = excluded.nonce", "due_at = excluded.due_at");
     expect(brokenStore).not.toBe(storeSrc);
     const findings = detectCodeDeviationsFromSource(brokenStore, tokenSrc);
-    expect(findings.map((f) => f.detectedVariant)).toContain("due-now-same-ms-race");
+    expect(findings.map((f) => f.detectedVariant)).toContain("due-now-two-empty-trash-race");
   });
 });

@@ -1,53 +1,32 @@
-# htmlgate hardening
+# htmlgate 0.1.23 Security Audit & Hardening Progress
 
-## Acceptance
+Release target: `0.1.23` (from baseline `0.1.22`, commit `070c9fa`).
 
-1. A Publisher learns that all retained and later Versions are Public before changing visibility. An Author can follow a Public link from the signed-in view. English and pt-BR describe the audience and queued physical erasure accurately. CLI machine output stays compatible.
-2. New setup refuses an unrelated storage name collision before remote writes. Interrupted setup resumes only with verified resource identity. Existing Instances keep working when ownership is established.
-3. Revocation distinguishes unknown IDs from genuine results. Emergency revocation verifies the Instance and its Access application before writes.
-4. Operators can inspect storage and cleanup status without reading Share contents. The guide covers safe teardown, republishing from originals, cron quiescence, and D1/R2 and revocation reconciliation during recovery.
-5. CI and local development use one Node pin. CLI package, formula, source archive, changelog, and release tag identify the same version. Published refs and cleanup are checked after merge.
-6. New test code follows the `cccc` cognitive complexity threshold. Test pruning preserves every assertion with unique behavioral evidence. A fresh reviewer on a different model checks the outcome against these criteria.
+## Completed Phases
 
-## Progress
+- [x] Sync `origin/main` and complete full-repository reconnaissance across Worker, landing site, standalone CLI, D1 migrations, operator scripts, formal models, Homebrew formula, and CI workflows.
+- [x] Multi-agent security audit swarm (8 specialized tracks covering auth/HTTP, D1/R2 store lifecycle, ZIP parser/DoS, client sandbox/CSP, standalone CLI, Cloudflare ops/setup, supply-chain/CI, and architecture/performance) with coverage validation and bounded local validation.
+- [x] 2026+ frontend review and modernization (`color-mix(in oklab, ...)`, `@view-transition`, progressive `::details-content` FAQ animation, accessible `<pre role="region">`, updated EN/pt-BR privacy notices using `tíquete`, strict zero-JS / system-font / WCAG 2.2 AA compliance).
+- [x] Implemented all confirmed security fixes and bug fixes:
+  - `migrations/0008_trash_nonce.sql` + `Store.emptyTrash()` `(body_key, due_at, nonce)` CAS + `Store.dueNow()` conflict advance/nonce refresh.
+  - `VERSION_FLOOR` (20 KiB) enforced on `trash` rows across quota, cleanup, and `scripts/storage-status.sql`.
+  - Bounded `Store.expire()` metadata scrubbing (`title`, `description`, `tags`, `expires_at`) with legacy versionless tombstone guard.
+  - Author-scoped `Store.versions()` / `Store.version()` and atomic single-query CTE `Store.recentShares()` with PK-indexed view counts.
+  - Hardened `src/zip.ts` (skipped macOS entries verified, directory payload caps, host-agnostic POSIX `S_IFMT` symlink/special-file rejection, polyglot prepend/split-disk/LFH-CD/bit-3 data descriptor/extra-header checks, Unicode control/formatting path filtering).
+  - Hardened HTTP/API/Access (`COOP`, `CORP`, `Permissions-Policy`, `X-Frame-Options: DENY` on non-raw HTML/JSON, null-prototype `TYPES`, 24h live-Share ticket navigation redirect guard, early `/p` & `/robots.txt` 404, 8 KiB JWT cap, `TEAM_URL` validation, linear `checkJsonShape` bounding depth & `,`/`:`/bracket delimiters, `[\p{Cc}\p{Cf}]` title/description filtering, IPv4-mapped IPv6 unwrapping).
+  - Hardened standalone CLI (`O_NOFOLLOW` + parent symlink refusal on `.htmlgate/config`, strict same-origin normalized Share URLs, terminal/JSON control/Bidi sanitization, 500-page ceiling, fixed multi-page `-n` offset pagination, 64 KiB chunked reads, TTY raw-mode cleanup).
+  - Hardened operator scripts & gates (`scripts/setup.mjs` `.instance` symlink guard, atomic `0600` config write, fail-closed `verifyAccessApp()`, `DEPLOYED` clean-tree paths, bounded DNS pagination; `scripts/cli-install.mjs` stdin tar without TOCTOU + `refs/tags/` diff; `scripts/site-deploy.mjs`, `scripts/token.mjs`, `scripts/bench.ts`, `scripts/perf/edge.mjs`, `scripts/lint.mjs`, `scripts/mutate.mjs` expanded to 262 anchors).
+  - Upgraded `formal/store-lifecycle.model.ts` (2 concurrent `emptyTrash` workers, 791,308 reachable states, 8 historical bug replays) and AST-based `formal/verify.ts`.
+- [x] Pruned redundant historical/mocked tests (preserving all 262 mutation anchors) and parallelized CLI timeout checks.
+- [x] Completed two-axis code review (Standards + Spec) and cross-model adversarial interrogation (Codex), fixing all 15 concrete findings surfaced across the three reviews.
+- [x] Updated release documentation (`CHANGELOG.md`, `AGENTS.md`, `DESIGN.md`, `README.md`, `docs/privacy.md`, `docs/operator.md`, `skills/htmlgate/SKILL.md`, `wrangler.jsonc`), synced version `0.1.23`, rebuilt Homebrew archive/formula (`0.1.23_1`), and passed `pnpm audit --audit-level high`.
 
-- Started from verified `origin/main` at `1b13090` on `hardening/operator-and-sharing`.
-- Installed frozen dependencies offline under the `.nvmrc` toolchain.
-- CI now reads the Node version from `.nvmrc`. Updated README publication, concurrency, and erasure guidance.
-- Setup now verifies bootstrap storage identity. Revocation checks provider targets and reports what was confirmed. Mocked Operator flows and local D1 revocation passed.
-- The Operator guide records safe recovery and teardown. The storage report passed against empty and populated local D1.
-- The Public link, bilingual erasure wording, and CLI audience checks passed focused tests. Added Gated Site navigation to the local benchmark.
-- Chromium passed the focused sharing, erasure and accessibility checks. The interactive CLI warning passed in a pseudo-terminal.
-- Independent review identified bucket jurisdiction, provider acknowledgement, bulk count and remote D1 query issues. The code and runbook were corrected. All 260 focused Operator, revocation and version checks passed after the correction.
-- Bumped the candidate to `0.1.19` and regenerated the CLI release archive. Full candidate gates precede landing.
-- Full integration passed on `8209a59` with 1,390 tests and two tag-dependent skips. The benchmark preflight uses an isolated macOS runner while the local host is busy.
-- Candidate `c6b54ae` caught all 250 mutations and passed the 12-page CI benchmark. The Gated Site p95 was 89.9 ms against the runner's 150 ms budget. The local 50 ms benchmark remained inconclusive under heavy load.
-- Independent verification found that Wrangler parses a leading SQL comment as flags with the two-token spelling. The documented `--command=...` form returned the correct read-only aggregates on empty and populated synthetic D1.
-- A fresh Astra verifier reran all 30 frozen behavior checks after the correction and passed six additional checks. It independently validated the archive and the immutable candidate run.
+## Remaining Release Gates
 
-## Verification boundaries
-
-Local checks use disposable synthetic data. Cloudflare accounts, backups, and live Shares are separate evidence for deployment and recovery. Test results and unresolved checks are recorded in `tests.json`.
-
-## Production release
-
-- Before rollout, the Instance and landing served `0.1.18`. Cloudflare reported no pending production migrations. The public `v0.1.19` tag identifies the intermediate build that passed tagged CI.
-- Cloudflare inventory found no staging Instance or staging D1 or R2 resource. The separate landing preview has workers.dev and preview URLs disabled.
-- Both staging setup controls failed against the previous code because setup installed the hourly cron. The `0.1.20` candidate accepts a staging setting and sends an empty schedule on the closed bootstrap, serving deploy and later updates. Existing Instances keep the default hourly cleanup.
-- The CLI release archive was rebuilt for `0.1.20`. Independent verification reproduced the archive bytes and exercised the setup command against a synthetic provider.
-- The source review caught a staging-only wording mismatch. The API, both erasure messages and the privacy inventory now distinguish an immediate access change from a scheduled physical cleanup.
-- The first `0.1.20` revision passed 1,391 integration tests with two pre-tag skips. Three browser commands failed before their flow assertions. See `tests.json` for the revision and run boundaries.
-- A focused rerun with installed Chrome passed all 87 cases across six suites, including all 11 browser cases and the three flows that timed out in the full run.
-- The final release candidate passed 1,394 integration tests. After tagging, the release archive suite passed all 12 checks, including the two previously skipped.
-- The Instance and landing serve `v0.1.20`. All 16 authenticated smoke checks and 11 independent readback checks passed. The tag identifies the deployed commit, and PR #28 merged the same release tree.
-- The landing passed the 50 ms p95 budget in both languages. The live Instance benchmark was inconclusive under high host load. Isolated release validation was in progress at closeout.
-- Staging has no Instance database or bucket. The landing preview has no public ingress or cron triggers and recorded zero invocations in the verified 24-hour window.
-- The owner authorized production under a release-specific waiver. The security verdict was WAIVED. The deferred controls remain recorded in the private release evidence.
-
-## Poteto-mode hardening pass
-
-- PR 1 (`hardening/prevent-recurring-mistakes`): audited git log and past fixes; fixed live recurrences (response creation in `src/index.ts` routed through `src/http.ts` `bytes()`/`copyResponse()`, paginated `listApplications(cf)` in `scripts/site-deploy.mjs`, `redirect: "manual"` on authenticated zip download and card probe in `scripts/smoke.mjs`, finite-number validation for `RUNS`/`GAP_MS`/`BUDGET_MS` in `scripts/bench.ts` and `scripts/smoke.mjs`); added `scripts/sync-version.mjs`, `init.sh`, and 10-rule AST linter `scripts/lint.mjs` (wired into `pnpm run check` and CI) with negative proofs in `test/lint.test.ts`.
-- PR 2 (`chore/no-comments`): ran fresh `comment-sicko` pass over `src/`, `site/src/`, and `scripts/` (278 comment blocks removed, 39 verified external/contract keep-list comments + 1 `HOLD` retained); encoded `SafeHtml` branded escaping type in `src/pages.ts`, `MAX_UNBIASED_BYTE` in `src/ids.ts`, `fromCanonicalBase64url` in `src/ticket.ts`, `RESERVATION_TTL_MS` and `hasLegacyD1BodiesTable()` in `src/store.ts`, `HOME_SHARES - 4` in `scripts/bench.ts`, and executable `scripts/storage-status.sql` parity check in `test/storage-cost.test.ts`; re-anchored 4 comment-dependent mutation controls and verified them caught.
-- PR 3 (`feat/formal-verification-store-lifecycle`): added explicit-state BFS model checker (`formal/store-lifecycle.model.ts`, `formal/verify.ts`) and project-local skill (`.claude/skills/store-lifecycle-verification/SKILL.md`), wired into `pnpm run verify:model`, `pnpm run check`, `init.sh`, and CI. Explores 104,068 reachable states (328,065 transitions) for `Store` lifecycle + 8 states for `revokeAll` in <1 s, replays 7 historical/discovered bugs and catches every one. The model checker discovered a real same-millisecond `Store.dueNow()` vs `Store.emptyTrash()` R2-orphan race in `src/store.ts`, reproduced it on real SQLite, and fixed `Store.dueNow()` to advance `due_at` by 1 ms on equal-timestamp conflict.
-- PR 4 (`refactor/prune-tests`): applied `mneves-prune-tests` across `test/` while preserving 100% of security, privacy, accessibility, license, performance, and mutation-anchored controls (all 250 mutation anchors intact). Pruned historical pre-0.1.0 rename fixtures/tests (`test/reviewer-share-gate-and-docs.test.ts`, `test/fixtures/pre-share-mutations.json`, `test/reviewer-share-surface.test.ts`, and cutover describe in `test/reviewer-beta10-inproc.test.ts`), pure mock test-harness implementation tests (`test/harness-failure.test.ts`), and mocked/source-regex duplicates (`test/site-metrics.test.ts`, `test/reviewer-share-migration.test.ts`, duplicated blocks in `test/reviewer-hostname-logs.test.ts` and `test/version.test.ts`) after folding unique assertions (`EXPLAIN QUERY PLAN`, `PRAGMA integrity_check`, `www` self-referer) into surviving real-DB/real-server suites. Also fixed `src/pages.ts` `./version.ts` extension so `scripts/bench.ts` runs cleanly under Node native TypeScript (`test/reviewer-release-tools.test.ts` 44/44 passed; 71/71 suites, 1,349 tests passing).
-- PR 5 (`release/v0.1.21`): finished `packages/cli/src/` comment cleanup (keeping OS/spec contracts only), synced `.claude/skills/store-lifecycle-verification/SKILL.md` to `37682bf`, bumped all release surfaces to `0.1.21` (`node scripts/sync-version.mjs 0.1.21`), regenerated Homebrew formula and deterministic source archive, updated `CHANGELOG.md`, `AGENTS.md`, `README.md`, and `docs/operator.md`. Addressed all 5 independent verifier (`codex-auto`) findings in a single correction round: tightened `detectCodeDeviations` for `Store.dueNow()` `+ 1`, tightened `scripts/lint.mjs` enforcement inside `site/src/worker.ts`, `scripts/bench.ts` `send()`, and `scripts/smoke.mjs` `paced()`, restored populated legacy/trash/tokens migration and throwing analytics assertions, restored Linux `/proc/self/fd` and `Sec-Purpose` platform rationale comments, and made `syncVersion()` validate all targets before writing.
+- [x] Full `pnpm run check` (71/71 test files, 1,340 passed, 2 pre-tag skips, 0 failed; `lint` 0 violations; `verify:model` 791,308 states & 8/8 bug replays; `typecheck` pass) on `0.1.23`.
+- [x] Local page benchmark (`pnpm run bench`): all 10 Instance pages and both landing locales under 50 ms p95 (max 41.6 ms gated site viewer, 15.8–16.2 ms landing).
+- [x] All 17 new and modified security mutations verified CAUGHT locally; full 262-mutation uninterrupted run dispatched via `release-validation.yml` (`mode=candidate`).
+- [ ] Fresh cross-model independent verification (`mneves-verify`, `Verdict: PASS`) and `mneves-security` production deploy gate on exact committed tree.
+- [ ] Pass required CI on PR, merge to `main`, create & push annotated tag `v0.1.23`.
+- [ ] Deploy production Instance (`app.htmlgate.com`), then deploy production landing (`htmlgate.com`), run live `smoke` + `bench --live` + `bench --site` + header/Access checks + `pnpm run cli:install`.
+- [ ] Verify zero active staging resources (0 crons, 0 ingress, 0 writes), clean up branch/scratch, run `devtrim purge`.

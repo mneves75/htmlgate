@@ -59,6 +59,12 @@ describe("the view limit", () => {
     await open(i, slug, "203.0.113.7");
     await open(i, slug, "203.0.113.8");
     expect(views(i, slug).v).toBe(4);
+    // IPv4-mapped IPv6 unwraps to its IPv4 address instead of collapsing all mapped clients into 0:0:0:0::/64.
+    await open(i, slug, "::ffff:203.0.113.7");
+    expect(views(i, slug).v).toBe(4);
+    await open(i, slug, "::ffff:198.51.100.4");
+    await open(i, slug, "::ffff:198.51.100.5");
+    expect(views(i, slug).v).toBe(6);
   });
 
   test("an Instance without its view limit still serves the page and counts nothing", async () => {

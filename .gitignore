@@ -3,7 +3,11 @@
 node_modules/
 .wrangler/
 .instance/
+.htmlgate/
 instance.json
+credentials.json
+*.pem
+*.key
 .dev.vars*
 .env*
 # Session handoffs name local paths and account hosts: they stay on the machine that wrote them.

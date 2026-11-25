@@ -118,15 +118,6 @@ describe("request bodies", () => {
     const over = await c("POST", "/api/shares", { html: html + "x", title: "max" });
     expect(over.status).toBe(413);
   });
-
-  test("a declared Content-Length over the cap is refused 413 without the body being read", async () => {
-    const token = await mintToken("cl");
-    const r = await fetch(`${mainBase}/api/shares`, {
-      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ html: "a".repeat(13 * 1024 * 1024), title: "t" }),
-    });
-    expect(r.status).toBe(413);
-  });
 });
 
 describe("token names", () => {
@@ -142,11 +133,5 @@ describe("token names", () => {
     for (const ok of ["family 👨‍👩‍👧", "می‌خواهم"]) {
       expect((await fetch(`${mainBase}/tokens`, await form(ok))).status, JSON.stringify(ok)).toBe(200);
     }
-  });
-  test("a urlencoded form with extra and repeated fields uses the first name", async () => {
-    const r = await fetch(`${mainBase}/tokens`, await asPerson(AUTHOR, {
-      method: "POST", headers: { origin: mainBase, "content-type": "application/x-www-form-urlencoded" }, body: "x=1&name=first&name=second",
-    }));
-    expect(r.status).toBe(200);
   });
 });

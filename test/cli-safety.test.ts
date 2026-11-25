@@ -87,6 +87,25 @@ describe("an answer too large to be the API's is refused", () => {
     expect(Date.now() - started).toBeLessThan(20_000);
     expect(sent).toBeLessThan(256);
   });
+
+  test("pages that are each small enough but add up past what a real list holds make list exit 8", async () => {
+    // Each page stays under the per-answer cap; together they would keep ~77 MiB of titles in memory.
+    const title = "x".repeat(64 * 1024);
+    const body = (page: number) => JSON.stringify({
+      data: Array.from({ length: 200 }, (_, i) => ({ ...share(page * 200 + i), title })),
+      pagination: { page, page_size: 200, total: 1200, total_pages: 6 },
+    });
+    const pages: number[] = [];
+    const s = await serve((req, res) => {
+      const page = Number(new URL(req.url!, "http://x").searchParams.get("page") ?? "1");
+      pages.push(page);
+      res.writeHead(200, { "content-type": "application/json" }).end(body(page));
+    });
+    const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"]);
+    expect(r.code, r.stderr).toBe(8);
+    expect(JSON.parse(r.stderr).error.code).toBe("bad_response");
+    expect(pages).toEqual([1, 2, 3, 4, 5, 6]);
+  });
 });
 
 describe("text output is safe for a terminal", () => {

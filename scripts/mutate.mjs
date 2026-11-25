@@ -278,6 +278,7 @@ const MUTATIONS = [
   ["a revoked token's visibility change still lands", "src/store.ts", "${LIVE_TOKEN}`)\n      .bind(value ? 1 : 0", "(? IS NOT NULL)`)\n      .bind(value ? 1 : 0", "test/revoke-in-flight.test.ts"],
   ["a revoked token's delete still lands", "src/store.ts", "${LIVE_TOKEN}`)\n      .bind(now, tokenId, now, slug", "(? IS NOT NULL)`)\n      .bind(now, tokenId, now, slug", "test/revoke-in-flight.test.ts"],
   ["a write refused for a revoked token reports another cause", "src/api.ts", "return (await store.tokenLive(token.id)) ? otherwise :", "return (await store.tokenLive(token.id)) || true ? otherwise :", "test/revoke-in-flight.test.ts"],
+  ["the CLI list keeps rows without a total cap", "packages/cli/src/bin.ts", "if (chars > MAX_LIST_CHARS) throw", "if (false) throw", "test/cli-safety.test.ts"],
   ["dueNow skips refreshing the trash CAS nonce", "src/store.ts", "VALUES (?, ?, ${CLOCK}, ${TRASH_NONCE}) ON CONFLICT (body_key) DO UPDATE SET due_at = CASE WHEN trash.due_at <= excluded.due_at THEN MAX(trash.due_at + 1, excluded.due_at) ELSE excluded.due_at END, size = MAX(trash.size, excluded.size), nonce = excluded.nonce", "VALUES (?, ?, ${CLOCK}, ${TRASH_NONCE}) ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at, size = MAX(trash.size, excluded.size)", "test/formal-verification.test.ts"],
 ];
 

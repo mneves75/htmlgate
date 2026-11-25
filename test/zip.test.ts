@@ -233,8 +233,8 @@ describe("a site zip that is refused", () => {
     await refused(rawZip([INDEX, { name: "a.txt", data: "aaaa" }, { name: "a.txt", data: "aaaa", sameLocalAs: 1 }]), "site_invalid", "overlap");
     await refused(rawZip([INDEX, { name: "a.txt", data: "x", localName: "b.txt" }]), "site_invalid", "local");
     await refused(rawZip([INDEX, { name: "a.txt", data: "abcdef", method: 0, size: 3 }]), "site_invalid", "a.txt");
-    await refused(rawZip([INDEX, { name: "a.txt", data: "a".repeat(5000), size: 100 }]), "site_invalid", "a.txt");
-    await refused(rawZip([INDEX, { name: "a.txt", data: "abc", size: 100 }]), "site_invalid", "a.txt");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "a".repeat(5000), size: 100, localSize: 100 }]), "site_invalid", "a.txt");
+    await refused(rawZip([INDEX, { name: "a.txt", data: "abc", size: 100, localSize: 100 }]), "site_invalid", "a.txt");
   });
 
   test("bytes that do not inflate cleanly, or that fail their checksum", async () => {

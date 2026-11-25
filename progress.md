@@ -25,8 +25,8 @@ Release target: `0.1.23` (from baseline `0.1.22`, commit `070c9fa`).
 
 - [x] Full `pnpm run check` (71/71 test files, 1,340 passed, 2 pre-tag skips, 0 failed; `lint` 0 violations; `verify:model` 791,308 states & 8/8 bug replays; `typecheck` pass) on `0.1.23`.
 - [x] Local page benchmark (`pnpm run bench`): all 10 Instance pages and both landing locales under 50 ms p95 (max 41.6 ms gated site viewer, 15.8–16.2 ms landing).
-- [x] All 17 new and modified security mutations verified CAUGHT locally; full 262-mutation uninterrupted run dispatched via `release-validation.yml` (`mode=candidate`).
-- [ ] Fresh cross-model independent verification (`mneves-verify`, `Verdict: PASS`) and `mneves-security` production deploy gate on exact committed tree.
-- [ ] Pass required CI on PR, merge to `main`, create & push annotated tag `v0.1.23`.
+- [x] Resolved all findings from Codex independent verification (exact ZIP `localFlags === flags`, `verifyAccessApp` trimmed string `aud` + re-read, `test/store-expiry.test.ts` live `barrierHit` assertion, `normalizeShareUrl` rejecting scheme-relative `https:sample`, full tombstone field disclosure in privacy notices, and strengthened `test/cli.test.ts` + `test/zip.test.ts` closing the 2 defense-in-depth mutation misses).
+- [ ] Run final cross-model `mneves-verify`, full uninterrupted 262-mutation gate (`pnpm run mutate`), and `mneves-security` production deploy gate on the final candidate commit.
+- [ ] Merge to `main`, create & push annotated tag `v0.1.23`, pass required `release-validation.yml` CI on `main`.
 - [ ] Deploy production Instance (`app.htmlgate.com`), then deploy production landing (`htmlgate.com`), run live `smoke` + `bench --live` + `bench --site` + header/Access checks + `pnpm run cli:install`.
 - [ ] Verify zero active staging resources (0 crons, 0 ingress, 0 writes), clean up branch/scratch, run `devtrim purge`.

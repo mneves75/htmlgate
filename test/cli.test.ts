@@ -321,6 +321,15 @@ describe("login, logout, status and which token a command uses", () => {
     const r = await htmlgate(d, { HOME: d }, ["login", base, "--token-stdin"], token);
     expect(r.code).toBe(7);
     expect(existsSync(target)).toBe(false);
+
+    // A symlinked ~/.config/htmlgate parent directory (before credentials exists) must also be refused by refuseLink().
+    const d2 = fresh("linkdir");
+    const targetDir = fresh("targetdir");
+    mkdirSync(join(d2, ".config"), { recursive: true });
+    symlinkSync(targetDir, join(d2, ".config/htmlgate"));
+    const r2 = await htmlgate(d2, { HOME: d2 }, ["login", base, "--token-stdin"], token);
+    expect(r2.code).toBe(7);
+    expect(existsSync(join(targetDir, "credentials"))).toBe(false);
   });
 
   test("two logins at once to different Instances keep both tokens", async () => {

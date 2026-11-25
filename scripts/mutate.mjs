@@ -281,6 +281,7 @@ const MUTATIONS = [
   ["a revoked token can still revoke another token", "src/store.ts", "AND (? IS NULL OR ${LIVE_TOKEN})", "AND (? IS NULL OR ? IS NOT NULL)", "test/revoke-in-flight.test.ts"],
   ["a revoked token's PATCH tells a missing Share apart", "src/api.ts", "throw await unchanged(store, token, notFound());\n  if (Object.keys(f).length === 0)", "throw notFound();\n  if (Object.keys(f).length === 0)", "test/revoke-in-flight.test.ts"],
   ["a revoked token's visibility change tells a missing Share apart", "src/api.ts", "throw await unchanged(store, token, notFound());\n  if (!(await store.setPublic", "throw notFound();\n  if (!(await store.setPublic", "test/revoke-in-flight.test.ts"],
+  ["one long cell pads every row of the CLI table", "packages/cli/src/bin.ts", "Math.min((r[i] ?? \"\").length, MAX_COLUMN_WIDTH)", "(r[i] ?? \"\").length", "test/cli-safety.test.ts"],
   ["the CLI list keeps rows without a total cap", "packages/cli/src/bin.ts", "if (chars > MAX_LIST_CHARS) throw", "if (false) throw", "test/cli-safety.test.ts"],
   ["dueNow skips refreshing the trash CAS nonce", "src/store.ts", "VALUES (?, ?, ${CLOCK}, ${TRASH_NONCE}) ON CONFLICT (body_key) DO UPDATE SET due_at = CASE WHEN trash.due_at <= excluded.due_at THEN MAX(trash.due_at + 1, excluded.due_at) ELSE excluded.due_at END, size = MAX(trash.size, excluded.size), nonce = excluded.nonce", "VALUES (?, ?, ${CLOCK}, ${TRASH_NONCE}) ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at, size = MAX(trash.size, excluded.size)", "test/formal-verification.test.ts"],
 ];

@@ -274,9 +274,12 @@ async function listShares(p: Paths, args: string[], v: Record<string, unknown>) 
   });
 }
 
+// A column pads to its widest cell up to this, so one long cell cannot pad every other row to its length.
+const MAX_COLUMN_WIDTH = 200;
+
 function table(cells: string[][], head: string[]): string {
   const rows = cells.map((r) => r.map(cell));
-  const widths = head.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? "").length)));
+  const widths = head.map((h, i) => rows.reduce((w, r) => Math.max(w, Math.min((r[i] ?? "").length, MAX_COLUMN_WIDTH)), h.length));
   const line = (r: string[]) => r.map((c, i) => c.padEnd(widths[i]!)).join("  ").trimEnd();
   return [line(head), ...rows.map(line)].join("\n") + "\n";
 }

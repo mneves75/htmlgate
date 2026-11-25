@@ -1,10 +1,11 @@
 // The htmlgate CLI against stand-in servers: where its token may go, and what it refuses to trust.
+import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { htmlgate } from "./helpers";
+import { CLI, htmlgate } from "./helpers";
 
 const TOKEN = "hg_" + "T".repeat(40);
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
@@ -105,6 +106,24 @@ describe("an answer too large to be the API's is refused", () => {
     expect(r.code, r.stderr).toBe(8);
     expect(JSON.parse(r.stderr).error.code).toBe("bad_response");
     expect(pages).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  // The table only prints on a terminal; `script` gives the CLI one (macOS, as CI runs).
+  test.skipIf(process.platform !== "darwin")("one very long title does not pad every row of the terminal table to its length", async () => {
+    const rows = [{ ...share(0), title: "x".repeat(64 * 1024) }, ...Array.from({ length: 300 }, (_, i) => share(i + 1))];
+    const s = await serve((_req, res) => jsonRes(res, 200, { data: rows, pagination: { page: 1, page_size: 301, total: 301, total_pages: 1 } }));
+    // Async, so this process keeps serving the stand-in Instance while the CLI runs.
+    const r = await new Promise<{ code: number; stdout: string }>((resolve) => {
+      // stdin is /dev/null: `script` refuses a socket there, which is what a pipe is in Node.
+      const child = spawn("script", ["-q", "/dev/null", process.execPath, CLI, "--output", "text", "list"],
+        { cwd: dir, timeout: 60_000, stdio: ["ignore", "pipe", "pipe"], env: { PATH: process.env.PATH!, NO_COLOR: "1", HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN } });
+      let stdout = "";
+      child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+      child.on("close", (code) => resolve({ code: code ?? 1, stdout }));
+    });
+    expect(r.code, r.stdout.slice(0, 400)).toBe(0);
+    expect(r.stdout).toContain("SLUG");
+    expect(r.stdout.length).toBeLessThan(1024 * 1024);
   });
 });
 

@@ -343,6 +343,8 @@ describe("CLI response URL, pagination, and argument hardening", () => {
       "//evil.example/s/1",
       "/\\evil.example/s/1",
       "evil.example/phish",
+      "https:sample",
+      "http:sample",
     ]) {
       const s = await serve((_req, res) => jsonRes(res, 200, { ...share(1), url: badUrl }));
       const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["url", "s1"]);

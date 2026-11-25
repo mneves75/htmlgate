@@ -57,16 +57,17 @@ const MAX_TIME_MS = 8.64e15;
 const isTime = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= MAX_TIME_MS;
 
 const UNSAFE_URL_CHARS = /[\s\\\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
-const HAS_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+const HTTP_ORIGIN = /^https?:\/\//i;
 
 function normalizeShareUrl(raw: string, origin: string): string | null {
   if (!raw || UNSAFE_URL_CHARS.test(raw) || raw.startsWith("//")) return null;
-  if (!HAS_SCHEME.test(raw) && !raw.startsWith("/")) return null;
+  const absolute = HTTP_ORIGIN.test(raw);
+  if (!absolute && !raw.startsWith("/")) return null;
   let u: URL;
   let base: URL;
   try {
     base = new URL(origin);
-    u = new URL(raw, base);
+    u = absolute ? new URL(raw) : new URL(raw, base);
   } catch {
     return null;
   }

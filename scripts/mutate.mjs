@@ -279,7 +279,7 @@ const MUTATIONS = [
   ["a revoked token's delete still lands", "src/store.ts", "${LIVE_TOKEN}`)\n      .bind(now, tokenId, now, slug", "(? IS NOT NULL)`)\n      .bind(now, tokenId, now, slug", "test/revoke-in-flight.test.ts"],
   ["a write refused for a revoked token reports another cause", "src/api.ts", "return (await store.tokenLive(token.id)) ? otherwise :", "return (await store.tokenLive(token.id)) || true ? otherwise :", "test/revoke-in-flight.test.ts"],
   ["a revoked token can still revoke another token", "src/store.ts", "AND (? IS NULL OR ${LIVE_TOKEN})", "AND (? IS NULL OR ? IS NOT NULL)", "test/revoke-in-flight.test.ts"],
-  ["a revoked token's PATCH tells a missing Share apart", "src/api.ts", "throw await unchanged(store, token, notFound());\n  if (Object.keys(f).length === 0)", "throw notFound();\n  if (Object.keys(f).length === 0)", "test/revoke-in-flight.test.ts"],
+  ["a revoked token's PATCH tells a missing Share apart", "src/api.ts", "throw await unchanged(store, token, notFound());\n  const changed = await store.updateFields", "throw notFound();\n  const changed = await store.updateFields", "test/revoke-in-flight.test.ts"],
   ["a revoked token's visibility change tells a missing Share apart", "src/api.ts", "throw await unchanged(store, token, notFound());\n  if (!(await store.setPublic", "throw notFound();\n  if (!(await store.setPublic", "test/revoke-in-flight.test.ts"],
   ["one long cell pads every row of the CLI table", "packages/cli/src/bin.ts", "Math.min((r[i] ?? \"\").length, MAX_COLUMN_WIDTH)", "(r[i] ?? \"\").length", "test/cli-safety.test.ts"],
   ["the CLI list keeps rows without a total cap", "packages/cli/src/bin.ts", "if (chars > MAX_LIST_CHARS) throw", "if (false) throw", "test/cli-safety.test.ts"],

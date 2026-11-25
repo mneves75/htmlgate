@@ -362,8 +362,8 @@ async function replace(req: Request, store: Store, cfg: Config, token: TokenRow,
 
 async function patch(req: Request, store: Store, cfg: Config, token: TokenRow, slug: string, url: URL) {
   const f = parseFields(await readBody(req, true), ["title", "description", "metadata", "expires_at"]);
-  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
   if (Object.keys(f).length === 0) throw new HttpError(400, "invalid_arg", "PATCH needs title, description, metadata or expires_at.");
+  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
   const changed = await store.updateFields(cfg.author, slug, {
     title: f.title, description: f.description,
     tags: f.metadata !== undefined ? JSON.stringify(f.metadata) : undefined,

@@ -74,6 +74,16 @@ describe("a write in flight when its token is revoked", () => {
     expect(res.status).toBe(401);
   });
 
+  test("an empty PATCH answers the same for an existing and a missing Share", async () => {
+    const slug = (await i.api("POST", "/api/shares", { html: PAGE, title: "kept" })).json.slug as string;
+    const statuses: Record<string, number> = {};
+    for (const [name, target] of [["existing", slug], ["missing", "Missing00000"]] as const) {
+      const { token, revoke } = await freshToken();
+      statuses[name] = (await heldWrite("PATCH", `/api/shares/${target}`, {}, token, revoke)).status;
+    }
+    expect(statuses.existing).toBe(statuses.missing);
+  });
+
   test("a live token's held writes still land", async () => {
     const { token } = await freshToken();
     const res = await heldWrite("POST", "/api/shares", { html: PAGE, title: "on time" }, token, async () => {});

@@ -65,6 +65,15 @@ describe("a write in flight when its token is revoked", () => {
       .toEqual({ title: start.title, public: start.public, latest: start.latest_version, changed_at: start.changed_at });
   });
 
+  test.each([
+    ["PATCH", "", { title: "late" }],
+    ["POST", "/visibility", { public: true }],
+  ] as const)("%s %s on a missing Share answers 401 too, so a revoked token learns nothing about which Shares exist", async (method, suffix, body) => {
+    const { token, revoke } = await freshToken();
+    const res = await heldWrite(method, `/api/shares/Missing00000${suffix}`, body, token, revoke);
+    expect(res.status).toBe(401);
+  });
+
   test("a live token's held writes still land", async () => {
     const { token } = await freshToken();
     const res = await heldWrite("POST", "/api/shares", { html: PAGE, title: "on time" }, token, async () => {});
@@ -87,5 +96,16 @@ describe("the Store refuses every write from a revoked token", () => {
     expect(await i.store.addVersion({ ...page, author: AUTHOR, slug, tokenId: id, now, limit: 1 << 26, expiry: { at: null, set: false } })).toBe("gone");
     const end = (await i.api("GET", `/api/shares/${slug}`)).json;
     expect({ title: end.title, public: end.public, latest: end.latest_version }).toEqual({ title: "store", public: false, latest: 1 });
+  });
+
+  test("a revoked token cannot revoke another token, while a live one can, itself included", async () => {
+    const caller = await freshToken();
+    const other = await freshToken();
+    await caller.revoke();
+    const now = Date.now();
+    expect(await i.store.revokeToken(AUTHOR, other.id, now, caller.id)).toBe(false);
+    expect(await i.store.tokenLive(other.id)).toBe(true);
+    expect(await i.store.revokeToken(AUTHOR, other.id, now, other.id)).toBe(true);
+    expect(await i.store.tokenLive(other.id)).toBe(false);
   });
 });

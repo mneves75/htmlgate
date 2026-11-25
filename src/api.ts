@@ -85,7 +85,8 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
       return json(200, { data: await store.listTokens(cfg.author) });
     }
     if (b !== undefined && TOKEN_ID.test(b) && c === undefined && method === "DELETE") {
-      return (await store.revokeToken(cfg.author, b, Date.now())) ? noContent() : fail(404, "not_found", "No live token has that id.");
+      if (await store.revokeToken(cfg.author, b, Date.now(), token.id)) return noContent();
+      throw await unchanged(store, token, new HttpError(404, "not_found", "No live token has that id."));
     }
   }
   return fail(404, "not_found", "No such request. See /api/onboard.");
@@ -361,7 +362,7 @@ async function replace(req: Request, store: Store, cfg: Config, token: TokenRow,
 
 async function patch(req: Request, store: Store, cfg: Config, token: TokenRow, slug: string, url: URL) {
   const f = parseFields(await readBody(req, true), ["title", "description", "metadata", "expires_at"]);
-  await mustShare(store, cfg, slug);
+  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
   if (Object.keys(f).length === 0) throw new HttpError(400, "invalid_arg", "PATCH needs title, description, metadata or expires_at.");
   const changed = await store.updateFields(cfg.author, slug, {
     title: f.title, description: f.description,
@@ -395,7 +396,7 @@ async function visibility(req: Request, store: Store, cfg: Config, token: TokenR
   if (Object.keys(body).length !== 1 || typeof body.public !== "boolean") {
     throw new HttpError(400, "invalid_arg", "Send exactly {\"public\": true} or {\"public\": false}.");
   }
-  await mustShare(store, cfg, slug);
+  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
   if (!(await store.setPublic(cfg.author, slug, body.public, token.id, Date.now()))) throw await unchanged(store, token, notFound());
   return shareJson(await mustShare(store, cfg, slug), url);
 }

@@ -161,10 +161,11 @@ export class Store {
     return r.results;
   }
 
-  async revokeToken(author: string, id: string, now: number): Promise<boolean> {
+  /** `by` is the token that asked, when a token asked rather than the Author's signed-in page. */
+  async revokeToken(author: string, id: string, now: number, by: string | null = null): Promise<boolean> {
     const r = await this.db
-      .prepare("UPDATE tokens SET revoked_at = ? WHERE id = ? AND author = ? AND revoked_at IS NULL")
-      .bind(now, id, author)
+      .prepare(`UPDATE tokens SET revoked_at = ? WHERE id = ? AND author = ? AND revoked_at IS NULL AND (? IS NULL OR ${LIVE_TOKEN})`)
+      .bind(now, id, author, by, by)
       .run();
     return r.meta.changes > 0;
   }

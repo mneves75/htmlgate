@@ -13,9 +13,9 @@ Node 26 and TypeScript are already pinned in `.nvmrc` and `package.json`, with z
 
 ## Coverage record
 
-- **Sync commit:** `37682bf`
+- **Sync commit:** `e76024d`
 - **Covered files and symbols:**
-  - `src/store.ts`: `Store.putBody`, `Store.dueNow`, `Store.commit`, `Store.createShare`, `Store.addVersion`, `Store.updateFields`, `Store.setPublic`, `Store.deleteShare`, `Store.emptyTrash`, `Store.expire`, `Store.countView`, `Store.eraseShare`, `Store.eraseBodies`, `RESERVED`, `WROTE`, `LIVE_TOKEN`, `live`.
+  - `src/store.ts`: `Store.putBody`, `Store.dueNow`, `Store.commit`, `Store.createShare`, `Store.addVersion`, `Store.updateFields`, `Store.setPublic`, `Store.deleteShare`, `Store.revokeToken`, `Store.emptyTrash`, `Store.expire`, `Store.countView`, `Store.eraseShare`, `Store.eraseBodies`, `RESERVED`, `WROTE`, `LIVE_TOKEN`, `live`.
   - `scripts/token.mjs`: `revokeAll`.
 
 Check whether covered files changed since the sync commit before trusting a pass:
@@ -35,7 +35,7 @@ Advance the sync commit above only after confirming that `formal/store-lifecycle
 5. **`UNEXPIRED_STORAGE_CAP`** — Stored Versions plus unexpired reservations never exceed `storageLimit`. *Harm:* concurrent publishes bypass the Instance storage cap.
 6. **`NO_LOST_RELEDGERED_TRASH`** — `Store.emptyTrash()` deletes only `trash` rows whose `(body_key, due_at)` still matches what it read before R2 deletion, and `Store.dueNow()` advances `due_at` by 1 ms on a same-millisecond conflict (`excluded.due_at = trash.due_at`). *Harm:* a freshly re-ledgered upload (`dueNow`) loses its `trash` row and leaks an untracked object in R2 (discovered by this model checker on `37e374b` and fixed in `Store.dueNow`).
 7. **`CONTAINMENT_NO_POST_REVOKE_CREDENTIAL`** — Once `revokeAll` completes, an attacker starting with a compromised Access session, API token, and ticket holds zero live credentials. *Harm:* revoking tokens before Access sessions lets the stolen session mint a fresh token mid-run (replays commit `17a60d6`, F-03).
-8. **`CONTAINMENT_NO_POST_REVOKE_WRITE`** — No write authenticated by a token commits after every token that could authorize it is revoked. `api.ts` checks the token before reading the body, so each token-authorized Store write (`createShare`, `addVersion`, `updateFields`, `setPublic`, `deleteShare`) re-checks `${LIVE_TOKEN}` in its liveness-deciding statement. *Harm:* a write still uploading when `revokeAll` or the Author revokes its token lands anyway.
+8. **`CONTAINMENT_NO_POST_REVOKE_WRITE`** — No write authenticated by a token commits after every token that could authorize it is revoked. `api.ts` checks the token before reading the body, so each token-authorized Store write (`createShare`, `addVersion`, `updateFields`, `setPublic`, `deleteShare`, and `revokeToken` when a token asks) re-checks `${LIVE_TOKEN}` in its liveness-deciding statement. *Harm:* a write still uploading when `revokeAll` or the Author revokes its token lands anyway.
 
 ## Bounds and scope honesty
 

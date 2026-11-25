@@ -110,7 +110,7 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
   }
 
   const liveTokenDecl = extractBody(store, "src/store.ts", "const", "LIVE_TOKEN");
-  const unguarded = ["createShare", "addVersion", "updateFields", "setPublic", "deleteShare"]
+  const unguarded = ["createShare", "addVersion", "updateFields", "setPublic", "deleteShare", "revokeToken"]
     .filter((m) => !extractBody(store, "src/store.ts", "method", m).includes("${LIVE_TOKEN}"));
   if (!/FROM tokens WHERE id = \? AND revoked_at IS NULL/.test(liveTokenDecl) || unguarded.length > 0) {
     findings.push({

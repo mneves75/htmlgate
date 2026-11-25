@@ -27,12 +27,16 @@ test.each(["create", "update", "late upload"])("an expired %s cannot claim its b
   let delayCommit = false;
   let lateStarted = false;
   let lateOvershoot = false;
+  let barrierHit = false;
   const prepare = (sql: string, values: SQLInputValue[] = []): Statement => ({
     sql, values,
     bind: (...bound) => prepare(sql, bound),
     run: async () => {
       // Cleanup's ledger delete waits, so the claim commits while cleanup still holds its row.
-      if (cleanup && sql.startsWith("DELETE FROM trash WHERE (body_key, nonce)")) await released;
+      if (cleanup && sql.startsWith("DELETE FROM trash WHERE (body_key, ")) {
+        barrierHit = true;
+        await released;
+      }
       return { meta: { changes: Number(sqlite.prepare(sql).run(...values).changes) } };
     },
     all: async () => ({ results: sqlite.prepare(sql).all(...values) }),
@@ -101,6 +105,8 @@ test.each(["create", "update", "late upload"])("an expired %s cannot claim its b
       // Documented lease-overrun limit: the late object exceeds the cap until the refused write's cleanup.
       expect(lateOvershoot).toBe(true);
       expect(sqlite.prepare("SELECT COUNT(*) AS n FROM trash").get()!.n).toBe(1);
+    } else {
+      expect(barrierHit).toBe(true);
     }
     await store.emptyTrash();
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM trash").get()!.n).toBe(0);

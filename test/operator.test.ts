@@ -634,6 +634,8 @@ describe("strict operator CLI flag and response validation", () => {
     const good = { aud: "a1", same_site_cookie_attribute: "lax", http_only_cookie_attribute: true, destinations: [{ type: "worker", worker_id: "w1" }] };
     expect(() => verifyAccessApp(good, inst, "w1")).not.toThrow();
     expect(() => verifyAccessApp({ ...good, aud: "" }, inst, "w1")).toThrow(/audience/);
+    expect(() => verifyAccessApp({ ...good, aud: "   " }, inst, "w1")).toThrow(/audience/);
+    expect(() => verifyAccessApp({ ...good, aud: {} as unknown as string }, inst, "w1")).toThrow(/audience/);
     expect(() => verifyAccessApp({ ...good, same_site_cookie_attribute: "none" }, inst, "w1")).toThrow(/SameSite=Lax/);
     expect(() => verifyAccessApp({ ...good, http_only_cookie_attribute: false }, inst, "w1")).toThrow(/HttpOnly/);
     expect(() => verifyAccessApp({ ...good, destinations: [{ type: "worker", worker_id: "w2" }] }, inst, "w1")).toThrow(/destination/);

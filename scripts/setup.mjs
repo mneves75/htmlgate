@@ -524,7 +524,7 @@ export function parseSetupArgs(argv) {
 const AUTH_DOMAIN_HOST = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
 
 export function verifyAccessApp(app, inst, workerId) {
-  if (!app?.aud) throw new Error("The Access application has no audience tag.");
+  if (typeof app?.aud !== "string" || !app.aud.trim()) throw new Error("The Access application has no audience tag.");
   if (app.same_site_cookie_attribute !== "lax" || app.http_only_cookie_attribute !== true) {
     throw new Error("Cloudflare returned an Access application without SameSite=Lax and HttpOnly cookies.");
   }
@@ -633,7 +633,7 @@ async function main() {
   let app = existing
     ? cf("zero-trust", "access", "applications", "update", existing.id, "--body", body)
     : cf("zero-trust", "access", "applications", "create", "--body", body);
-  if (app?.id && (!app.aud || !Object.hasOwn(app, "same_site_cookie_attribute") || !Object.hasOwn(app, "http_only_cookie_attribute") || !Object.hasOwn(app, "destinations") || (inst.mfa && !Object.hasOwn(app, "mfa_config")))) {
+  if (app?.id && (typeof app.aud !== "string" || !app.aud.trim() || !Object.hasOwn(app, "same_site_cookie_attribute") || !Object.hasOwn(app, "http_only_cookie_attribute") || !Object.hasOwn(app, "destinations") || (inst.mfa && !Object.hasOwn(app, "mfa_config")))) {
     app = cf("zero-trust", "access", "applications", "get", app.id);
   }
   verifyAccessApp(app, inst, worker.id);

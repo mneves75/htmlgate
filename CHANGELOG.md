@@ -4,6 +4,8 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-11-25
+
 ### Security
 
 - **Revocation stops writes in flight (H2-1, `src/store.ts`, `src/api.ts`):** every token-authorized Store write re-checks in its liveness-deciding statement that its token is unrevoked, so a write whose body was still uploading when the token was revoked no longer lands; the API answers `401`. The same applies when a token revokes another token, and a revoked token gets `401` for a missing Share as well as an existing one, so it cannot tell which Shares exist. Covered by `test/revoke-in-flight.test.ts`, a new `CONTAINMENT_NO_POST_REVOKE_WRITE` model invariant with its replay (9 historical bug replays), and six mutation anchors.

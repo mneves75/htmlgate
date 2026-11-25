@@ -52,6 +52,9 @@ const ROOM = `(SELECT COALESCE(SUM(${COST}), 0) FROM versions) + (SELECT COALESC
 const TRASH_NONCE = "lower(hex(randomblob(8)))";
 const WROTE = "EXISTS (SELECT 1 FROM versions WHERE body_key = ?)";
 const RESERVED = `EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > ${CLOCK})`;
+// A token is checked before its request's body is read, so every write it authorizes re-checks at commit that the
+// token is still live: revocation also stops a write still in flight.
+const LIVE_TOKEN = "EXISTS (SELECT 1 FROM tokens WHERE id = ? AND revoked_at IS NULL)";
 const FIELDS = "title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags)";
 const EXPIRY = "expires_at = CASE WHEN ? = 1 THEN ? WHEN expiry_set = 0 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?)";
 const expiryArgs = (e: Expiry) => [e.set ? 1 : 0, e.at, e.at, e.set ? 1 : 0];
@@ -139,6 +142,10 @@ export class Store {
     }
   }
 
+  async tokenLive(id: string): Promise<boolean> {
+    return (await this.db.prepare("SELECT 1 AS n FROM tokens WHERE id = ? AND revoked_at IS NULL").bind(id).first()) !== null;
+  }
+
   async createToken(id: string, author: string, name: string, digest: string, now: number): Promise<void> {
     await this.db
       .prepare("INSERT INTO tokens (id, author, name, digest, created_at) VALUES (?, ?, ?, ?, ?)")
@@ -188,8 +195,8 @@ export class Store {
     const key = await this.putBody(slug, input, cost, limit);
     if (key === null) return "full";
     const written = await this.commit(key, cost, [
-      this.db.prepare(`INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT ?, 1, ?, ?, ?, ?, ?, ? WHERE ${RESERVED}`)
-        .bind(slug, key, size, now, tokenId, input.kind, input.files, key),
+      this.db.prepare(`INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) SELECT ?, 1, ?, ?, ?, ?, ?, ? WHERE ${RESERVED} AND ${LIVE_TOKEN}`)
+        .bind(slug, key, size, now, tokenId, input.kind, input.files, key, tokenId),
       this.db.prepare(`INSERT INTO shares (slug, author, title, description, tags, public, latest_version,
           created_at, updated_at, changed_by, changed_at, expires_at, expiry_set) SELECT ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?, ? WHERE ${WROTE}`)
         .bind(slug, author, title, description, tags, now, now, tokenId, now, expiry.at, expiry.set ? 1 : 0, key),
@@ -208,8 +215,8 @@ export class Store {
     if (key === null) return "full";
     const written = await this.commit(key, cost, [
       this.db.prepare(`INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files)
-          SELECT slug, latest_version + 1, ?, ?, ?, ?, ?, ? FROM shares WHERE slug = ? AND author = ? AND ${live()} AND ${RESERVED}`)
-        .bind(key, size, now, tokenId, input.kind, input.files, slug, author, key),
+          SELECT slug, latest_version + 1, ?, ?, ?, ?, ?, ? FROM shares WHERE slug = ? AND author = ? AND ${live()} AND ${RESERVED} AND ${LIVE_TOKEN}`)
+        .bind(key, size, now, tokenId, input.kind, input.files, slug, author, key, tokenId),
       this.db.prepare(`UPDATE shares SET latest_version = latest_version + 1, ${FIELDS}, ${EXPIRY},
           updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND ${WROTE}`)
         .bind(title ?? null, description !== undefined ? 1 : 0, description ?? null, tags ?? null, ...expiryArgs(expiry), now, tokenId, now, slug, author, key),
@@ -220,30 +227,32 @@ export class Store {
     return written ? "written" : "gone";
   }
 
-  async updateFields(author: string, slug: string, fields: ShareFields, tokenId: string, now: number): Promise<void> {
+  async updateFields(author: string, slug: string, fields: ShareFields, tokenId: string, now: number): Promise<boolean> {
     const { title, description, tags, expiresAt } = fields;
     const set = expiresAt !== undefined ? 1 : 0;
-    await this.db
+    const r = await this.db
       .prepare(`UPDATE shares SET ${FIELDS}, expires_at = CASE WHEN ? = 1 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?),
-        updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND ${live()}`)
+        updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND ${live()} AND ${LIVE_TOKEN}`)
       .bind(title ?? null, description !== undefined ? 1 : 0, description ?? null, tags ?? null,
-        set, expiresAt ?? null, set, now, tokenId, now, slug, author)
+        set, expiresAt ?? null, set, now, tokenId, now, slug, author, tokenId)
       .run();
+    return r.meta.changes > 0;
   }
 
-  async setPublic(author: string, slug: string, value: boolean, tokenId: string, now: number): Promise<void> {
-    await this.db
+  async setPublic(author: string, slug: string, value: boolean, tokenId: string, now: number): Promise<boolean> {
+    const r = await this.db
       .prepare(`UPDATE shares SET public = ?, changed_by = ?, changed_at = ?
-        WHERE slug = ? AND author = ? AND ${live()}`)
-      .bind(value ? 1 : 0, tokenId, now, slug, author)
+        WHERE slug = ? AND author = ? AND ${live()} AND ${LIVE_TOKEN}`)
+      .bind(value ? 1 : 0, tokenId, now, slug, author, tokenId)
       .run();
+    return r.meta.changes > 0;
   }
 
   async deleteShare(author: string, slug: string, tokenId: string, now: number): Promise<boolean> {
     const r = await this.db
       .prepare(`UPDATE shares SET deleted_at = ?, changed_by = ?, changed_at = ?
-        WHERE slug = ? AND author = ? AND ${live()}`)
-      .bind(now, tokenId, now, slug, author)
+        WHERE slug = ? AND author = ? AND ${live()} AND ${LIVE_TOKEN}`)
+      .bind(now, tokenId, now, slug, author, tokenId)
       .run();
     return r.meta.changes > 0;
   }

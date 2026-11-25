@@ -96,4 +96,14 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
     const findings = detectCodeDeviationsFromSource(brokenStore, tokenSrc);
     expect(findings.map((f) => f.detectedVariant)).toContain("due-now-two-empty-trash-race");
   });
+
+  test("code-to-model conformance rejects src/store.ts when a token-authorized write skips the live-token re-check", () => {
+    const storeSrc = readFileSync(join(process.cwd(), "src/store.ts"), "utf8");
+    const tokenSrc = readFileSync(join(process.cwd(), "scripts/token.mjs"), "utf8");
+    expect(detectCodeDeviationsFromSource(storeSrc, tokenSrc)).toEqual([]);
+    const brokenStore = storeSrc.replace(/(async setPublic[\s\S]*?) AND \$\{LIVE_TOKEN\}/, "$1");
+    expect(brokenStore).not.toBe(storeSrc);
+    const findings = detectCodeDeviationsFromSource(brokenStore, tokenSrc);
+    expect(findings).toEqual([expect.objectContaining({ symbol: "Store.setPublic", detectedVariant: "write-commit-skips-token-check" })]);
+  });
 });

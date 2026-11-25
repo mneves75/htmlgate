@@ -109,6 +109,18 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
     });
   }
 
+  const liveTokenDecl = extractBody(store, "src/store.ts", "const", "LIVE_TOKEN");
+  const unguarded = ["createShare", "addVersion", "updateFields", "setPublic", "deleteShare"]
+    .filter((m) => !extractBody(store, "src/store.ts", "method", m).includes("${LIVE_TOKEN}"));
+  if (!/FROM tokens WHERE id = \? AND revoked_at IS NULL/.test(liveTokenDecl) || unguarded.length > 0) {
+    findings.push({
+      codeFile: "src/store.ts",
+      symbol: unguarded.length ? unguarded.map((m) => `Store.${m}`).join(", ") : "LIVE_TOKEN",
+      detectedVariant: "write-commit-skips-token-check",
+      detail: "Every token-authorized Store write must re-check ${LIVE_TOKEN} (the token unrevoked) in its liveness-deciding statement.",
+    });
+  }
+
   const revokeBlock = extractBody(token, "scripts/token.mjs", "function", "revokeAll");
   const remoteAt = revokeBlock.indexOf(": [[");
   const remoteSteps = remoteAt === -1 ? "" : revokeBlock.slice(remoteAt);
@@ -154,6 +166,7 @@ export const HISTORICAL_STORE_BUGS: readonly { bug: StoreBugVariant; expectedInv
 
 export const HISTORICAL_REVOKE_BUGS: readonly { bug: RevokeBugVariant; expectedInvariant: string; source: string }[] = [
   { bug: "revoke-all-sessions-last", expectedInvariant: "CONTAINMENT_NO_POST_REVOKE_CREDENTIAL", source: "commit 17a60d6 (v0.1.18 F-03)" },
+  { bug: "write-commit-skips-token-check", expectedInvariant: "CONTAINMENT_NO_POST_REVOKE_WRITE", source: "2026-11-25 audit H2-1 (write in flight across revocation)" },
 ];
 
 export function runFormalVerification(root = ROOT, { replayBugs = false } = {}) {
@@ -161,7 +174,7 @@ export function runFormalVerification(root = ROOT, { replayBugs = false } = {}) 
   const results: CheckResult[] = [];
   if (deviations.length > 0) {
     for (const d of deviations) {
-      if (d.detectedVariant === "revoke-all-sessions-last") {
+      if (d.detectedVariant === "revoke-all-sessions-last" || d.detectedVariant === "write-commit-skips-token-check") {
         results.push(checkRevokeAllModel(d.detectedVariant));
       } else {
         results.push(checkStoreModel(d.detectedVariant));

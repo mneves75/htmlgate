@@ -8,7 +8,7 @@ export type StoreBugVariant =
   | "due-now-same-ms-race"
   | "due-now-two-empty-trash-race";
 
-export type RevokeBugVariant = "none" | "revoke-all-sessions-last";
+export type RevokeBugVariant = "none" | "revoke-all-sessions-last" | "write-commit-skips-token-check";
 
 export interface ModelBounds {
   maxClock: number;
@@ -552,6 +552,9 @@ interface RevokeState {
   tokensLive: number;
   ticketLive: boolean;
   attackerMintedAfterTokensRevoked: boolean;
+  /** A write authenticated by a then-live token, whose body is still uploading (api.ts checks the token before reading it). */
+  writeInFlight: boolean;
+  writeLandedWithoutLiveToken: boolean;
 }
 
 export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult {
@@ -565,8 +568,11 @@ export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult
     tokensLive: 1,
     ticketLive: true,
     attackerMintedAfterTokensRevoked: false,
+    writeInFlight: false,
+    writeLandedWithoutLiveToken: false,
   };
-  const keyOf = (s: RevokeState) => `${s.step}|${s.sessionLive ? 1 : 0}|${s.tokensLive}|${s.ticketLive ? 1 : 0}|${s.attackerMintedAfterTokensRevoked ? 1 : 0}`;
+  const keyOf = (s: RevokeState) =>
+    `${s.step}|${s.sessionLive ? 1 : 0}|${s.tokensLive}|${s.ticketLive ? 1 : 0}|${s.attackerMintedAfterTokensRevoked ? 1 : 0}|${s.writeInFlight ? 1 : 0}|${s.writeLandedWithoutLiveToken ? 1 : 0}`;
   const visited = new Set<string>([keyOf(init)]);
   const queue: { state: RevokeState; trace: string[] }[] = [{ state: init, trace: ["init(compromised-device: session=live, tokens=1, ticket=live)"] }];
   let statesExplored = 0;
@@ -577,6 +583,20 @@ export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult
     const cur = queue[head++]!;
     const s = cur.state;
     statesExplored++;
+    if (s.writeLandedWithoutLiveToken) {
+      return {
+        model: "RevokeAllContainment",
+        variant: bug,
+        statesExplored,
+        transitionsExplored,
+        ok: false,
+        violation: {
+          invariant: "CONTAINMENT_NO_POST_REVOKE_WRITE",
+          reason: "A write committed after every token that could authorize it was revoked.",
+          trace: cur.trace,
+        },
+      };
+    }
     if (s.step === order.length && (s.sessionLive || s.tokensLive > 0 || s.ticketLive)) {
       return {
         model: "RevokeAllContainment",
@@ -608,6 +628,17 @@ export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult
         attackerMintedAfterTokensRevoked: s.attackerMintedAfterTokensRevoked || s.tokensLive === 0,
       };
       nexts.push([`Attacker uses live Access session -> POST /tokens (liveTokens=${n.tokensLive})`, n]);
+    }
+    if (!s.writeInFlight && s.tokensLive > 0) {
+      nexts.push(["Attacker's live token passes authenticate() and starts uploading a write body", { ...s, writeInFlight: true }]);
+    }
+    if (s.writeInFlight) {
+      // Store writes re-check LIVE_TOKEN in their first statement; the bug variant commits on the earlier check alone.
+      const lands = bug === "write-commit-skips-token-check" || s.tokensLive > 0;
+      nexts.push([
+        `Write body finishes -> Store commit ${lands ? "lands" : "refused (LIVE_TOKEN)"} (liveTokens=${s.tokensLive})`,
+        { ...s, writeInFlight: false, writeLandedWithoutLiveToken: lands && s.tokensLive === 0 },
+      ]);
     }
 
     for (const [label, n] of nexts) {

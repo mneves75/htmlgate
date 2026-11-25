@@ -315,6 +315,13 @@ function parseFields(body: Record<string, unknown>, allowed: (keyof Fields)[]): 
   return out;
 }
 
+const notFound = () => new HttpError(404, "not_found", "No such Share.");
+
+/** Why a write that passed its checks changed nothing: its token was revoked while the request ran, or `otherwise`. */
+async function unchanged(store: Store, token: TokenRow, otherwise: HttpError): Promise<HttpError> {
+  return (await store.tokenLive(token.id)) ? otherwise : new HttpError(401, "unauthorized", "This token was revoked.");
+}
+
 const noRoom = () =>
   new HttpError(507, "quota_exceeded", "This Instance has no room left for Shares. Deleted Shares count until they expire: tell the Operator.");
 
@@ -329,7 +336,7 @@ async function create(req: Request, store: Store, cfg: Config, token: TokenRow, 
     tokenId: token.id, now, limit: cfg.storageLimit, expiry: expiryOf(f, cfg, now),
   });
   if (created === "full") throw noRoom();
-  if (created === "gone") throw new HttpError(503, "busy", "The upload took too long. Try again.");
+  if (created === "gone") throw await unchanged(store, token, new HttpError(503, "busy", "The upload took too long. Try again."));
   return shareJson(await mustShare(store, cfg, slug), url, 201);
 }
 
@@ -346,7 +353,9 @@ async function replace(req: Request, store: Store, cfg: Config, token: TokenRow,
     tokenId: token.id, now, limit: cfg.storageLimit, expiry: expiryOf(f, cfg, now),
   });
   if (added === "full") throw noRoom();
-  if (added === "gone") throw (await store.share(cfg.author, slug)) ? new HttpError(503, "busy", "The upload took too long. Try again.") : new HttpError(404, "not_found", "No such Share.");
+  if (added === "gone") {
+    throw await unchanged(store, token, (await store.share(cfg.author, slug)) ? new HttpError(503, "busy", "The upload took too long. Try again.") : notFound());
+  }
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 
@@ -354,11 +363,12 @@ async function patch(req: Request, store: Store, cfg: Config, token: TokenRow, s
   const f = parseFields(await readBody(req, true), ["title", "description", "metadata", "expires_at"]);
   await mustShare(store, cfg, slug);
   if (Object.keys(f).length === 0) throw new HttpError(400, "invalid_arg", "PATCH needs title, description, metadata or expires_at.");
-  await store.updateFields(cfg.author, slug, {
+  const changed = await store.updateFields(cfg.author, slug, {
     title: f.title, description: f.description,
     tags: f.metadata !== undefined ? JSON.stringify(f.metadata) : undefined,
     expiresAt: f.expires_at,
   }, token.id, Date.now());
+  if (!changed) throw await unchanged(store, token, notFound());
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 
@@ -376,7 +386,7 @@ async function zipOf(store: Store, cfg: Config, slug: string, n: number) {
 }
 
 async function remove(store: Store, cfg: Config, token: TokenRow, slug: string) {
-  if (!(await store.deleteShare(cfg.author, slug, token.id, Date.now()))) throw new HttpError(404, "not_found", "No such Share.");
+  if (!(await store.deleteShare(cfg.author, slug, token.id, Date.now()))) throw await unchanged(store, token, notFound());
   return noContent();
 }
 
@@ -386,7 +396,7 @@ async function visibility(req: Request, store: Store, cfg: Config, token: TokenR
     throw new HttpError(400, "invalid_arg", "Send exactly {\"public\": true} or {\"public\": false}.");
   }
   await mustShare(store, cfg, slug);
-  await store.setPublic(cfg.author, slug, body.public, token.id, Date.now());
+  if (!(await store.setPublic(cfg.author, slug, body.public, token.id, Date.now()))) throw await unchanged(store, token, notFound());
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 

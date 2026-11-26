@@ -224,6 +224,13 @@ describe("the Store refuses every write from a revoked token", () => {
     expect(await i.store.setPublic(AUTHOR, slug, true, id, now)).toBe(false);
     const page = { body: PAGE, kind: "page" as const, files: null, size: PAGE.length };
     expect(await i.store.addVersion({ ...page, author: AUTHOR, slug, tokenId: id, now, limit: 1 << 26, expiry: { at: null, set: false } })).toBe("gone");
+    // Even if a Version outside the retention window existed, a refused addVersion must neither queue nor delete it.
+    i.fake.sqlite.prepare("INSERT INTO versions (slug, n, body_key, size, created_at, token_id, kind, files) VALUES (?, ?, ?, ?, ?, ?, 'page', NULL)")
+      .run(slug, -100, "bodies/out-of-window", 10, now, id);
+    expect(await i.store.addVersion({ ...page, author: AUTHOR, slug, tokenId: id, now, limit: 1 << 26, expiry: { at: null, set: false } })).toBe("gone");
+    expect(i.fake.sqlite.prepare("SELECT 1 FROM versions WHERE slug = ? AND n = -100").get(slug)).toBeDefined();
+    expect(i.fake.sqlite.prepare("SELECT 1 FROM trash WHERE body_key = ?").get("bodies/out-of-window")).toBeUndefined();
+    i.fake.sqlite.prepare("DELETE FROM versions WHERE slug = ? AND n = -100").run(slug);
     const end = (await i.api("GET", `/api/shares/${slug}`)).json;
     expect({ title: end.title, public: end.public, latest: end.latest_version }).toEqual({ title: "store", public: false, latest: 1 });
   });

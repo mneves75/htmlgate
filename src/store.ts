@@ -221,9 +221,9 @@ export class Store {
       this.db.prepare(`UPDATE shares SET latest_version = latest_version + 1, ${FIELDS}, ${EXPIRY},
           updated_at = ?, changed_by = ?, changed_at = ? WHERE slug = ? AND author = ? AND ${WROTE}`)
         .bind(title ?? null, description !== undefined ? 1 : 0, description ?? null, tags ?? null, ...expiryArgs(expiry), now, tokenId, now, slug, author, key),
-      this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) SELECT body_key, MAX(size, ${VERSION_FLOOR}), ?, ${TRASH_NONCE} FROM versions WHERE ${pruned} ON CONFLICT (body_key) DO NOTHING`)
-        .bind(now, slug, slug),
-      this.db.prepare(`DELETE FROM versions WHERE ${pruned}`).bind(slug, slug),
+      this.db.prepare(`INSERT INTO trash (body_key, size, due_at, nonce) SELECT body_key, MAX(size, ${VERSION_FLOOR}), ?, ${TRASH_NONCE} FROM versions WHERE ${pruned} AND ${WROTE} ON CONFLICT (body_key) DO NOTHING`)
+        .bind(now, slug, slug, key),
+      this.db.prepare(`DELETE FROM versions WHERE ${pruned} AND ${WROTE}`).bind(slug, slug, key),
     ]);
     return written ? "written" : "gone";
   }

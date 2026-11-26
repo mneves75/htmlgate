@@ -116,6 +116,7 @@ describe("request bodies", () => {
           return { status: r.status, answer: await r.text().catch(() => ""), sent, elapsed: Date.now() - started };
         }
         const answer = await r.text();
+        if (r.status === 413 && answer === "") return { terminated: "empty 413 body", sent, elapsed: Date.now() - started };
         return { status: r.status, answer, sent, elapsed: Date.now() - started };
       } catch (e) {
         if (e instanceof TypeError) return { terminated: e.message, sent, elapsed: Date.now() - started };
@@ -126,15 +127,17 @@ describe("request bodies", () => {
     };
     let outcome = await attempt();
     // The Worker answers 413 without reading on. Wrangler's local dev proxy (not present in production) sometimes
-    // reports that early answer as a 500 "Network connection lost", or terminates the request outright. Nothing else
-    // is accepted, and a termination twice is a failed assertion, not a broken test.
+    // reports that early answer as a 500 "Network connection lost", truncates the 413 body, or terminates the request
+    // outright. Nothing else is accepted, and a termination twice is a failed assertion, not a broken test.
     if ("terminated" in outcome) outcome = await attempt();
     expect("terminated" in outcome ? outcome.terminated : undefined, "the request terminated without an answer twice").toBeUndefined();
     const { status, answer, sent, elapsed } = outcome as { status: number; answer: string; sent: number; elapsed: number };
     if (status === 500) expect(answer).toMatch(/^Error: Network connection lost\./);
     else {
       expect(status).toBe(413);
-      expect(JSON.parse(answer).error.code).toBe("html_too_large");
+      let code: unknown;
+      try { code = JSON.parse(answer).error?.code; } catch {}
+      expect(code, answer).toBe("html_too_large");
     }
     expect(elapsed).toBeLessThan(15_000);
     expect(sent).toBeLessThan(200 * 1024 * 1024);

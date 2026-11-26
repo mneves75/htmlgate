@@ -112,6 +112,9 @@ describe("request bodies", () => {
           method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", connection: "close" }, body, duplex: "half",
         } as RequestInit);
         answered = true;
+        if (r.status !== 413 && r.status !== 500) {
+          return { status: r.status, answer: await r.text().catch(() => ""), sent, elapsed: Date.now() - started };
+        }
         const answer = await r.text();
         return { status: r.status, answer, sent, elapsed: Date.now() - started };
       } catch (e) {

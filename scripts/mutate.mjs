@@ -283,6 +283,7 @@ const MUTATIONS = [
   ["a revoked token's write reports its cause when the token check fails", "src/api.ts", "    if (live === null) return fail(503,", "    if (false) return fail(503,", "test/revoke-in-flight.test.ts"],
   ["one long cell pads every row of the CLI table", "packages/cli/src/bin.ts", "Math.min((r[i] ?? \"\").length, MAX_COLUMN_WIDTH)", "(r[i] ?? \"\").length", "test/cli-safety.test.ts"],
   ["the CLI list keeps rows without a total cap", "packages/cli/src/bin.ts", "if (chars > MAX_LIST_CHARS) throw", "if (false) throw", "test/cli-safety.test.ts"],
+  ["the CLI accepts nested Share metadata", "packages/cli/src/api.ts", "if (v.metadata !== undefined && (!isObj(v.metadata) || Object.values(v.metadata).some((x) => typeof x !== \"string\"))) throw badShape(\"a Share\");", "", "test/cli-safety.test.ts"],
   ["dueNow skips refreshing the trash CAS nonce", "src/store.ts", "VALUES (?, ?, ${CLOCK}, ${TRASH_NONCE}) ON CONFLICT (body_key) DO UPDATE SET due_at = CASE WHEN trash.due_at <= excluded.due_at THEN MAX(trash.due_at + 1, excluded.due_at) ELSE excluded.due_at END, size = MAX(trash.size, excluded.size), nonce = excluded.nonce", "VALUES (?, ?, ${CLOCK}, ${TRASH_NONCE}) ON CONFLICT (body_key) DO UPDATE SET due_at = excluded.due_at, size = MAX(trash.size, excluded.size)", "test/formal-verification.test.ts"],
 ];
 

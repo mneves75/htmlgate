@@ -167,6 +167,15 @@ describe("an answer missing what the CLI shows is refused, not a crash", () => {
     expect(JSON.parse(r.stderr).error.code).toBe("bad_response");
   });
 
+  test("a Share with nested or non-string metadata exits 8 (bad_response), not 1", async () => {
+    const nested = `${"{\"a\":".repeat(500)}"x"${"}".repeat(500)}`;
+    const body = `{"data":[{"slug":"S00000000001","title":"t","url":"/s/S00000000001","public":false,"updated_at":1,"metadata":${nested}}],"pagination":{"page":1,"page_size":200,"total":1,"total_pages":1}}`;
+    const s = await serve((_req, res) => res.writeHead(200, { "content-type": "application/json" }).end(body));
+    const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"]);
+    expect(r.code).toBe(8);
+    expect(JSON.parse(r.stderr).error.code).toBe("bad_response");
+  });
+
   test("a Version without created_at exits 8 (bad_response), not 1", async () => {
     const s = await serve((_req, res) => jsonRes(res, 200, { data: [{ n: 1, size: 3, token: { id: null, name: null } }] }));
     const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["versions", "S00000000001"]);

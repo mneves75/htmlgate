@@ -81,6 +81,7 @@ function asShare(v: unknown, origin: string): Share {
     throw badShape("a Share");
   }
   if (v.expires_at !== undefined && v.expires_at !== null && !isTime(v.expires_at)) throw badShape("a Share");
+  if (v.metadata !== undefined && (!isObj(v.metadata) || Object.values(v.metadata).some((x) => typeof x !== "string"))) throw badShape("a Share");
   const normalized = normalizeShareUrl(v.url, origin);
   if (normalized === null) {
     throw new CliError("bad_response", `The Instance returned an unexpected Share URL: ${v.url}`);

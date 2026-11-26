@@ -41,17 +41,19 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, c
 
   let answer: Response | undefined;
   let error: unknown;
-  if (!env.WRITE_LIMIT) answer = fail(503, "server_misconfigured", "This Instance is missing its write limit. The Operator must run setup.");
-  else if (!(await env.WRITE_LIMIT.limit({ key: token.id })).success) answer = fail(429, "rate_limited", "Too many changes from this token. Wait a minute.", { "retry-after": "60" });
-  else {
-    try {
-      answer = await route(req, store, cfg, token, url, parts);
-    } catch (e) {
-      if (e instanceof HttpError) answer = fail(e.status, e.code, e.message);
-      else error = e;
-    } finally {
-      ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
+  try {
+    if (!env.WRITE_LIMIT) answer = fail(503, "server_misconfigured", "This Instance is missing its write limit. The Operator must run setup.");
+    else if (!(await env.WRITE_LIMIT.limit({ key: token.id })).success) answer = fail(429, "rate_limited", "Too many changes from this token. Wait a minute.", { "retry-after": "60" });
+    else {
+      try {
+        answer = await route(req, store, cfg, token, url, parts);
+      } finally {
+        ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
+      }
     }
+  } catch (e) {
+    if (e instanceof HttpError) answer = fail(e.status, e.code, e.message);
+    else error = e;
   }
   // Each write decides at commit whether its token is live. A write that did not land answers 401 if the token is now
   // revoked, whatever else went wrong, so a revoked token learns nothing else; if that check fails, the answer is 503.

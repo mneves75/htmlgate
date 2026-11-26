@@ -85,6 +85,15 @@ describe("a write in flight when its token is revoked", () => {
     expect(statuses.existing).toBe(statuses.missing);
   });
 
+  test("a live token's empty PATCH is refused with 400 before the Share is looked up", async () => {
+    const slug = (await i.api("POST", "/api/shares", { html: PAGE, title: "kept" })).json.slug as string;
+    const statuses: Record<string, number> = {};
+    for (const [name, target] of [["existing", slug], ["missing", "Missing00000"]] as const) {
+      statuses[name] = (await i.api("PATCH", `/api/shares/${target}`, {})).status;
+    }
+    expect(statuses).toEqual({ existing: 400, missing: 400 });
+  });
+
   test("a live token's held writes still land", async () => {
     const { token } = await freshToken();
     const res = await heldWrite("POST", "/api/shares", { html: PAGE, title: "on time" }, token, async () => {});
@@ -172,6 +181,7 @@ describe("a token revoked right after it authenticates", () => {
     ["rate-limited", 429, () => { i.env.WRITE_LIMIT = { limit: async () => ({ success: false }) } as RateLimit; }, "/api/shares/Missing00000"],
     ["without a write limit", 503, () => { i.env.WRITE_LIMIT = undefined as unknown as RateLimit; }, "/api/shares/Missing00000"],
     ["on a malformed path", 404, () => {}, "/api/shares/bad"],
+    ["whose rate limit check fails", 500, () => { i.env.WRITE_LIMIT = { limit: async () => { throw new Error("limiter down"); } } as RateLimit; }, "/api/shares/Missing00000"],
   ] as const)("a write %s answers %i to a live token and 401 to a revoked one", async (_, live, setUp, path) => {
     const limit = i.env.WRITE_LIMIT;
     const send = (token: string) => i.call(path, { method: "PATCH", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ title: "x" }) });

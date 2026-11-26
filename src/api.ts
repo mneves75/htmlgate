@@ -39,10 +39,13 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, c
   try {
     return await route(req, store, cfg, token, url, parts);
   } catch (e) {
-    if (!(e instanceof HttpError)) throw e;
     // A write that fails for a token revoked mid-request answers 401 whatever the cause, so the cause reveals nothing.
-    const err = method !== "GET" && e.status !== 401 ? await unchanged(store, token, e) : e;
-    return fail(err.status, err.code, err.message);
+    // If the liveness read itself fails, the original error stands: nothing was written either way.
+    if (method !== "GET" && !(e instanceof HttpError && e.status === 401) && !(await store.tokenLive(token.id).catch(() => true))) {
+      return fail(401, "unauthorized", "This token was revoked.");
+    }
+    if (e instanceof HttpError) return fail(e.status, e.code, e.message);
+    throw e;
   } finally {
     if (method !== "GET") ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
   }
@@ -321,10 +324,6 @@ function parseFields(body: Record<string, unknown>, allowed: (keyof Fields)[]): 
 const notFound = () => new HttpError(404, "not_found", "No such Share.");
 
 /** Why a write that passed its checks changed nothing: its token was revoked while the request ran, or `otherwise`. */
-async function unchanged(store: Store, token: TokenRow, otherwise: HttpError): Promise<HttpError> {
-  return (await store.tokenLive(token.id)) ? otherwise : new HttpError(401, "unauthorized", "This token was revoked.");
-}
-
 const noRoom = () =>
   new HttpError(507, "quota_exceeded", "This Instance has no room left for Shares. Deleted Shares count until they expire: tell the Operator.");
 

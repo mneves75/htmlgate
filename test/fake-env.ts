@@ -25,7 +25,7 @@ export function fakeEnv(opts: { before?: string; through?: string; seed?: (sqlit
     sqlite.exec(readFileSync(join(dir, f), "utf8"));
   }
 
-  const hooks: { between?: (index: number, sql: string) => void; failBucketDelete?: boolean } = {};
+  const hooks: { between?: (index: number, sql: string) => void; failBucketDelete?: boolean; failBucketPut?: boolean } = {};
   const prepare = (sql: string, values: SQLInputValue[] = []): FakeStatement => ({
     sql, values,
     bind: (...bound) => prepare(sql, bound),
@@ -60,6 +60,7 @@ export function fakeEnv(opts: { before?: string; through?: string; seed?: (sqlit
   const objects = new Map<string, Uint8Array>();
   const bucket = {
     put: async (key: string, value: string | Uint8Array) => {
+      if (hooks.failBucketPut) throw new Error("bucket unavailable");
       objects.set(key, typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value));
     },
     get: async (key: string, opts?: { range?: { offset: number; length: number } }) => {

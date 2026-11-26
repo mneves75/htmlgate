@@ -132,6 +132,24 @@ describe("a token revoked right after it authenticates", () => {
       .toEqual({ title: start.title, public: start.public, latest: start.latest_version, changed_at: start.changed_at });
   });
 
+  test("a write that fails in storage answers 401 too, for an existing and a missing Share alike", async () => {
+    const slug = (await i.api("POST", "/api/shares", { html: PAGE, title: "kept" })).json.slug as string;
+    const statuses: Record<string, number> = {};
+    for (const [name, target] of [["existing", slug], ["missing", "Missing00000"]] as const) {
+      const { token, id } = await freshToken();
+      revokeOnAuth(i, id);
+      i.fake.hooks.failBucketPut = true;
+      try {
+        statuses[name] = (await i.call(`/api/shares/${target}`, {
+          method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ html: "<p>late</p>" }),
+        })).status;
+      } finally {
+        i.fake.hooks.failBucketPut = false;
+      }
+    }
+    expect(statuses).toEqual({ existing: 401, missing: 401 });
+  });
+
   test("a PUT on a full Instance answers 401, not quota_exceeded", async () => {
     const full = await startInstance({ STORAGE_LIMIT_BYTES: String(VERSION_FLOOR + VERSION_FLOOR / 2) });
     const slug = (await full.api("POST", "/api/shares", { html: PAGE, title: "fills it" })).json.slug as string;

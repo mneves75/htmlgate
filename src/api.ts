@@ -342,7 +342,7 @@ async function create(req: Request, store: Store, cfg: Config, token: TokenRow, 
 }
 
 async function replace(req: Request, store: Store, cfg: Config, token: TokenRow, slug: string, url: URL) {
-  await mustShare(store, cfg, slug);
+  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
   const { f, body } = await readPublish(req, url);
   if (body === undefined) throw new HttpError(400, "html_required", "PUT needs html or a zip. Use PATCH to change only fields.");
   const now = Date.now();

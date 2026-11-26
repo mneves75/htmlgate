@@ -46,7 +46,7 @@ Each fix was written test first: its new tests failed on the code before the fix
 | `pnpm run verify:model` | StoreLifecycle 791,308 states and RevokeAllContainment 16 states, 0 invariant violations; all 9 historical bug replays fail on their invariant as expected |
 | `pnpm typecheck` | Pass |
 | `node scripts/mutate.mjs --check` | 273 unique anchors |
-| Mutations added by this work, each run with `--only` | Every planted violation caught by an assertion: 6 for writes in flight, 3 for the token revoke route and the missing-Share answers, 2 for the CLI caps |
+| Mutations added by this work, each run with `--only` | Every planted violation caught by an assertion: 6 for writes in flight, 4 for the token revoke route and the missing-Share answers, 2 for the CLI caps |
 | Independent review (Codex gpt-6.2-sol, high) | Round 1 found three issues, all fixed. Round 2 found none |
 | Independent review (`reviewer` agent) | One Low issue (the empty PATCH), fixed with a test |
 | Full `pnpm run check`, full `pnpm run mutate`, `pnpm run bench` | Recorded in the pull request for the final commit |

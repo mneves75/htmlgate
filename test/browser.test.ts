@@ -201,7 +201,8 @@ describe("the token page in a real browser", () => {
     await ab("click", 'details[data-token-name="browser revoke"] summary');
     await ab("wait", "--text", "stop working on their next request");
     await ab("find", "role", "button", "click", "--name", "Revoke browser revoke");
-    await ab("wait", "--text", "Revoked");
+    // Other tests revoke the same Author's tokens, so "Revoked" alone may already be on the page: wait for this row.
+    await ab("wait", "--fn", `!document.querySelector('details[data-token-name="browser revoke"]') && [...document.querySelectorAll('li.token.revoked .t-name')].some((e) => e.textContent.startsWith('browser revoke'))`);
     expect((await api(token)("GET", "/api/shares")).status).toBe(401);
   });
 

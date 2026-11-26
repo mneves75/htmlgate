@@ -93,6 +93,43 @@ describe("a write in flight when its token is revoked", () => {
   });
 });
 
+describe("a token revoked right after it authenticates", () => {
+  /** Revokes the token inside its own lookup batch, so the request is authenticated and the token is revoked before any route runs. */
+  function revokeOnAuth(id: string) {
+    i.fake.hooks.between = (n, sql) => {
+      if (n !== 1 || !sql.startsWith("UPDATE tokens SET last_used_at")) return;
+      i.fake.sqlite.prepare("UPDATE tokens SET revoked_at = ? WHERE id = ?").run(Date.now(), id);
+      i.fake.hooks.between = undefined;
+    };
+  }
+
+  test.each([
+    ["PUT", "", { html: "<p>late</p>" }],
+    ["PATCH", "", { title: "late" }],
+    ["POST", "/visibility", { public: true }],
+    ["DELETE", "", undefined],
+  ] as const)("%s %s answers 401 for an existing and a missing Share alike, and changes nothing", async (method, suffix, body) => {
+    const slug = (await i.api("POST", "/api/shares", { html: PAGE, title: "kept" })).json.slug as string;
+    const start = (await i.api("GET", `/api/shares/${slug}`)).json;
+    const statuses: Record<string, number> = {};
+    for (const [name, target] of [["existing", slug], ["missing", "Missing00000"]] as const) {
+      const { token, id } = await freshToken();
+      revokeOnAuth(id);
+      const res = await i.call(`/api/shares/${target}${suffix}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      expect(i.fake.hooks.between, "the token was revoked during authentication").toBeUndefined();
+      statuses[name] = res.status;
+    }
+    expect(statuses).toEqual({ existing: 401, missing: 401 });
+    const end = (await i.api("GET", `/api/shares/${slug}`)).json;
+    expect({ title: end.title, public: end.public, latest: end.latest_version, changed_at: end.changed_at })
+      .toEqual({ title: start.title, public: start.public, latest: start.latest_version, changed_at: start.changed_at });
+  });
+});
+
 describe("the Store refuses every write from a revoked token", () => {
   test("delete, field and visibility changes and a new Version change nothing once the token is revoked", async () => {
     const slug = (await i.api("POST", "/api/shares", { html: PAGE, title: "store" })).json.slug as string;

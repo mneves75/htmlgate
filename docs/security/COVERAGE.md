@@ -29,10 +29,10 @@ Profile: standard. Baseline `e70b6ff`. This was one pass, the first recorded und
 
 | Tool | Baseline (`e70b6ff`) | After |
 |---|---|---|
-| gitleaks, working tree | 6 hits: 5 dummy test fixtures, 1 in a git-ignored local Instance file that was never committed | Same 6, at `36b3be3` |
-| gitleaks, history | 5 hits, all dummy test fixtures | Same 5 dummy fixtures, at `36b3be3` |
-| trufflehog (verified only) | 0 | 0, history through `36b3be3` |
-| `pnpm audit` | No known vulnerabilities | No known vulnerabilities, at `36b3be3` (no dependency changed) |
+| gitleaks, working tree | 6 hits: 5 dummy test fixtures, 1 in a git-ignored local Instance file that was never committed | Same 6, at `51738d2` |
+| gitleaks, history | 5 hits, all dummy test fixtures | Same 5 dummy fixtures, at `51738d2` |
+| trufflehog (verified only) | 0 | 0, history through `51738d2` |
+| `pnpm audit` | No known vulnerabilities | No known vulnerabilities, at `51738d2` (no dependency changed) |
 | actionlint | 0 issues | 0 issues (no workflow changed) |
 | trivy | Not run: its first run needs a vulnerability database download | Not run |
 
@@ -45,8 +45,8 @@ Each fix was written test first: its new tests failed on the code before the fix
 | `pnpm run lint` | 0 violations |
 | `pnpm run verify:model` | StoreLifecycle 791,308 states and RevokeAllContainment 16 states, 0 invariant violations; all 9 historical bug replays fail on their invariant as expected |
 | `pnpm typecheck` | Pass |
-| `node scripts/mutate.mjs --check` | 271 unique anchors |
-| Mutations added by this work, each run with `--only` | Every planted violation caught by an assertion: 7 for revocation (one per write predicate, the token-revoke predicate, the `401` mapping), 2 for the CLI caps |
+| `node scripts/mutate.mjs --check` | 272 unique anchors |
+| Mutations added by this work, each run with `--only` | Every planted violation caught by an assertion: 8 for revocation (one per write predicate, the token-revoke predicate, the `401` answer, the `503` answer when the check fails), 2 for the CLI caps |
 | Independent review (Codex gpt-6.2-sol, high) | Round 1 found three issues, all fixed. Round 2 found none |
 | Independent review (`reviewer` agent) | One Low issue (the empty PATCH), fixed with a test |
 | Full `pnpm run check`, full `pnpm run mutate`, `pnpm run bench` | Recorded in the pull request for the final commit |

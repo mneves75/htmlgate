@@ -8,7 +8,7 @@ This was a source-first audit of the Worker (`src/`), the CLI (`packages/cli/src
 
 | ID | Title | Status | Severity | CWE | Fix |
 |---|---|---|---|---|---|
-| H2-1 | Revoking a token did not stop a write whose body was still uploading | Fixed | Low | CWE-613, CWE-367 | `e76024d`, `3c2519c`, `ddcf5e4`, `dc3ada7`, `cd6a57e`, `36b3be3`, `51738d2`, `16f6c76` |
+| H2-1 | Revoking a token did not stop a write whose body was still uploading | Fixed | Low | CWE-613, CWE-367 | `e76024d`, `3c2519c`, `ddcf5e4`, `dc3ada7`, `cd6a57e`, `36b3be3`, `51738d2`, `16f6c76`, `f9127d9` |
 | H4-1 | `htmlgate list` kept every page in memory with no total cap | Fixed | Low | CWE-770 | `9e6df7a`, `531d7cd`, `e836545` |
 | H1-1 | People routes depend on the zone's URL normalization staying on | Holds on the live zone (checked 2026-11-26) | — | CWE-863 | — |
 | H5-1 | The Access application does not pin identity providers | Holds on the live organization (checked 2026-11-26) | — | CWE-287 | — |
@@ -39,7 +39,7 @@ The first two depend on deployment facts outside the repository. On 2026-11-26 t
 
 - **H1-1:** the zone's **Rules → Settings → Normalize incoming URLs** is on (incoming URLs, Cloudflare normalization). Keep it on for the Instance hostname. Cloudflare documents that normalization runs before Access and Workers. The Worker cannot see the raw path, so it cannot enforce this itself. Every gated people route (`/`, `/tokens`, `/metrics`, `/erase`, `/s/*`) still requires a verified Access JWT for an allowlisted email; Public Shares at `/p/*` and ticketed site files at `/f/*` remain outside Access as designed.
 - **H5-1:** the Access application accepts every provider the organization enables. Each one proves the user owns the email address: a one-time PIN sent to the address, Cloudflare sign-in limited to the account's members, and Google. Pin the application to a chosen provider before adding one that does not verify email, such as a generic OIDC or SAML provider.
-- **H3-1:** serving a compressed site file costs inflate CPU in proportion to the file's unzipped size, which `SITE_LIMITS.fileBytes` caps at 5 MiB, whatever the compression ratio. Measured with the same `DecompressionStream("deflate-raw")` API in Node 26 (not workerd), a 5 MiB file took a median of 3.4 ms of CPU at a 1,026:1 ratio, 3.6 ms at 411:1 and 4.0 ms stored incompressible. A ratio cap would not lower that cost, so none is added.
+- **H3-1:** serving a compressed site file costs inflate CPU bounded by both the file's unzipped size (`SITE_LIMITS.fileBytes`, 5 MiB) and the compressed archive's size (`SITE_LIMITS.zipBytes`, 5 MiB), whatever the compression ratio. Measured with the same `DecompressionStream("deflate-raw")` API in Node 26 (not workerd), a 5 MiB file took a median of 3.4 ms of CPU at a 1,026:1 ratio, 3.6 ms at 411:1 and 4.0 ms stored incompressible. A ratio cap would not lower that cost, so none is added.
 - **H4-2:** kept as it is. The CLI sends a token only to the origin it was saved for (or to the origin paired with `HTMLGATE_URL` when `HTMLGATE_TOKEN` is set in the environment). When a project's config names an origin for which the user has no saved credential, the CLI stops with "Not signed in to <origin> (from .htmlgate/config)", which names both the origin and where it came from, and signing in there takes the user's own `htmlgate login`.
 
 ## Hardening notes (not vulnerabilities)

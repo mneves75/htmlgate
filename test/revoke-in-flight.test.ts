@@ -150,6 +150,42 @@ describe("a token revoked right after it authenticates", () => {
     expect(statuses).toEqual({ existing: 401, missing: 401 });
   });
 
+  test("when the token re-check itself fails, an existing and a missing Share answer the same 503", async () => {
+    const slug = (await i.api("POST", "/api/shares", { html: PAGE, title: "kept" })).json.slug as string;
+    const statuses: Record<string, number> = {};
+    for (const [name, target] of [["existing", slug], ["missing", "Missing00000"]] as const) {
+      const { token, id } = await freshToken();
+      revokeOnAuth(i, id);
+      i.fake.hooks.failFirst = (sql) => sql.startsWith("SELECT 1 AS n FROM tokens");
+      try {
+        statuses[name] = (await i.call(`/api/shares/${target}`, {
+          method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ html: "<p>late</p>" }),
+        })).status;
+      } finally {
+        i.fake.hooks.failFirst = undefined;
+      }
+    }
+    expect(statuses).toEqual({ existing: 503, missing: 503 });
+  });
+
+  test.each([
+    ["rate-limited", 429, () => { i.env.WRITE_LIMIT = { limit: async () => ({ success: false }) } as RateLimit; }, "/api/shares/Missing00000"],
+    ["without a write limit", 503, () => { i.env.WRITE_LIMIT = undefined as unknown as RateLimit; }, "/api/shares/Missing00000"],
+    ["on a malformed path", 404, () => {}, "/api/shares/bad"],
+  ] as const)("a write %s answers %i to a live token and 401 to a revoked one", async (_, live, setUp, path) => {
+    const limit = i.env.WRITE_LIMIT;
+    const send = (token: string) => i.call(path, { method: "PATCH", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ title: "x" }) });
+    setUp();
+    try {
+      expect((await send((await freshToken()).token)).status).toBe(live);
+      const { token, id } = await freshToken();
+      revokeOnAuth(i, id);
+      expect((await send(token)).status).toBe(401);
+    } finally {
+      i.env.WRITE_LIMIT = limit;
+    }
+  });
+
   test("a PUT on a full Instance answers 401, not quota_exceeded", async () => {
     const full = await startInstance({ STORAGE_LIMIT_BYTES: String(VERSION_FLOOR + VERSION_FLOOR / 2) });
     const slug = (await full.api("POST", "/api/shares", { html: PAGE, title: "fills it" })).json.slug as string;

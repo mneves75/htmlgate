@@ -30,25 +30,38 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, c
   if (!token) return fail(401, "unauthorized", "Send a valid token as 'Authorization: Bearer hg_...'.");
   if (token.author !== cfg.author) return fail(401, "unauthorized", "This token belongs to no Author on this Instance.");
 
-  if (method !== "GET") {
-    if (!env.WRITE_LIMIT) return fail(503, "server_misconfigured", "This Instance is missing its write limit. The Operator must run setup.");
-    const { success } = await env.WRITE_LIMIT.limit({ key: token.id });
-    if (!success) return fail(429, "rate_limited", "Too many changes from this token. Wait a minute.", { "retry-after": "60" });
+  if (method === "GET") {
+    try {
+      return await route(req, store, cfg, token, url, parts);
+    } catch (e) {
+      if (e instanceof HttpError) return fail(e.status, e.code, e.message);
+      throw e;
+    }
   }
 
-  try {
-    return await route(req, store, cfg, token, url, parts);
-  } catch (e) {
-    // A write that fails for a token revoked mid-request answers 401 whatever the cause, so the cause reveals nothing.
-    // If the liveness read itself fails, the original error stands: nothing was written either way.
-    if (method !== "GET" && !(e instanceof HttpError && e.status === 401) && !(await store.tokenLive(token.id).catch(() => true))) {
-      return fail(401, "unauthorized", "This token was revoked.");
+  let answer: Response | undefined;
+  let error: unknown;
+  if (!env.WRITE_LIMIT) answer = fail(503, "server_misconfigured", "This Instance is missing its write limit. The Operator must run setup.");
+  else if (!(await env.WRITE_LIMIT.limit({ key: token.id })).success) answer = fail(429, "rate_limited", "Too many changes from this token. Wait a minute.", { "retry-after": "60" });
+  else {
+    try {
+      answer = await route(req, store, cfg, token, url, parts);
+    } catch (e) {
+      if (e instanceof HttpError) answer = fail(e.status, e.code, e.message);
+      else error = e;
+    } finally {
+      ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
     }
-    if (e instanceof HttpError) return fail(e.status, e.code, e.message);
-    throw e;
-  } finally {
-    if (method !== "GET") ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
   }
+  // Each write decides at commit whether its token is live. A write that did not land answers 401 if the token is now
+  // revoked, whatever else went wrong, so a revoked token learns nothing else; if that check fails, the answer is 503.
+  if (answer?.ok !== true && answer?.status !== 401) {
+    const live = await store.tokenLive(token.id).catch(() => null);
+    if (live === null) return fail(503, "busy", "The Instance could not check this token. Try again.");
+    if (!live) return fail(401, "unauthorized", "This token was revoked.");
+  }
+  if (answer) return answer;
+  throw error;
 }
 
 async function route(req: Request, store: Store, cfg: Config, token: TokenRow, url: URL, parts: string[]): Promise<Response> {

@@ -39,8 +39,10 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, c
   try {
     return await route(req, store, cfg, token, url, parts);
   } catch (e) {
-    if (e instanceof HttpError) return fail(e.status, e.code, e.message);
-    throw e;
+    if (!(e instanceof HttpError)) throw e;
+    // A write that fails for a token revoked mid-request answers 401 whatever the cause, so the cause reveals nothing.
+    const err = method !== "GET" && e.status !== 401 ? await unchanged(store, token, e) : e;
+    return fail(err.status, err.code, err.message);
   } finally {
     if (method !== "GET") ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
   }
@@ -86,7 +88,7 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
     }
     if (b !== undefined && TOKEN_ID.test(b) && c === undefined && method === "DELETE") {
       if (await store.revokeToken(cfg.author, b, Date.now(), token.id)) return noContent();
-      throw await unchanged(store, token, new HttpError(404, "not_found", "No live token has that id."));
+      throw new HttpError(404, "not_found", "No live token has that id.");
     }
   }
   return fail(404, "not_found", "No such request. See /api/onboard.");
@@ -337,12 +339,12 @@ async function create(req: Request, store: Store, cfg: Config, token: TokenRow, 
     tokenId: token.id, now, limit: cfg.storageLimit, expiry: expiryOf(f, cfg, now),
   });
   if (created === "full") throw noRoom();
-  if (created === "gone") throw await unchanged(store, token, new HttpError(503, "busy", "The upload took too long. Try again."));
+  if (created === "gone") throw new HttpError(503, "busy", "The upload took too long. Try again.");
   return shareJson(await mustShare(store, cfg, slug), url, 201);
 }
 
 async function replace(req: Request, store: Store, cfg: Config, token: TokenRow, slug: string, url: URL) {
-  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
+  await mustShare(store, cfg, slug);
   const { f, body } = await readPublish(req, url);
   if (body === undefined) throw new HttpError(400, "html_required", "PUT needs html or a zip. Use PATCH to change only fields.");
   const now = Date.now();
@@ -355,7 +357,7 @@ async function replace(req: Request, store: Store, cfg: Config, token: TokenRow,
   });
   if (added === "full") throw noRoom();
   if (added === "gone") {
-    throw await unchanged(store, token, (await store.share(cfg.author, slug)) ? new HttpError(503, "busy", "The upload took too long. Try again.") : notFound());
+    throw (await store.share(cfg.author, slug)) ? new HttpError(503, "busy", "The upload took too long. Try again.") : notFound();
   }
   return shareJson(await mustShare(store, cfg, slug), url);
 }
@@ -363,13 +365,13 @@ async function replace(req: Request, store: Store, cfg: Config, token: TokenRow,
 async function patch(req: Request, store: Store, cfg: Config, token: TokenRow, slug: string, url: URL) {
   const f = parseFields(await readBody(req, true), ["title", "description", "metadata", "expires_at"]);
   if (Object.keys(f).length === 0) throw new HttpError(400, "invalid_arg", "PATCH needs title, description, metadata or expires_at.");
-  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
+  await mustShare(store, cfg, slug);
   const changed = await store.updateFields(cfg.author, slug, {
     title: f.title, description: f.description,
     tags: f.metadata !== undefined ? JSON.stringify(f.metadata) : undefined,
     expiresAt: f.expires_at,
   }, token.id, Date.now());
-  if (!changed) throw await unchanged(store, token, notFound());
+  if (!changed) throw notFound();
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 
@@ -387,7 +389,7 @@ async function zipOf(store: Store, cfg: Config, slug: string, n: number) {
 }
 
 async function remove(store: Store, cfg: Config, token: TokenRow, slug: string) {
-  if (!(await store.deleteShare(cfg.author, slug, token.id, Date.now()))) throw await unchanged(store, token, notFound());
+  if (!(await store.deleteShare(cfg.author, slug, token.id, Date.now()))) throw notFound();
   return noContent();
 }
 
@@ -396,8 +398,8 @@ async function visibility(req: Request, store: Store, cfg: Config, token: TokenR
   if (Object.keys(body).length !== 1 || typeof body.public !== "boolean") {
     throw new HttpError(400, "invalid_arg", "Send exactly {\"public\": true} or {\"public\": false}.");
   }
-  if (!(await store.share(cfg.author, slug))) throw await unchanged(store, token, notFound());
-  if (!(await store.setPublic(cfg.author, slug, body.public, token.id, Date.now()))) throw await unchanged(store, token, notFound());
+  await mustShare(store, cfg, slug);
+  if (!(await store.setPublic(cfg.author, slug, body.public, token.id, Date.now()))) throw notFound();
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 

@@ -1,6 +1,7 @@
 // A token revoked while one of its writes is still in progress must not land that write: the Worker checks the token
 // before it reads the body, so each Store write re-checks at commit that the token is still live.
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { VERSION_FLOOR } from "../src/store";
 import { AUTHOR, PAGE, startInstance, stopAccess, type Instance } from "./reviewer-beta10-harness";
 
 let i: Instance;
@@ -95,26 +96,28 @@ describe("a write in flight when its token is revoked", () => {
 
 describe("a token revoked right after it authenticates", () => {
   /** Revokes the token inside its own lookup batch, so the request is authenticated and the token is revoked before any route runs. */
-  function revokeOnAuth(id: string) {
-    i.fake.hooks.between = (n, sql) => {
+  function revokeOnAuth(on: Instance, id: string) {
+    on.fake.hooks.between = (n, sql) => {
       if (n !== 1 || !sql.startsWith("UPDATE tokens SET last_used_at")) return;
-      i.fake.sqlite.prepare("UPDATE tokens SET revoked_at = ? WHERE id = ?").run(Date.now(), id);
-      i.fake.hooks.between = undefined;
+      on.fake.sqlite.prepare("UPDATE tokens SET revoked_at = ? WHERE id = ?").run(Date.now(), id);
+      on.fake.hooks.between = undefined;
     };
   }
 
   test.each([
     ["PUT", "", { html: "<p>late</p>" }],
+    ["PUT", "", {}],
     ["PATCH", "", { title: "late" }],
+    ["PATCH", "", {}],
     ["POST", "/visibility", { public: true }],
     ["DELETE", "", undefined],
-  ] as const)("%s %s answers 401 for an existing and a missing Share alike, and changes nothing", async (method, suffix, body) => {
+  ] as const)("%s %s %j answers 401 for an existing and a missing Share alike, and changes nothing", async (method, suffix, body) => {
     const slug = (await i.api("POST", "/api/shares", { html: PAGE, title: "kept" })).json.slug as string;
     const start = (await i.api("GET", `/api/shares/${slug}`)).json;
     const statuses: Record<string, number> = {};
     for (const [name, target] of [["existing", slug], ["missing", "Missing00000"]] as const) {
       const { token, id } = await freshToken();
-      revokeOnAuth(id);
+      revokeOnAuth(i, id);
       const res = await i.call(`/api/shares/${target}${suffix}`, {
         method,
         headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
@@ -127,6 +130,22 @@ describe("a token revoked right after it authenticates", () => {
     const end = (await i.api("GET", `/api/shares/${slug}`)).json;
     expect({ title: end.title, public: end.public, latest: end.latest_version, changed_at: end.changed_at })
       .toEqual({ title: start.title, public: start.public, latest: start.latest_version, changed_at: start.changed_at });
+  });
+
+  test("a PUT on a full Instance answers 401, not quota_exceeded", async () => {
+    const full = await startInstance({ STORAGE_LIMIT_BYTES: String(VERSION_FLOOR + VERSION_FLOOR / 2) });
+    const slug = (await full.api("POST", "/api/shares", { html: PAGE, title: "fills it" })).json.slug as string;
+    expect((await full.api("PUT", `/api/shares/${slug}`, { html: PAGE })).status, "a live token sees the cap").toBe(507);
+    const { newToken, randomHex, sha256Hex } = await import("../src/ids");
+    const token = newToken();
+    const id = randomHex(6);
+    await full.store.createToken(id, AUTHOR, "full", await sha256Hex(token), Date.now());
+    revokeOnAuth(full, id);
+    const res = await full.call(`/api/shares/${slug}`, {
+      method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ html: PAGE }),
+    });
+    expect(full.fake.hooks.between, "the token was revoked during authentication").toBeUndefined();
+    expect(res.status).toBe(401);
   });
 });
 

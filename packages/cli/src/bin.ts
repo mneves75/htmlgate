@@ -235,6 +235,9 @@ async function update(p: Paths, args: string[], v: Record<string, unknown>) {
 }
 
 const MAX_LIST_PAGES = 500;
+// A listing keeps every row until it prints. Real rows are a few hundred characters, so past this the Instance is
+// trying to exhaust memory rather than answering.
+const MAX_LIST_CHARS = 64 * 1024 * 1024;
 
 async function listShares(p: Paths, args: string[], v: Record<string, unknown>) {
   maxArgs(args, 0);
@@ -244,18 +247,23 @@ async function listShares(p: Paths, args: string[], v: Record<string, unknown>) 
   const limit = limitRaw === undefined ? Infinity : Number(limitRaw);
   const metadata = parseMetadata(list(v.metadata));
   const api = await connect(p);
-  const rows: Share[] = [];
+  const out: (Pick<Share, "slug" | "title" | "url" | "public" | "metadata"> & { updated_at: string; expires_at: string | null })[] = [];
+  let chars = 0;
   const pageSize = Number.isFinite(limit) ? Math.min(200, limit) : 200;
-  for (let page = 1; rows.length < limit; page++) {
+  for (let page = 1; out.length < limit; page++) {
     if (page > MAX_LIST_PAGES) throw new CliError("bad_response", `The Instance kept returning pages past ${MAX_LIST_PAGES}.`);
     const res = await api.listShares({ page, pageSize, metadata, ...(v.public ? { public: true } : v.gated ? { public: false } : {}) });
-    rows.push(...res.data);
+    for (const d of res.data.slice(0, limit - out.length)) {
+      const row = {
+        slug: d.slug, title: d.title, url: d.url, public: d.public, updated_at: new Date(d.updated_at).toISOString(), metadata: d.metadata ?? {},
+        expires_at: typeof d.expires_at === "number" ? new Date(d.expires_at).toISOString() : null,
+      };
+      chars += JSON.stringify(row).length;
+      if (chars > MAX_LIST_CHARS) throw new CliError("bad_response", `The Instance's list ran past ${MAX_LIST_CHARS} characters, which no real list needs.`);
+      out.push(row);
+    }
     if (page >= res.totalPages || res.data.length === 0) break;
   }
-  const out = rows.slice(0, limit).map((d) => ({
-    slug: d.slug, title: d.title, url: d.url, public: d.public, updated_at: new Date(d.updated_at).toISOString(), metadata: d.metadata ?? {},
-    expires_at: typeof d.expires_at === "number" ? new Date(d.expires_at).toISOString() : null,
-  }));
   emit(out, () => {
     if (out.length === 0) return "(no shares)\n";
     if (process.stdout.isTTY) {
@@ -266,9 +274,12 @@ async function listShares(p: Paths, args: string[], v: Record<string, unknown>) 
   });
 }
 
+// A column pads to its widest cell up to this, so one long cell cannot pad every other row to its length.
+const MAX_COLUMN_WIDTH = 200;
+
 function table(cells: string[][], head: string[]): string {
   const rows = cells.map((r) => r.map(cell));
-  const widths = head.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? "").length)));
+  const widths = head.map((h, i) => rows.reduce((w, r) => Math.max(w, Math.min((r[i] ?? "").length, MAX_COLUMN_WIDTH)), h.length));
   const line = (r: string[]) => r.map((c, i) => c.padEnd(widths[i]!)).join("  ").trimEnd();
   return [line(head), ...rows.map(line)].join("\n") + "\n";
 }

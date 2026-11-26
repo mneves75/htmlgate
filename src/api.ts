@@ -30,20 +30,40 @@ export async function handleApi(req: Request, env: Env, ctx: ExecutionContext, c
   if (!token) return fail(401, "unauthorized", "Send a valid token as 'Authorization: Bearer hg_...'.");
   if (token.author !== cfg.author) return fail(401, "unauthorized", "This token belongs to no Author on this Instance.");
 
-  if (method !== "GET") {
-    if (!env.WRITE_LIMIT) return fail(503, "server_misconfigured", "This Instance is missing its write limit. The Operator must run setup.");
-    const { success } = await env.WRITE_LIMIT.limit({ key: token.id });
-    if (!success) return fail(429, "rate_limited", "Too many changes from this token. Wait a minute.", { "retry-after": "60" });
+  if (method === "GET") {
+    try {
+      return await route(req, store, cfg, token, url, parts);
+    } catch (e) {
+      if (e instanceof HttpError) return fail(e.status, e.code, e.message);
+      throw e;
+    }
   }
 
+  let answer: Response | undefined;
+  let error: unknown;
   try {
-    return await route(req, store, cfg, token, url, parts);
+    if (!env.WRITE_LIMIT) answer = fail(503, "server_misconfigured", "This Instance is missing its write limit. The Operator must run setup.");
+    else if (!(await env.WRITE_LIMIT.limit({ key: token.id })).success) answer = fail(429, "rate_limited", "Too many changes from this token. Wait a minute.", { "retry-after": "60" });
+    else {
+      try {
+        answer = await route(req, store, cfg, token, url, parts);
+      } finally {
+        ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
+      }
+    }
   } catch (e) {
-    if (e instanceof HttpError) return fail(e.status, e.code, e.message);
-    throw e;
-  } finally {
-    if (method !== "GET") ctx.waitUntil(store.emptyTrash().catch((e) => console.error("trash", e)));
+    if (e instanceof HttpError) answer = fail(e.status, e.code, e.message);
+    else error = e;
   }
+  // Each write decides at commit whether its token is live. A write that did not land answers 401 if the token is now
+  // revoked, whatever else went wrong, so a revoked token learns nothing else; if that check fails, the answer is 503.
+  if (answer?.ok !== true && answer?.status !== 401) {
+    const live = await store.tokenLive(token.id).catch(() => null);
+    if (live === null) return fail(503, "busy", "The Instance could not check this token. Try again.");
+    if (!live) return fail(401, "unauthorized", "This token was revoked.");
+  }
+  if (answer) return answer;
+  throw error;
 }
 
 async function route(req: Request, store: Store, cfg: Config, token: TokenRow, url: URL, parts: string[]): Promise<Response> {
@@ -85,7 +105,8 @@ async function route(req: Request, store: Store, cfg: Config, token: TokenRow, u
       return json(200, { data: await store.listTokens(cfg.author) });
     }
     if (b !== undefined && TOKEN_ID.test(b) && c === undefined && method === "DELETE") {
-      return (await store.revokeToken(cfg.author, b, Date.now())) ? noContent() : fail(404, "not_found", "No live token has that id.");
+      if (await store.revokeToken(cfg.author, b, Date.now(), token.id)) return noContent();
+      throw new HttpError(404, "not_found", "No live token has that id.");
     }
   }
   return fail(404, "not_found", "No such request. See /api/onboard.");
@@ -315,6 +336,9 @@ function parseFields(body: Record<string, unknown>, allowed: (keyof Fields)[]): 
   return out;
 }
 
+const notFound = () => new HttpError(404, "not_found", "No such Share.");
+
+/** Why a write that passed its checks changed nothing: its token was revoked while the request ran, or `otherwise`. */
 const noRoom = () =>
   new HttpError(507, "quota_exceeded", "This Instance has no room left for Shares. Deleted Shares count until they expire: tell the Operator.");
 
@@ -346,19 +370,22 @@ async function replace(req: Request, store: Store, cfg: Config, token: TokenRow,
     tokenId: token.id, now, limit: cfg.storageLimit, expiry: expiryOf(f, cfg, now),
   });
   if (added === "full") throw noRoom();
-  if (added === "gone") throw (await store.share(cfg.author, slug)) ? new HttpError(503, "busy", "The upload took too long. Try again.") : new HttpError(404, "not_found", "No such Share.");
+  if (added === "gone") {
+    throw (await store.share(cfg.author, slug)) ? new HttpError(503, "busy", "The upload took too long. Try again.") : notFound();
+  }
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 
 async function patch(req: Request, store: Store, cfg: Config, token: TokenRow, slug: string, url: URL) {
   const f = parseFields(await readBody(req, true), ["title", "description", "metadata", "expires_at"]);
-  await mustShare(store, cfg, slug);
   if (Object.keys(f).length === 0) throw new HttpError(400, "invalid_arg", "PATCH needs title, description, metadata or expires_at.");
-  await store.updateFields(cfg.author, slug, {
+  await mustShare(store, cfg, slug);
+  const changed = await store.updateFields(cfg.author, slug, {
     title: f.title, description: f.description,
     tags: f.metadata !== undefined ? JSON.stringify(f.metadata) : undefined,
     expiresAt: f.expires_at,
   }, token.id, Date.now());
+  if (!changed) throw notFound();
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 
@@ -376,7 +403,7 @@ async function zipOf(store: Store, cfg: Config, slug: string, n: number) {
 }
 
 async function remove(store: Store, cfg: Config, token: TokenRow, slug: string) {
-  if (!(await store.deleteShare(cfg.author, slug, token.id, Date.now()))) throw new HttpError(404, "not_found", "No such Share.");
+  if (!(await store.deleteShare(cfg.author, slug, token.id, Date.now()))) throw notFound();
   return noContent();
 }
 
@@ -386,7 +413,7 @@ async function visibility(req: Request, store: Store, cfg: Config, token: TokenR
     throw new HttpError(400, "invalid_arg", "Send exactly {\"public\": true} or {\"public\": false}.");
   }
   await mustShare(store, cfg, slug);
-  await store.setPublic(cfg.author, slug, body.public, token.id, Date.now());
+  if (!(await store.setPublic(cfg.author, slug, body.public, token.id, Date.now()))) throw notFound();
   return shareJson(await mustShare(store, cfg, slug), url);
 }
 

@@ -1,10 +1,11 @@
 // The htmlgate CLI against stand-in servers: where its token may go, and what it refuses to trust.
+import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { htmlgate } from "./helpers";
+import { CLI, htmlgate } from "./helpers";
 
 const TOKEN = "hg_" + "T".repeat(40);
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
@@ -87,6 +88,62 @@ describe("an answer too large to be the API's is refused", () => {
     expect(Date.now() - started).toBeLessThan(20_000);
     expect(sent).toBeLessThan(256);
   });
+
+  test("pages that are each small enough but add up past what a real list holds make list exit 8", async () => {
+    // Each page stays under the per-answer cap; together they would keep ~77 MiB of titles in memory.
+    const title = "x".repeat(64 * 1024);
+    const body = (page: number) => JSON.stringify({
+      data: Array.from({ length: 200 }, (_, i) => ({ ...share(page * 200 + i), title })),
+      pagination: { page, page_size: 200, total: 1200, total_pages: 6 },
+    });
+    const pages: number[] = [];
+    const s = await serve((req, res) => {
+      const page = Number(new URL(req.url!, "http://x").searchParams.get("page") ?? "1");
+      pages.push(page);
+      res.writeHead(200, { "content-type": "application/json" }).end(body(page));
+    });
+    const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"]);
+    expect(r.code, r.stderr).toBe(8);
+    expect(JSON.parse(r.stderr).error.code).toBe("bad_response");
+    expect(pages).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  // The table only prints on a terminal; a Python PTY works on both macOS and Linux with no platform skip.
+  test("one very long title does not pad every row of the terminal table to its length", async () => {
+    const rows = [{ ...share(0), title: "x".repeat(64 * 1024) }, ...Array.from({ length: 300 }, (_, i) => share(i + 1))];
+    const s = await serve((_req, res) => jsonRes(res, 200, { data: rows, pagination: { page: 1, page_size: 301, total: 301, total_pages: 1 } }));
+    const driver = `
+import os, pty, select, sys
+node, cli, cwd, url, tok = sys.argv[1:6]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(cwd)
+    os.execve(node, [node, cli, "--output", "text", "list"], {"PATH": os.environ.get("PATH", ""), "NO_COLOR": "1", "HOME": cwd, "HTMLGATE_URL": url, "HTMLGATE_TOKEN": tok})
+out = bytearray()
+while True:
+    r, _, _ = select.select([fd], [], [], 30)
+    if not r: break
+    try: chunk = os.read(fd, 65536)
+    except OSError: break
+    if not chunk: break
+    out.extend(chunk)
+_, st = os.waitpid(pid, 0)
+os.close(fd)
+sys.stdout.buffer.write(out)
+sys.exit(os.waitstatus_to_exitcode(st))
+`;
+    // Async, so this process keeps serving the stand-in Instance while the CLI runs.
+    const r = await new Promise<{ code: number; stdout: string }>((resolve) => {
+      const child = spawn("python3", ["-I", "-c", driver, process.execPath, CLI, dir, s.url, TOKEN],
+        { cwd: dir, timeout: 60_000, stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "";
+      child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+      child.on("close", (code) => resolve({ code: code ?? 1, stdout }));
+    });
+    expect(r.code, r.stdout.slice(0, 400)).toBe(0);
+    expect(r.stdout).toContain("SLUG");
+    expect(r.stdout.length).toBeLessThan(1024 * 1024);
+  });
 });
 
 describe("text output is safe for a terminal", () => {
@@ -124,6 +181,15 @@ describe("an answer missing what the CLI shows is refused, not a crash", () => {
   test("a Share without updated_at exits 8 (bad_response), not 1", async () => {
     const { updated_at: _, ...broken } = share(1);
     const s = await serve((_req, res) => jsonRes(res, 200, { data: [broken], pagination: { page: 1, page_size: 200, total: 1, total_pages: 1 } }));
+    const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"]);
+    expect(r.code).toBe(8);
+    expect(JSON.parse(r.stderr).error.code).toBe("bad_response");
+  });
+
+  test("a Share with nested or non-string metadata exits 8 (bad_response), not 1", async () => {
+    const nested = `${"{\"a\":".repeat(500)}"x"${"}".repeat(500)}`;
+    const body = `{"data":[{"slug":"S00000000001","title":"t","url":"/s/S00000000001","public":false,"updated_at":1,"metadata":${nested}}],"pagination":{"page":1,"page_size":200,"total":1,"total_pages":1}}`;
+    const s = await serve((_req, res) => res.writeHead(200, { "content-type": "application/json" }).end(body));
     const r = await htmlgate(dir, { HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN }, ["list"]);
     expect(r.code).toBe(8);
     expect(JSON.parse(r.stderr).error.code).toBe("bad_response");

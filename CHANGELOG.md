@@ -4,6 +4,13 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-11-25
+
+### Security
+
+- **Revocation stops writes in flight (H2-1, `src/store.ts`, `src/api.ts`):** every token-authorized Store write re-checks in its liveness-deciding statement that its token is unrevoked, so a write whose body was still uploading when the token was revoked no longer lands; the API answers `401`. The same applies when a token revokes another token, and every other write answer except success re-checks the token: `401` if it is now revoked, `503` if the check fails, so a revoked token's status codes do not tell it which Shares exist. Covered by `test/revoke-in-flight.test.ts`, a new `CONTAINMENT_NO_POST_REVOKE_WRITE` model invariant with its replay (9 historical bug replays), and nine mutation anchors.
+- **CLI listing memory cap (H4-1, `packages/cli/src/bin.ts`, `packages/cli/src/api.ts`):** `htmlgate list` stops with `bad_response` (exit 8) once the rows it holds pass 64 Mi characters, and Share `metadata` is validated as a flat string map, so a hostile Instance can no longer exhaust memory or trigger serialization errors with many large pages or deeply nested metadata. The terminal table pads each column to at most 200 characters, so one long title no longer pads every row to its length.
+
 ## [0.1.23] - 2026-11-25
 
 ### Security

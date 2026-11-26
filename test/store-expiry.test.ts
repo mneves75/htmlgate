@@ -18,6 +18,7 @@ test.each(["create", "update", "late upload"])("an expired %s cannot claim its b
   for (const migration of readdirSync(join(process.cwd(), "migrations")).filter((f) => f.endsWith(".sql")).sort()) {
     sqlite.exec(readFileSync(join(process.cwd(), "migrations", migration), "utf8"));
   }
+  sqlite.exec("INSERT INTO tokens (id, author, name, digest, created_at) VALUES ('abcdefabcdef', 'author@example.com', 't', 'd', 0)");
   const objects = new Map<string, string>();
   let bodyDeleted!: () => void;
   const deleted = new Promise<void>((r) => { bodyDeleted = r; });

@@ -12,9 +12,14 @@ const html = "<!doctype html><title>t</title><p>hi</p>";
 let counter = 0;
 const slug = () => `S${String(++counter).padStart(11, "0")}`;
 
-function setup() {
-  const env = fakeEnv();
+/** Every write names the token that made it, and the Store refuses a token that is not live. */
+const withToken = (env: ReturnType<typeof fakeEnv>) => {
+  env.sqlite.exec(`INSERT INTO tokens (id, author, name, digest, created_at) VALUES ('tok', '${AUTHOR}', 't', 'd', 0)`);
   return { ...env, store: new Store(env.db, env.bucket) };
+};
+
+function setup() {
+  return withToken(fakeEnv());
 }
 
 const page = (s: string, now: number, expiry: Expiry = { at: now + 30 * DAY, set: false }) => ({
@@ -55,7 +60,7 @@ describe("expiry", () => {
         db.prepare("INSERT INTO versions (slug, n, body_key, size, created_at, token_id) VALUES ('OldShare0001', 1, 'bodies/OldShare0001/a', 1, ?, 'tok')").run(now);
       },
     });
-    const store = new Store(env.db, env.bucket);
+    const { store } = withToken(env);
     expect(await store.addVersion(version("OldShare0001", now + 1))).toBe("written");
     expect(env.one<{ expires_at: number | null; expiry_set: number }>("SELECT expires_at, expiry_set FROM shares WHERE slug = 'OldShare0001'"))
       .toEqual({ expires_at: null, expiry_set: 1 });

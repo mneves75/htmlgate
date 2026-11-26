@@ -111,7 +111,12 @@ describe("request bodies", () => {
           // connection: close keeps the cut socket out of fetch's pool, where a later request would hit EPIPE.
           method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", connection: "close" }, body, duplex: "half",
         } as RequestInit);
-        return { r, sent, elapsed: Date.now() - started };
+        answered = true;
+        if (r.status !== 413 && r.status !== 500) {
+          return { status: r.status, answer: await r.text().catch(() => ""), sent, elapsed: Date.now() - started };
+        }
+        const answer = await r.text();
+        return { status: r.status, answer, sent, elapsed: Date.now() - started };
       } catch (e) {
         if (e instanceof TypeError) return { terminated: e.message, sent, elapsed: Date.now() - started };
         throw e;
@@ -125,12 +130,13 @@ describe("request bodies", () => {
     // is accepted, and a termination twice is a failed assertion, not a broken test.
     if ("terminated" in outcome) outcome = await attempt();
     expect("terminated" in outcome ? outcome.terminated : undefined, "the request terminated without an answer twice").toBeUndefined();
-    const { r, sent, elapsed } = outcome as { r: Response; sent: number; elapsed: number };
-    const answer = await r.text();
-    if (r.status === 500) expect(answer).toMatch(/^Error: Network connection lost\./);
+    const { status, answer, sent, elapsed } = outcome as { status: number; answer: string; sent: number; elapsed: number };
+    if (status === 500) expect(answer).toMatch(/^Error: Network connection lost\./);
     else {
-      expect(r.status).toBe(413);
-      expect(JSON.parse(answer).error.code).toBe("html_too_large");
+      expect(status).toBe(413);
+      let code: unknown;
+      try { code = JSON.parse(answer).error?.code; } catch {}
+      expect(code, answer).toBe("html_too_large");
     }
     expect(elapsed).toBeLessThan(15_000);
     expect(sent).toBeLessThan(200 * 1024 * 1024);

@@ -108,15 +108,34 @@ describe("an answer too large to be the API's is refused", () => {
     expect(pages).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  // The table only prints on a terminal; `script` gives the CLI one (macOS, as CI runs).
-  test.skipIf(process.platform !== "darwin")("one very long title does not pad every row of the terminal table to its length", async () => {
+  // The table only prints on a terminal; a Python PTY works on both macOS and Linux with no platform skip.
+  test("one very long title does not pad every row of the terminal table to its length", async () => {
     const rows = [{ ...share(0), title: "x".repeat(64 * 1024) }, ...Array.from({ length: 300 }, (_, i) => share(i + 1))];
     const s = await serve((_req, res) => jsonRes(res, 200, { data: rows, pagination: { page: 1, page_size: 301, total: 301, total_pages: 1 } }));
+    const driver = `
+import os, pty, select, sys
+node, cli, cwd, url, tok = sys.argv[1:6]
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(cwd)
+    os.execve(node, [node, cli, "--output", "text", "list"], {"PATH": os.environ.get("PATH", ""), "NO_COLOR": "1", "HOME": cwd, "HTMLGATE_URL": url, "HTMLGATE_TOKEN": tok})
+out = bytearray()
+while True:
+    r, _, _ = select.select([fd], [], [], 30)
+    if not r: break
+    try: chunk = os.read(fd, 65536)
+    except OSError: break
+    if not chunk: break
+    out.extend(chunk)
+_, st = os.waitpid(pid, 0)
+os.close(fd)
+sys.stdout.buffer.write(out)
+sys.exit(os.waitstatus_to_exitcode(st))
+`;
     // Async, so this process keeps serving the stand-in Instance while the CLI runs.
     const r = await new Promise<{ code: number; stdout: string }>((resolve) => {
-      // stdin is /dev/null: `script` refuses a socket there, which is what a pipe is in Node.
-      const child = spawn("script", ["-q", "/dev/null", process.execPath, CLI, "--output", "text", "list"],
-        { cwd: dir, timeout: 60_000, stdio: ["ignore", "pipe", "pipe"], env: { PATH: process.env.PATH!, NO_COLOR: "1", HOME: dir, HTMLGATE_URL: s.url, HTMLGATE_TOKEN: TOKEN } });
+      const child = spawn("python3", ["-I", "-c", driver, process.execPath, CLI, dir, s.url, TOKEN],
+        { cwd: dir, timeout: 60_000, stdio: ["ignore", "pipe", "pipe"] });
       let stdout = "";
       child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
       child.on("close", (code) => resolve({ code: code ?? 1, stdout }));

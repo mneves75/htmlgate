@@ -10,10 +10,10 @@ This was a source-first audit of the Worker (`src/`), the CLI (`packages/cli/src
 |---|---|---|---|---|---|
 | H2-1 | Revoking a token did not stop a write whose body was still uploading | Fixed | Low | CWE-613, CWE-367 | `e76024d`, `3c2519c`, `ddcf5e4` |
 | H4-1 | `htmlgate list` kept every page in memory with no total cap | Fixed | Low | CWE-770 | `9e6df7a`, `531d7cd` |
-| H1-1 | People routes depend on the zone's URL normalization staying on | Needs validation (Operator) | — | CWE-863 | — |
-| H5-1 | The Access application does not pin identity providers | Needs validation (Operator) | — | CWE-287 | — |
-| H3-1 | Public site files may be highly compressed, so serving one costs inflate CPU | Needs validation | — | CWE-409 | — |
-| H4-2 | A project's `.htmlgate/config` can suggest a login origin | Needs validation (product) | — | CWE-451 | — |
+| H1-1 | People routes depend on the zone's URL normalization staying on | Holds on the live zone (checked 2026-11-26) | — | CWE-863 | — |
+| H5-1 | The Access application does not pin identity providers | Holds on the live organization (checked 2026-11-26) | — | CWE-287 | — |
+| H3-1 | Public site files may be highly compressed, so serving one costs inflate CPU | Rejected: the cost is bounded by the file size limit | — | CWE-409 | — |
+| H4-2 | A project's `.htmlgate/config` can suggest a login origin | Accepted (product decision) | — | CWE-451 | — |
 
 ### H2-1 — Revocation now stops writes in flight
 
@@ -33,14 +33,14 @@ This was a source-first audit of the Worker (`src/`), the CLI (`packages/cli/src
 - **Fix:** rows are reduced to the printed fields as they arrive, and the listing stops with `bad_response` (exit 8) once those rows pass 64 Mi characters. The terminal table pads each column to at most 200 characters, so one long title cannot pad every row to its length.
 - **Tests and controls:** a stand-in server in `test/cli-safety.test.ts` sends pages that are each under the per-answer cap. A second test drives the terminal table through a pseudo-terminal. Both fail without their fix (the table case printed about 20 MB for 301 rows) and pass with it. There are two new mutation anchors.
 
-### Needs validation
+### Deployment checks and decisions
 
-These depend on deployment facts outside the repository. None of them was probed on a live system.
+The first two depend on deployment facts outside the repository. On 2026-11-26 the Operator's live zone and Zero Trust organization were read (read-only); nothing was probed.
 
-- **H1-1:** keep the zone's **Rules → Settings → Normalize incoming URLs** on (Cloudflare's default) for the Instance hostname. Cloudflare documents that normalization runs before Access and Workers. The Worker cannot see the raw path, so it cannot enforce this itself. Every people route still requires a verified Access JWT for an allowlisted email.
-- **H5-1:** if the Zero Trust organization has more than one identity provider, check that each one verifies email addresses. Pinning the Access application to a chosen provider would be a possible setup option.
-- **H3-1:** measure the Worker's CPU time on a staging Instance before deciding on a compression-ratio cap for site uploads.
-- **H4-2:** this is a hint only; the CLI never sends a token to an origin from a project config. Changing it is a product decision.
+- **H1-1:** the zone's **Rules → Settings → Normalize incoming URLs** is on (incoming URLs, Cloudflare normalization). Keep it on for the Instance hostname. Cloudflare documents that normalization runs before Access and Workers. The Worker cannot see the raw path, so it cannot enforce this itself. Every people route still requires a verified Access JWT for an allowlisted email.
+- **H5-1:** the Access application accepts every provider the organization enables. Each one proves the user owns the email address: a one-time PIN sent to the address, Cloudflare sign-in limited to the account's members, and Google. Pin the application to a chosen provider before adding one that does not verify email, such as a generic OIDC or SAML provider.
+- **H3-1:** serving a compressed site file costs inflate CPU in proportion to the file's unzipped size, which `SITE_LIMITS.fileBytes` caps at 5 MiB, whatever the compression ratio. Measured with the same `DecompressionStream("deflate-raw")` API in Node 26 (not workerd), a 5 MiB file took a median of 3.4 ms of CPU at a 1,026:1 ratio, 3.6 ms at 411:1 and 4.0 ms stored incompressible. A ratio cap would not lower that cost, so none is added.
+- **H4-2:** kept as it is. The CLI sends a token only to the origin it was saved for. When a project's config names another origin, the CLI stops with "Not signed in to <origin> (from .htmlgate/config)", which names both the origin and where it came from, and signing in there takes the user's own `htmlgate login`.
 
 ## Hardening notes (not vulnerabilities)
 

@@ -6,14 +6,14 @@ Profile: standard. Baseline `e70b6ff`. This was one pass, the first recorded und
 
 | Surface | Trust boundary | Attack classes examined | Result |
 |---|---|---|---|
-| Access identity (`src/access.ts`, `src/index.ts` routing) | Internet → people routes | JWT signature/iss/aud/exp, email normalization, path matching, dot segments, method confusion | Covered; H1-1 needs validation |
+| Access identity (`src/access.ts`, `src/index.ts` routing) | Internet → people routes | JWT signature/iss/aud/exp, email normalization, path matching, dot segments, method confusion | Covered; H1-1 holds on the live zone |
 | Tickets (`src/ticket.ts`, `/f/<ticket>`) | Gated viewer → site files | Forgery, cross-Share reuse, expiry, CSRF on issuance | Covered; nothing confirmed |
 | Bearer tokens and API (`src/api.ts`) | CLI/token holder → Store | Revocation timing (writes and token revocation in flight), existence oracles, rate limiting, JSON shape, size caps, ownership checks | Covered; H2-1 fixed |
 | Store lifecycle (`src/store.ts`, migrations) | API → D1/R2 | Batch atomicity, liveness, expiry, trash CAS, quota, erase scope | Covered; formal model re-run |
-| ZIP parsing and site serving (`src/zip.ts`) | Author upload → anonymous viewer | Parser differentials, path traversal, symlinks, compression ratio, MIME | Covered; H3-1 needs validation |
+| ZIP parsing and site serving (`src/zip.ts`) | Author upload → anonymous viewer | Parser differentials, path traversal, symlinks, compression ratio, MIME | Covered; H3-1 rejected (bounded by the file size limit) |
 | Response headers and sandbox (`src/http.ts`, `src/pages.ts`) | Share HTML → Instance origin | CSP sandbox, COOP/CORP, framing, caching, escaping | Covered by existing mutation gate; spot-checked |
-| CLI (`packages/cli/src`) | Instance answer → user machine | Redirect token leaks, config trust, symlink/FIFO reads, terminal escapes, resource exhaustion | Covered; H4-1 fixed, H4-2 needs validation |
-| Operator scripts (`scripts/setup.mjs`, `scripts/token.mjs`) | Operator → Cloudflare account | Account/storage ownership, Access app config, revoke-all order | Source only; H5-1 needs validation |
+| CLI (`packages/cli/src`) | Instance answer → user machine | Redirect token leaks, config trust, symlink/FIFO reads, terminal escapes, resource exhaustion | Covered; H4-1 fixed, H4-2 accepted |
+| Operator scripts (`scripts/setup.mjs`, `scripts/token.mjs`) | Operator → Cloudflare account | Account/storage ownership, Access app config, revoke-all order | Source, plus a read-only check of the live organization; H5-1 holds |
 | Landing (`site/`) | Internet → htmlgate.com | Open redirects, headers | Covered; nothing confirmed |
 | Supply chain (`pnpm-lock.yaml`, `Formula/`, `.github/workflows/`) | Dependencies/CI → release | Lockfile, formula checksum pinning, workflow permissions | Covered; hardening notes only |
 

@@ -29,10 +29,10 @@ Profile: standard. Baseline `e70b6ff`. This was one pass, the first recorded und
 
 | Tool | Baseline (`e70b6ff`) | After |
 |---|---|---|
-| gitleaks, working tree | 6 hits: 5 dummy test fixtures, 1 in a git-ignored local Instance file that was never committed | Same 6 (at `9e6df7a`; the later commits change only source and tests, and the history scan covers them) |
-| gitleaks, history | 5 hits, all dummy test fixtures | Same 5 dummy fixtures, at `531d7cd` |
-| trufflehog (verified only) | 0 | 0 (tree at `9e6df7a`, plus the commits since, at `531d7cd`) |
-| `pnpm audit` | No known vulnerabilities | No known vulnerabilities (no dependency changed) |
+| gitleaks, working tree | 6 hits: 5 dummy test fixtures, 1 in a git-ignored local Instance file that was never committed | Same 6, at `dc3ada7` |
+| gitleaks, history | 5 hits, all dummy test fixtures | Same 5 dummy fixtures, at `dc3ada7` |
+| trufflehog (verified only) | 0 | 0, history through `dc3ada7` |
+| `pnpm audit` | No known vulnerabilities | No known vulnerabilities, at `dc3ada7` (no dependency changed) |
 | actionlint | 0 issues | 0 issues (no workflow changed) |
 | trivy | Not run: its first run needs a vulnerability database download | Not run |
 
@@ -45,7 +45,7 @@ Each fix was written test first: its new tests failed on the code before the fix
 | `pnpm run lint` | 0 violations |
 | `pnpm run verify:model` | StoreLifecycle 791,308 states and RevokeAllContainment 16 states, 0 invariant violations; all 9 historical bug replays fail on their invariant as expected |
 | `pnpm typecheck` | Pass |
-| `node scripts/mutate.mjs --check` | 273 unique anchors |
+| `node scripts/mutate.mjs --check` | 274 unique anchors |
 | Mutations added by this work, each run with `--only` | Every planted violation caught by an assertion: 6 for writes in flight, 4 for the token revoke route and the missing-Share answers, 2 for the CLI caps |
 | Independent review (Codex gpt-6.2-sol, high) | Round 1 found three issues, all fixed. Round 2 found none |
 | Independent review (`reviewer` agent) | One Low issue (the empty PATCH), fixed with a test |

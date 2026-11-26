@@ -29,10 +29,10 @@ Profile: standard. Baseline `e70b6ff`. This was one pass, the first recorded und
 
 | Tool | Baseline (`e70b6ff`) | After |
 |---|---|---|
-| gitleaks, working tree | 6 hits: 5 dummy test fixtures, 1 in a git-ignored local Instance file that was never committed | Same 6, at `e836545` |
-| gitleaks, history | 5 hits, all dummy test fixtures | Same 5 dummy fixtures, at `e836545` |
-| trufflehog (verified only) | 0 | 0, history through `e836545` |
-| `pnpm audit` | No known vulnerabilities | No known vulnerabilities, at `e836545` (no dependency changed) |
+| gitleaks, working tree | 6 hits: 5 dummy test fixtures, 1 in a git-ignored local Instance file that was never committed | Same 6, at `d78cacd` |
+| gitleaks, history | 5 hits, all dummy test fixtures | Same 5 dummy fixtures, at `d78cacd` |
+| trufflehog (verified only) | 0 | 0, history through `d78cacd` |
+| `pnpm audit` | No known vulnerabilities | No known vulnerabilities, at `d78cacd` (no dependency changed) |
 | actionlint | 0 issues | 0 issues (no workflow changed) |
 | trivy | Not run: its first run needs a vulnerability database download | Not run |
 

@@ -27,7 +27,7 @@ type Scenario = {
   bucketPageSize?: number; bucketPages?: Record<string, unknown>; endlessBuckets?: boolean;
   bootstrapStorage?: unknown; receipt?: unknown; failBucketCreate?: boolean; staging?: boolean;
   createdDb?: unknown; createdBucket?: unknown;
-  token?: boolean; generated?: Record<string, unknown>; d1Result?: unknown; accessResult?: string; ticketResult?: string; accessAccount?: string;
+  token?: boolean; generated?: Record<string, unknown>; d1Result?: unknown; d1FailAt?: number; accessResult?: string; ticketResult?: string; accessAccount?: string;
 };
 
 async function setup(change: Scenario = {}) {
@@ -56,7 +56,7 @@ import cp from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { readFileSync, appendFileSync } from 'node:fs';
 const s = JSON.parse(readFileSync(new URL('./scenario.json', import.meta.url)));
-let created = false, createdDb = false;
+let created = false, createdDb = false, d1Calls = 0;
 const log = v => appendFileSync(new URL('./calls.jsonl', import.meta.url), JSON.stringify(v) + '\n');
 cp.execFileSync = (bin, args) => {
   log({ bin: bin.endsWith('/wrangler') ? 'wrangler' : bin, args });
@@ -68,7 +68,7 @@ const page = pageAt < 0 ? 1 : Number(args[pageAt + 1]);
     if (args[0] === 'whoami') return json({ loggedIn: true, accounts: [{ id: 'account-control' }] });
     if (args[0] === 'versions') return json(s.versions[args[2]]);
     if (args[0] === 'd1' && args[1] === 'list') return json(createdDb ? [{ name: 'ownership-control-db', uuid: '${DB}' }] : s.dbs);
-    if (args[0] === 'd1' && args[1] === 'execute') return json(s.d1Result);
+    if (args[0] === 'd1' && args[1] === 'execute') return json(++d1Calls === s.d1FailAt ? [{ success: false, results: [] }] : s.d1Result);
     if (args[0] === 'deploy') {
       created = true;
       const c = JSON.parse(readFileSync(args[args.indexOf('-c') + 1], 'utf8').replace(/^\/\/[^\n]*\n/, ''));
@@ -439,6 +439,16 @@ test("revoke-all uses the verified Access application and reports returned resul
   expect(r.code, r.stdout + r.stderr).toBe(0);
   expect(r.writes.map(c => c.args?.[0] === "zero-trust" ? c.args.slice(3, 5) : c.args?.slice(0, 2)))
     .toEqual([["revoke-tokens", app.id], ["d1", "execute"], ["d1", "execute"], ["d1", "execute"], ["secret", "put"]]);
+  // The deployed database gets the table, then the revocation time, then the token UPDATE, each in its own call.
+  const sql = r.writes.filter(c => c.args?.[0] === "d1").map(c => {
+    expect(c.args).toContain("--remote");
+    return String(c.args?.[c.args.indexOf("--command") + 1]);
+  });
+  expect(sql).toEqual([
+    expect.stringMatching(/^CREATE TABLE IF NOT EXISTS revocations /),
+    expect.stringMatching(/^INSERT INTO revocations \(id, at\) VALUES \(1, CAST\(unixepoch\('subsec'\) \* 1000 AS INTEGER\)\)/),
+    expect.stringMatching(/^UPDATE tokens SET revoked_at = \d+ WHERE revoked_at IS NULL$/),
+  ]);
   expect(r.stdout).toMatch(/Access sign-ins:.*revoked.*\nTokens: 1 revoked\.\nTicket key:.*replaced/);
 });
 
@@ -446,6 +456,7 @@ test.each([
   ["unconfirmed Access result", { accessResult: "Aborted." }, ["zero-trust"]],
   ["unexpected Access acknowledgement", { accessResult: '{"error":"unconfirmed"}' }, ["zero-trust"]],
   ["unconfirmed D1 result", { d1Result: [{ success: false, results: [] }] }, ["zero-trust", "d1"]],
+  ["unconfirmed revocation time", { d1FailAt: 2 }, ["zero-trust", "d1", "d1"]],
   ["missing D1 changes count", { d1Result: [{ success: true, results: [] }] }, ["zero-trust", "d1", "d1", "d1"]],
   ["unconfirmed ticket result", { ticketResult: "" }, ["zero-trust", "d1", "d1", "d1", "secret"]],
 ] as const)("revoke-all stops after %s and reports the unconfirmed step", async (_name, scenario, commands) => {

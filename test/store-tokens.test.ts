@@ -2,6 +2,8 @@
 // counted in test/roundtrips.test.ts.
 import { describe, expect, test } from "vitest";
 import { Store } from "../src/store";
+// @ts-expect-error plain JavaScript module
+import { revokeTokenStatements } from "../scripts/token.mjs";
 import { fakeEnv } from "./fake-env";
 
 function setup() {
@@ -10,6 +12,34 @@ function setup() {
   const lastUsed = (id: string) => fake.one<{ last_used_at: number | null }>("SELECT last_used_at FROM tokens WHERE id = ?", id).last_used_at;
   return { fake, store, lastUsed };
 }
+
+describe("createToken after revoke-all", () => {
+  const count = (fake: ReturnType<typeof fakeEnv>) => fake.one<{ n: number }>("SELECT COUNT(*) AS n FROM tokens").n;
+
+  test("refuses a sign-in issued at or before the recorded revocation and accepts a later one", async () => {
+    const { fake, store } = setup();
+    await fake.db.prepare("INSERT INTO revocations (id, at) VALUES (1, 5000)").run();
+    expect(await store.createToken("aaaaaaaaaaaa", "a@example.com", "x", "d1", 9_000, 0)).toBe(false);
+    expect(await store.createToken("aaaaaaaaaaaa", "a@example.com", "x", "d1", 9_000, 4_999)).toBe(false);
+    expect(await store.createToken("aaaaaaaaaaaa", "a@example.com", "x", "d1", 9_000, 5_000)).toBe(false);
+    expect(count(fake)).toBe(0);
+    expect(await store.createToken("aaaaaaaaaaaa", "a@example.com", "x", "d1", 9_000, 5_001)).toBe(true);
+    expect(count(fake)).toBe(1);
+  });
+
+  test("revoke-all's time record never moves an earlier-recorded later time back", async () => {
+    const { fake } = setup();
+    const later = 9_000_000_000_000_000;
+    await fake.db.prepare(`INSERT INTO revocations (id, at) VALUES (1, ${later})`).run();
+    await fake.db.prepare((revokeTokenStatements(1) as string[])[1]!).run();
+    expect(fake.one<{ at: number }>("SELECT at FROM revocations").at).toBe(later);
+    await fake.db.prepare("DELETE FROM revocations").run();
+    const before = Date.now();
+    await fake.db.prepare((revokeTokenStatements(1) as string[])[1]!).run();
+    const at = fake.one<{ at: number }>("SELECT at FROM revocations").at;
+    expect(Number.isSafeInteger(at) && at >= before - 1000 && at <= Date.now() + 1000).toBe(true);
+  });
+});
 
 describe("useToken", () => {
   test("returns the live token and records its first use", async () => {

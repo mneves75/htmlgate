@@ -124,7 +124,9 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
   const notRevokedDecl = extractBody(store, "src/store.ts", "const", "NOT_REVOKED_SINCE");
   const createTokenBody = extractBody(store, "src/store.ts", "method", "createToken");
   if (!/NOT EXISTS \(SELECT 1 FROM revocations WHERE at >= \?\)/.test(notRevokedDecl)
-    || !/INSERT INTO tokens \([^)]*\) SELECT [?, ]+ WHERE \$\{NOT_REVOKED_SINCE\}/.test(createTokenBody)) {
+    || !/INSERT INTO tokens \([^)]*\) SELECT [?, ]+ WHERE \$\{NOT_REVOKED_SINCE\}/.test(createTokenBody)
+    // The guard's one parameter is bound last, and it must be the sign-in's issue time, not the request's clock.
+    || !/\.bind\([^)]*,\s*signedInAt\)/.test(createTokenBody)) {
     findings.push({
       codeFile: "src/store.ts",
       symbol: "Store.createToken",
@@ -137,8 +139,12 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
   const markerStmtAt = statements.indexOf("INSERT INTO revocations");
   const updateStmtAt = statements.indexOf("UPDATE tokens SET revoked_at");
   const sentMarkerAt = token.indexOf("d1(marker, ");
-  const sentUpdateAt = token.indexOf("${update}", sentMarkerAt);
-  if (markerStmtAt === -1 || updateStmtAt === -1 || markerStmtAt > updateStmtAt || sentMarkerAt === -1 || sentUpdateAt === -1) {
+  // Every D1 call that sends the token UPDATE, local or remote, must come after the call that sends the marker.
+  const sentUpdates = [...token.matchAll(/d1\(`?\$?\{?update\b/g)].map((m) => m.index);
+  // The marker is in milliseconds, the unit of the sign-in time it is compared with (Person.issuedAt, iat * 1000).
+  const clockInMs = token.includes(`const CLOCK = "CAST(unixepoch('subsec') * 1000 AS INTEGER)"`) && statements.includes("VALUES (1, ${CLOCK})");
+  if (markerStmtAt === -1 || updateStmtAt === -1 || markerStmtAt > updateStmtAt || sentMarkerAt === -1
+    || sentUpdates.length === 0 || sentUpdates.some((at) => at < sentMarkerAt) || !clockInMs) {
     findings.push({
       codeFile: "scripts/token.mjs",
       symbol: "revokeTokenStatements",

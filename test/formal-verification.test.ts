@@ -110,6 +110,7 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
   test.each([
     ["the unguarded INSERT of 0.1.24", (s: string) => s.replace(/SELECT \?, \?, \?, \?, \? WHERE \$\{NOT_REVOKED_SINCE\}/, "VALUES (?, ?, ?, ?, ?)")],
     ["a guard that no longer reads the revocation record", (s: string) => s.replace("FROM revocations WHERE at >= ?", "FROM tokens WHERE created_at >= ?")],
+    ["the request's clock bound in place of the sign-in time", (s: string) => s.replace(".bind(id, author, name, digest, now, signedInAt)", ".bind(id, author, name, digest, now, now)")],
   ])("code-to-model conformance rejects Store.createToken with %s", (_name, mutate) => {
     const storeSrc = readFileSync(join(process.cwd(), "src/store.ts"), "utf8");
     const tokenSrc = readFileSync(join(process.cwd(), "scripts/token.mjs"), "utf8");
@@ -122,6 +123,10 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
   test.each([
     ["records the revocation time after the token UPDATE", (s: string) => s.replace(/(\n {4}`INSERT INTO revocations[^\n]*)(\n {4}`UPDATE tokens[^\n]*)/, "$2$1")],
     ["never sends the revocation time to D1", (s: string) => s.replace("d1(marker, inst, flags, targetConfig);\n", "")],
+    ["sends the token UPDATE to D1 before the revocation time", (s: string) => s
+      .replace("          d1(marker, inst, flags, targetConfig);\n", "")
+      .replace(".meta?.changes;\n", ".meta?.changes;\n          d1(marker, inst, flags, targetConfig);\n")],
+    ["records the revocation time in seconds", (s: string) => s.replace("unixepoch('subsec') * 1000 AS INTEGER", "unixepoch('subsec') AS INTEGER")],
   ])("code-to-model conformance rejects revoke-all when it %s", (_name, mutate) => {
     const storeSrc = readFileSync(join(process.cwd(), "src/store.ts"), "utf8");
     const tokenSrc = readFileSync(join(process.cwd(), "scripts/token.mjs"), "utf8");

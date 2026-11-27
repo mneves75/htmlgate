@@ -13,7 +13,7 @@ Node 26 and TypeScript are already pinned in `.nvmrc` and `package.json`, with z
 
 ## Coverage record
 
-- **Sync commit:** `e76024d`
+- **Sync commit:** `cd3ed86`
 - **Covered files and symbols:**
   - `src/store.ts`: `Store.putBody`, `Store.dueNow`, `Store.commit`, `Store.createShare`, `Store.addVersion`, `Store.updateFields`, `Store.setPublic`, `Store.deleteShare`, `Store.revokeToken`, `Store.emptyTrash`, `Store.expire`, `Store.countView`, `Store.eraseShare`, `Store.eraseBodies`, `Store.createToken`, `RESERVED`, `WROTE`, `LIVE_TOKEN`, `NOT_REVOKED_SINCE`, `live`.
   - `scripts/token.mjs`: `revokeAll`, `revokeTokenStatements`.
@@ -21,7 +21,7 @@ Node 26 and TypeScript are already pinned in `.nvmrc` and `package.json`, with z
 Check whether covered files changed since the sync commit before trusting a pass:
 
 ```sh
-git diff --stat 37682bf -- src/store.ts scripts/token.mjs
+git diff --stat cd3ed86 -- src/store.ts scripts/token.mjs
 ```
 
 Advance the sync commit above only after confirming that `formal/store-lifecycle.model.ts` and `formal/verify.ts` still accurately reflect every atomic boundary in `src/store.ts` and `scripts/token.mjs`.

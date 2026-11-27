@@ -34,7 +34,9 @@ export async function person(req: Request, cfg: Config): Promise<Person | null> 
       requiredClaims: ["exp", "email"],
     });
     if (payload.type !== undefined && payload.type !== "app") return null;
-    const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+    // Fold only ASCII: trim() and toLowerCase() are Unicode-wide, so they would turn other legal mailboxes
+    // (U+212A KELVIN SIGN, NBSP around the address) into an Allowlisted one.
+    const email = typeof payload.email === "string" ? payload.email.replace(/^[ \t]+|[ \t]+$/g, "").replace(/[A-Z]/g, (c) => c.toLowerCase()) : "";
     // jose has checked that iat, when present, is a number. Without one the sign-in counts as issued at 0, the oldest.
     return cfg.allowlist.has(email) ? { email, issuedAt: typeof payload.iat === "number" ? payload.iat * 1000 : 0 } : null;
   } catch (e) {

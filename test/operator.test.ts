@@ -26,7 +26,12 @@ describe("the instance file", () => {
   test("names the Author and the Allowlist; the Author is always on it; emails are lowercased", () => {
     const inst = readInstance(file("ok.json", { name: "my-bin", authorEmail: "Me@Example.com", allowlist: ["A@b.c"] }));
     expect(inst).toEqual({ name: "my-bin", author: "me@example.com", allowlist: ["me@example.com", "a@b.c"], language: "en", expiryDays: 30, mfa: false, staging: false });
-    expect(readInstance(file("u.json", { name: "my-bin", authorEmail: "me@example.com", allowlist: ["JÖRG@B.c"] })).allowlist).toEqual(["me@example.com", "jÖrg@b.c"]);
+    expect(readInstance(file("u.json", { name: "my-bin", authorEmail: "me@example.com", allowlist: ["jörg@B.c"] })).allowlist).toEqual(["me@example.com", "jörg@b.c"]);
+  });
+
+  test("refuses a non-ASCII capital, whose rows 0.1.24 stored under its Unicode lowercase", () => {
+    expect(() => readInstance(file("u.json", { name: "my-bin", authorEmail: "me@example.com", allowlist: ["JÖRG@B.c"] }))).toThrow(/JÖRG@B\.c.*lowercase/);
+    expect(() => readInstance(file("u.json", { name: "my-bin", authorEmail: "Ärger@example.com", allowlist: [] }))).toThrow(/Ärger@example\.com.*lowercase/);
   });
 
   test("sets the Instance's language: English unless the file says pt-BR", () => {

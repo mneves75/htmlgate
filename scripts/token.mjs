@@ -67,7 +67,10 @@ export function revokeTokenStatements(now) {
   ];
 }
 
-export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, config = "instance.json", say }) {
+export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, config = "instance.json", persistTo, say }) {
+  // The retry repeats this run's own target: dropping --local would send it to the deployed Instance.
+  const quote = (s) => (/^[\w./-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`);
+  const retry = `pnpm run token revoke-all --config ${quote(config)}${local ? ` --local --persist-to ${quote(persistTo)}` : ""}`;
   const steps = local
     ? [["Tokens", revokeTokens]]
     : [["Account", checkAccount], ["Access sign-ins", revokeSessions], ["Tokens", revokeTokens], ["Ticket key", rotateTicketKey]];
@@ -76,7 +79,7 @@ export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTi
     try {
       result = step();
     } catch (e) {
-      throw new Error(`${name}: ${e.message}\nThe steps after it did not run. Every step is safe to repeat: run pnpm run token revoke-all --config ${config} again.`);
+      throw new Error(`${name}: ${e.message}\nThe steps after it did not run. Every step is safe to repeat: run ${retry} again.`);
     }
     say(`${name}: ${result}.`);
   }
@@ -177,7 +180,7 @@ function main() {
           return "replaced; every open ticket has ended";
         },
         revokeSessions: () => revokeSessions(appId),
-      }, { local: flags.local, config: flags.config, say: (line) => console.log(line) });
+      }, { local: flags.local, config: flags.config, persistTo: flags.persistTo, say: (line) => console.log(line) });
     } finally {
       if (directory) rmSync(directory, { recursive: true, force: true });
     }

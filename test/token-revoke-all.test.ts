@@ -39,6 +39,16 @@ describe("revoke-all", () => {
       .toThrow(/pnpm run token revoke-all --config \.instance\/production\.json again/);
   });
 
+  test("a failed local run's retry stays local, so following it never touches the deployed Instance", () => {
+    expect(() => revokeAll(steps([], "tokens"), { local: true, config: ".instance/production.json", persistTo: ".wrangler/state", say: () => {} }))
+      .toThrow(/run pnpm run token revoke-all --config \.instance\/production\.json --local --persist-to \.wrangler\/state again\./);
+  });
+
+  test("the retry quotes a path a shell would split", () => {
+    expect(() => revokeAll(steps([], "tokens"), { local: true, config: "my dir/it's.json", persistTo: "/tmp/a b", say: () => {} }))
+      .toThrow(/--config 'my dir\/it'\\''s\.json' --local --persist-to '\/tmp\/a b' again\./);
+  });
+
   test("against a local database it revokes the tokens only, and says what it left", () => {
     const log: string[] = [];
     const out: string[] = [];

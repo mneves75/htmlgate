@@ -100,6 +100,14 @@ function revocationTarget(inst, accountId) {
   return { appId: app.id, config: { account_id: accountId, name: worker.name, d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid }] } };
 }
 
+function servingVersions(inst) {
+  const versions = cf("workers", "deployments", "list", "--worker", inst.name, "--page", "1", "--per-page", "1")?.deployments?.[0]?.versions;
+  if (!Array.isArray(versions) || !versions.length || versions.some((v) => typeof v?.version_id !== "string" || typeof v.percentage !== "number")) {
+    throw new Error("cf did not return the Worker's active deployment");
+  }
+  return versions;
+}
+
 function revokeSessions(appId) {
   const result = cf("zero-trust", "access", "applications", "revoke-tokens", appId, "--force");
   // cf prints the result of Cloudflare's successful response, an empty object.
@@ -158,7 +166,16 @@ function main() {
           if (!Number.isSafeInteger(count) || count < 0) throw new Error("Wrangler did not confirm the number of revoked tokens.");
           return `${count} revoked`;
         },
-        rotateTicketKey: () => (putTicketKey(targetConfig), "replaced; every open ticket has ended"),
+        rotateTicketKey: () => {
+          const before = new Set(servingVersions(inst).map((v) => v.version_id));
+          putTicketKey(targetConfig);
+          // A version still in the active deployment, even at 0%, answers a version override and accepts old tickets.
+          const after = servingVersions(inst);
+          if (after.length !== 1 || after[0].percentage !== 100 || before.has(after[0].version_id)) {
+            throw new Error("the new key was uploaded, but the active deployment still holds a version from before it, which accepts the old tickets. Run pnpm run setup so one version serves 100%, then run revoke-all again");
+          }
+          return "replaced; every open ticket has ended";
+        },
         revokeSessions: () => revokeSessions(appId),
       }, { local: flags.local, say: (line) => console.log(line) });
     } finally {

@@ -30,8 +30,13 @@ describe("revoke-all", () => {
 
   test("a failed step stops the rest and says to run it again", () => {
     const log: string[] = [];
-    expect(() => revokeAll(steps(log, "tokens"), { local: false, say: () => {} })).toThrow(/Tokens.*d1 down.*revoke-all again/s);
+    expect(() => revokeAll(steps(log, "tokens"), { local: false, say: () => {} })).toThrow(/Tokens.*d1 down.*revoke-all --config instance\.json again/s);
     expect(log).toEqual(["account", "sign-ins", "tokens"]);
+  });
+
+  test("the retry names the Instance's config, so following it verbatim targets the same Instance", () => {
+    expect(() => revokeAll(steps([], "tokens"), { local: false, config: ".instance/production.json", say: () => {} }))
+      .toThrow(/pnpm run token revoke-all --config \.instance\/production\.json again/);
   });
 
   test("against a local database it revokes the tokens only, and says what it left", () => {

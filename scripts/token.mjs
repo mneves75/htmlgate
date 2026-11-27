@@ -67,7 +67,7 @@ export function revokeTokenStatements(now) {
   ];
 }
 
-export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, say }) {
+export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, config = "instance.json", say }) {
   const steps = local
     ? [["Tokens", revokeTokens]]
     : [["Account", checkAccount], ["Access sign-ins", revokeSessions], ["Tokens", revokeTokens], ["Ticket key", rotateTicketKey]];
@@ -76,7 +76,7 @@ export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTi
     try {
       result = step();
     } catch (e) {
-      throw new Error(`${name}: ${e.message}\nThe steps after it did not run. Every step is safe to repeat: run pnpm run token revoke-all again.`);
+      throw new Error(`${name}: ${e.message}\nThe steps after it did not run. Every step is safe to repeat: run pnpm run token revoke-all --config ${config} again.`);
     }
     say(`${name}: ${result}.`);
   }
@@ -172,12 +172,12 @@ function main() {
           // A version still in the active deployment, even at 0%, answers a version override and accepts old tickets.
           const after = servingVersions(inst);
           if (after.length !== 1 || after[0].percentage !== 100 || before.has(after[0].version_id)) {
-            throw new Error("the new key was uploaded, but the active deployment still holds a version from before it, which accepts the old tickets. Run pnpm run setup so one version serves 100%, then run revoke-all again");
+            throw new Error("the new key was uploaded, but the active deployment still holds a version from before it, which accepts the old tickets. Run setup with this Instance's config so one version serves 100%, give the deployment a minute to settle, then run revoke-all again");
           }
           return "replaced; every open ticket has ended";
         },
         revokeSessions: () => revokeSessions(appId),
-      }, { local: flags.local, say: (line) => console.log(line) });
+      }, { local: flags.local, config: flags.config, say: (line) => console.log(line) });
     } finally {
       if (directory) rmSync(directory, { recursive: true, force: true });
     }

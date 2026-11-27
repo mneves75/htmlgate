@@ -17,6 +17,14 @@ describe("the ticket key", () => {
   });
 });
 
+describe("the Allowlist", () => {
+  // The Worker folds a sign-in's email over ASCII only (src/access.ts), so the configured side must fold the same way.
+  test("folds ASCII letters only, so a non-ASCII capital keeps the spelling a sign-in arrives with", () => {
+    const cfg = read({ AUTHOR_EMAIL: "Author@Example.com", ALLOWLIST: "JÖRG@Example.com" })!;
+    expect([...cfg.allowlist].sort()).toEqual(["author@example.com", "jÖrg@example.com"]);
+  });
+});
+
 describe("the expiry default", () => {
   test("is 30 days when unset, and 0 means never", () => {
     expect(read({})!.expiryDays).toBe(30);

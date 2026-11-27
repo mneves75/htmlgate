@@ -34,14 +34,17 @@ const DEFAULT_EXPIRY_DAYS = 30;
 const MAX_EXPIRY_DAYS = 3650;
 const TEAM_URL = /^(https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+|http:\/\/(127\.0\.0\.1|localhost)(:[0-9]{1,5})?)$/i;
 
+// The fold src/access.ts applies to a sign-in's email, ASCII letters only, so both sides spell an address alike.
+const fold = (email: string) => email.trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
+
 export function readConfig(env: Env): Config | null {
   const teamUrl = env.ACCESS_TEAM_URL?.trim().replace(/\/+$/, "");
   const aud = env.ACCESS_AUD?.trim();
-  const author = env.AUTHOR_EMAIL?.trim().toLowerCase();
+  const author = env.AUTHOR_EMAIL === undefined ? undefined : fold(env.AUTHOR_EMAIL);
   if (!teamUrl || !TEAM_URL.test(teamUrl) || !URL.canParse(teamUrl) || !aud || !author || !EMAIL.test(author)) return null;
   const allowlist = new Set<string>([author]);
   for (const raw of (env.ALLOWLIST ?? "").split(",")) {
-    const e = raw.trim().toLowerCase();
+    const e = fold(raw);
     if (!e) continue;
     if (!EMAIL.test(e)) return null;
     allowlist.add(e);

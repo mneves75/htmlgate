@@ -95,6 +95,8 @@ export async function htmlgate(cwd: string, env: Record<string, string>, args: s
         const code = err ? (typeof (err as { code?: unknown }).code === "number" ? (err as { code: number }).code : 1) : 0;
         resolve({ code, out, stdout, stderr });
       });
+    // A CLI run that exits before reading stdin closes the pipe; its result still comes from the callback above.
+    child.stdin!.on("error", (e: NodeJS.ErrnoException) => { if (e.code !== "EPIPE") throw e; });
     child.stdin!.end(input ?? "");
   });
 }

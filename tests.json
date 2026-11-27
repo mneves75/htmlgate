@@ -8,7 +8,8 @@
       "commits": [
         "cd3ed86",
         "b38ab12",
-        "5b2a48f"
+        "5b2a48f",
+        "665282e"
       ],
       "evidence": "test/revoke-in-flight.test.ts, test/store-tokens.test.ts, test/language.test.ts, formal bug replay"
     },
@@ -16,15 +17,17 @@
       "status": "fixed",
       "commits": [
         "834271a",
-        "2515131"
+        "2515131",
+        "d14c69f"
       ],
-      "evidence": "test/reviewer-identity.test.ts, test/config.test.ts, test/operator.test.ts"
+      "evidence": "test/reviewer-identity.test.ts, test/config.test.ts, test/operator.test.ts (setup refuses a non-ASCII capital in a configured email)"
     },
     "P-17": {
       "status": "fixed",
       "commits": [
         "dc36650",
-        "2515131"
+        "2515131",
+        "d14c69f"
       ],
       "evidence": "test/setup-ownership.test.ts, test/token-revoke-all.test.ts"
     }
@@ -32,8 +35,8 @@
   "gates": {
     "check": {
       "status": "pass",
-      "commit": "ad9917e",
-      "tests": "1398/1398"
+      "commit": "665282e",
+      "note": "1401/1402; the formal BFS timed out at 97 s at load 340 and passed 23/23 alone; d14c69f passed 1401/1401"
     },
     "lint": {
       "status": "pass"
@@ -46,17 +49,33 @@
     },
     "mutateCheck": {
       "status": "pass",
-      "anchors": 280
+      "anchors": 283
     },
     "mutateFull": {
-      "status": "pending",
-      "where": "CI release-validation on the tagged commit"
+      "status": "pass",
+      "commit": "665282e",
+      "caught": 283,
+      "planted": 283,
+      "where": "local worktree, exit 0, tree clean after"
     },
     "securityGate": {
-      "status": "pending"
+      "status": "waived",
+      "commit": "665282e",
+      "note": "SEC-02 owner waiver until 2026-11-30; independent acceptance (Codex gpt-6.2-sol) PASS 7/7"
     },
     "deploy": {
-      "status": "pending"
+      "status": "pass",
+      "commit": "665282e",
+      "workerVersion": "7e55a509",
+      "rollback": "44ceafb2",
+      "migration": "0009_revocations applied",
+      "smoke": "16/16",
+      "toolchain": "node 26.12.1 (.nvmrc), cf 1.0.0-beta.28"
+    },
+    "bench": {
+      "status": "no-verdict",
+      "commit": "665282e",
+      "note": "local and --live exit 2 at host load 238 and 124; CI release-validation bench is the verdict"
     }
   }
 }

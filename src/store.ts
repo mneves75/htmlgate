@@ -151,8 +151,10 @@ export class Store {
   /**
    * Inserts a token for a sign-in issued at `signedInAt` (ms), or returns false when revoke-all ran at or after it
    * (migrations/0009_revocations.sql): a session revoke-all ended cannot mint a token, even from a request it started earlier.
+   * A sign-in with no issue time (0) never mints one: no revocation could be compared with it.
    */
   async createToken(id: string, author: string, name: string, digest: string, now: number, signedInAt: number): Promise<boolean> {
+    if (signedInAt <= 0) return false;
     const r = await this.db
       .prepare(`INSERT INTO tokens (id, author, name, digest, created_at) SELECT ?, ?, ?, ?, ? WHERE ${NOT_REVOKED_SINCE}`)
       .bind(id, author, name, digest, now, signedInAt)

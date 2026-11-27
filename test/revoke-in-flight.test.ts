@@ -330,6 +330,15 @@ describe("token creation against revoke-all", () => {
     expect(await live(inst)).toBe(0);
   });
 
+  test("a sign-in without an issue time gets no token even before any revoke-all", async () => {
+    const inst = await startInstance();
+    const before = await live(inst);
+    const r = await mint(inst, await signIn(null));
+    expect(r.status).toBe(403);
+    expect(minted(await r.text())).toBeUndefined();
+    expect(await live(inst)).toBe(before);
+  });
+
   test("the Author signing in again after revoke-all makes a working token", async () => {
     const inst = await startInstance();
     await revokeTokens(inst);

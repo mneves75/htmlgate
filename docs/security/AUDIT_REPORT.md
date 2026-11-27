@@ -13,7 +13,7 @@ The method was the same as on 2026-11-25. Planted violations measured the hunter
 - **P-15:**
   - **What was wrong:** revoke-all ended Access sessions, then revoked tokens. A `POST /tokens` whose sign-in predated revoke-all, if it was still in flight, could insert a new token after the sweep.
   - **Fix:** revoke-all records its time, on D1's clock, before revoking tokens. `Store.createToken` inserts only when no revocation is at or after the JWT `iat`, in the same statement. Otherwise the request gets `403` and the page asks for a fresh sign-in.
-  - **Residual:** this relies on Access issuing `iat` at sign-in. A clock skew between Access and D1 widens or narrows the window by the size of the skew; a skew in the other direction fails closed.
+  - **Residual:** this relies on Access issuing `iat` at sign-in; a sign-in without one never creates a token. A clock skew between Access and D1 widens or narrows the window by the size of the skew; a skew in the other direction fails closed.
 - **P-16:**
   - **What was wrong:** Access may admit a different mailbox whose Unicode fold matches an Allowlisted address, for example one with U+212A KELVIN SIGN or a non-breaking space around it. The Worker then treated that sign-in as the Allowlisted person.
   - **Fix:** the Worker trims only spaces and tabs from the claim. The Worker, config and setup lowercase only `A`–`Z`.

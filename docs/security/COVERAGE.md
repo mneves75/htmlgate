@@ -15,7 +15,7 @@ Profile: standard. Baseline `d3d5880`. The run was recorded as incomplete when i
 | Check | Result |
 |---|---|
 | `pnpm run check` | Full suite green |
-| Full `pnpm run mutate` | Recorded in the release-validation run for the tagged commit |
+| Full `pnpm run mutate` | Run on the release commit before deploy; its result is in the private gate record |
 | `pnpm run verify:model` | Includes the revoke-all marker step and its bug replay |
 
 # Audit coverage, 2026-11-25

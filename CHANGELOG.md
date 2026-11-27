@@ -4,6 +4,19 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-11-27
+
+### Security
+
+- **Token creation after revoke-all (P-15, `migrations/0009_revocations.sql`, `src/store.ts`, `src/access.ts`, `scripts/token.mjs`):** `pnpm run token revoke-all` now records its time in a one-row `revocations` table before it revokes every token, and `POST /tokens` creates a token only when no revocation is recorded at or after the sign-in's Access JWT `iat`, in the same statement as the insert. A token-creation request whose sign-in predates revoke-all, including one already in flight, is refused with `403`. The `/tokens` page asks the Author to sign in again, in English and pt-BR. A JWT without `iat` counts as the oldest sign-in. The formal model gains the containment step and a bug replay.
+- **ASCII-only email fold (`src/access.ts`, `src/config.ts`, `scripts/setup.mjs`):** the Allowlist check trimmed and lowercased a sign-in's email with Unicode-wide `trim()` and `toLowerCase()`. So a different mailbox, such as one with U+212A KELVIN SIGN or a non-breaking space around the address, could fold onto an Allowlisted address. The Worker now trims only spaces and tabs from the claim and lowercases only `A`–`Z`. Config and setup also lowercase only `A`–`Z` in the Author and Allowlist.
+- **Ticket key rotation (`scripts/token.mjs`):** after revoke-all puts a new `TICKET_KEY`, it now fails unless the Worker's active deployment is exactly one new version at 100%. An older version left in the deployment, even at 0%, could still accept old tickets through a version override. Its retry messages now name the `--config` they ran with.
+
+### Documentation
+
+- `docs/operator.md`: before a D1 restore, record each Share's visibility, deletion, expiry and Versions, then reapply what the API can redo. Setting `mfa: false` leaves an application's MFA on until it is turned off in Zero Trust.
+- `docs/privacy.md`: names the credentials a Workers Logs error record may carry.
+
 ## [0.1.24] - 2026-11-25
 
 ### Security

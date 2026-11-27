@@ -34,7 +34,7 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
     const env = fakeEnv();
     const store = new Store(env.db, env.bucket);
     const now = Date.now();
-    await store.createToken("tok123456789", "a@b.c", "ci", "d", now);
+    await store.createToken("tok123456789", "a@b.c", "ci", "d", now, now);
     for (const slug of ["Expire000001", "Expire000002"]) {
       expect(await store.createShare({
         slug, author: "a@b.c", title: slug, description: null, tags: "{}",
@@ -105,5 +105,29 @@ describe("formal state-machine verification (Store lifecycle & revokeAll)", () =
     expect(brokenStore).not.toBe(storeSrc);
     const findings = detectCodeDeviationsFromSource(brokenStore, tokenSrc);
     expect(findings).toEqual([expect.objectContaining({ symbol: "Store.setPublic", detectedVariant: "write-commit-skips-token-check" })]);
+  });
+
+  test.each([
+    ["the unguarded INSERT of 0.1.24", (s: string) => s.replace(/SELECT \?, \?, \?, \?, \? WHERE \$\{NOT_REVOKED_SINCE\}/, "VALUES (?, ?, ?, ?, ?)")],
+    ["a guard that no longer reads the revocation record", (s: string) => s.replace("FROM revocations WHERE at >= ?", "FROM tokens WHERE created_at >= ?")],
+  ])("code-to-model conformance rejects Store.createToken with %s", (_name, mutate) => {
+    const storeSrc = readFileSync(join(process.cwd(), "src/store.ts"), "utf8");
+    const tokenSrc = readFileSync(join(process.cwd(), "scripts/token.mjs"), "utf8");
+    const brokenStore = mutate(storeSrc);
+    expect(brokenStore).not.toBe(storeSrc);
+    expect(detectCodeDeviationsFromSource(brokenStore, tokenSrc))
+      .toEqual([expect.objectContaining({ symbol: "Store.createToken", detectedVariant: "mint-skips-revocation-marker" })]);
+  });
+
+  test.each([
+    ["records the revocation time after the token UPDATE", (s: string) => s.replace(/(\n {4}`INSERT INTO revocations[^\n]*)(\n {4}`UPDATE tokens[^\n]*)/, "$2$1")],
+    ["never sends the revocation time to D1", (s: string) => s.replace("d1(marker, inst, flags, targetConfig);\n", "")],
+  ])("code-to-model conformance rejects revoke-all when it %s", (_name, mutate) => {
+    const storeSrc = readFileSync(join(process.cwd(), "src/store.ts"), "utf8");
+    const tokenSrc = readFileSync(join(process.cwd(), "scripts/token.mjs"), "utf8");
+    const brokenToken = mutate(tokenSrc);
+    expect(brokenToken).not.toBe(tokenSrc);
+    expect(detectCodeDeviationsFromSource(storeSrc, brokenToken))
+      .toEqual([expect.objectContaining({ symbol: "revokeTokenStatements", detectedVariant: "revoke-all-marker-after-tokens" })]);
   });
 });

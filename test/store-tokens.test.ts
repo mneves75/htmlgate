@@ -14,14 +14,14 @@ function setup() {
 describe("useToken", () => {
   test("returns the live token and records its first use", async () => {
     const { store, lastUsed } = setup();
-    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000);
+    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000, 1_000);
     expect(await store.useToken("d1", 5_000_000)).toEqual({ id: "aaaaaaaaaaaa", author: "a@example.com", name: "laptop" });
     expect(lastUsed("aaaaaaaaaaaa")).toBe(5_000_000);
   });
 
   test("records use at most once a minute", async () => {
     const { store, lastUsed } = setup();
-    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000);
+    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000, 1_000);
     await store.useToken("d1", 5_000_000);
     await store.useToken("d1", 5_059_999);
     expect(lastUsed("aaaaaaaaaaaa")).toBe(5_000_000);
@@ -31,8 +31,8 @@ describe("useToken", () => {
 
   test("a revoked or unknown token is not found and nothing is recorded", async () => {
     const { store, lastUsed } = setup();
-    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000);
-    await store.createToken("bbbbbbbbbbbb", "a@example.com", "phone", "d2", 1_000);
+    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000, 1_000);
+    await store.createToken("bbbbbbbbbbbb", "a@example.com", "phone", "d2", 1_000, 1_000);
     expect(await store.revokeToken("a@example.com", "aaaaaaaaaaaa", 2_000)).toBe(true);
     expect(await store.useToken("d1", 5_000_000)).toBeNull();
     expect(lastUsed("aaaaaaaaaaaa")).toBeNull();
@@ -42,8 +42,8 @@ describe("useToken", () => {
 
   test("when the database refuses the write, an unknown or revoked token is still no token and a live one fails", async () => {
     const { fake, store } = setup();
-    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000);
-    await store.createToken("bbbbbbbbbbbb", "a@example.com", "old", "d2", 1_000);
+    await store.createToken("aaaaaaaaaaaa", "a@example.com", "laptop", "d1", 1_000, 1_000);
+    await store.createToken("bbbbbbbbbbbb", "a@example.com", "old", "d2", 1_000, 1_000);
     await store.revokeToken("a@example.com", "bbbbbbbbbbbb", 2_000);
     const raw = fake.db as unknown as { prepare: (sql: string) => { sql: string }; batch: (s: { sql: string }[]) => Promise<unknown> };
     const readOnly = {

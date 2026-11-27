@@ -70,7 +70,7 @@ describe("a sign-in that cannot be verified", () => {
     expect(await person(request("not-a-jwt"), cfg)).toBeNull();
     expect(await person(request(forged), cfg)).toBeNull();
     expect(await person(request(await i.jwt(AUTHOR, { aud: "another-app" })), cfg)).toBeNull();
-    expect(await person(request(good), cfg)).toBe(AUTHOR);
+    expect((await person(request(good), cfg))?.email).toBe(AUTHOR);
 
     expect(errors).not.toHaveBeenCalled();
   });

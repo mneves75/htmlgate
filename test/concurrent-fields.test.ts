@@ -66,7 +66,7 @@ test.each(["PATCH", "PUT"])("a delayed %s preserves concurrent omitted fields", 
     return handleApi(new Request(url.href, { method: verb, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body) }), env, ctx, cfg, url);
   };
   try {
-    await store.createToken("abcdefabcdef", cfg.author, "test", await sha256Hex(token), Date.now());
+    await store.createToken("abcdefabcdef", cfg.author, "test", await sha256Hex(token), Date.now(), Date.now());
     expect(await store.createShare({ slug, author: cfg.author, title: "original", description: "original", tags: '{"old":"1"}', body: "original", kind: "page", files: null, size: 8, tokenId: "abcdefabcdef", now: Date.now(), limit: 64 * VERSION_FLOOR, expiry: { at: null, set: false } })).toBe("written");
     delay = true;
     const first = request(method, method === "PATCH" ? { title: "first" } : { html: "second body" });

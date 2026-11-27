@@ -438,7 +438,7 @@ test("revoke-all uses the verified Access application and reports returned resul
   const r = await setup({ token: true });
   expect(r.code, r.stdout + r.stderr).toBe(0);
   expect(r.writes.map(c => c.args?.[0] === "zero-trust" ? c.args.slice(3, 5) : c.args?.slice(0, 2)))
-    .toEqual([["revoke-tokens", app.id], ["d1", "execute"], ["secret", "put"]]);
+    .toEqual([["revoke-tokens", app.id], ["d1", "execute"], ["d1", "execute"], ["d1", "execute"], ["secret", "put"]]);
   expect(r.stdout).toMatch(/Access sign-ins:.*revoked.*\nTokens: 1 revoked\.\nTicket key:.*replaced/);
 });
 
@@ -446,8 +446,8 @@ test.each([
   ["unconfirmed Access result", { accessResult: "Aborted." }, ["zero-trust"]],
   ["unexpected Access acknowledgement", { accessResult: '{"error":"unconfirmed"}' }, ["zero-trust"]],
   ["unconfirmed D1 result", { d1Result: [{ success: false, results: [] }] }, ["zero-trust", "d1"]],
-  ["missing D1 changes count", { d1Result: [{ success: true, results: [] }] }, ["zero-trust", "d1"]],
-  ["unconfirmed ticket result", { ticketResult: "" }, ["zero-trust", "d1", "secret"]],
+  ["missing D1 changes count", { d1Result: [{ success: true, results: [] }] }, ["zero-trust", "d1", "d1", "d1"]],
+  ["unconfirmed ticket result", { ticketResult: "" }, ["zero-trust", "d1", "d1", "d1", "secret"]],
 ] as const)("revoke-all stops after %s and reports the unconfirmed step", async (_name, scenario, commands) => {
   const r = await setup({ ...scenario, token: true });
   expect(r.code).toBe(1);

@@ -15,7 +15,7 @@ export const OG_IMAGE_HEIGHT = 900;
 
 export const HOME_SHARES = 50;
 
-export type TokenError = "refused" | "too-large" | "bad-name";
+export type TokenError = "refused" | "too-large" | "bad-name" | "stale-sign-in";
 export type EraseError = "refused" | "too-large" | "bad-share" | "no-share";
 export type HomeNote = { erased: string } | { error: EraseError } | { confirm: { slug: string; title: string } };
 
@@ -72,6 +72,7 @@ const en = {
     refused: "Refused: this change did not come from this Instance's own page.",
     "too-large": "That form is too large. Give the token a name of 1 to 64 characters.",
     "bad-name": "Give the token a name of 1 to 64 characters, without control characters.",
+    "stale-sign-in": "Refused: every token was revoked after you signed in. Sign in again to create a token.",
   } satisfies Record<TokenError, string>,
   created: (name: SafeHtml) => `New token: ${name}`,
   copyNow: "Copy it now. It is not shown again.",
@@ -179,6 +180,7 @@ const ptBR: typeof en = {
     refused: "Recusado: este pedido não veio da página desta Instância.",
     "too-large": "Formulário grande demais. Dê ao token um nome de 1 a 64 caracteres.",
     "bad-name": "Dê ao token um nome de 1 a 64 caracteres, sem caracteres de controle.",
+    "stale-sign-in": "Recusado: todos os tokens foram revogados depois que você entrou. Entre de novo para criar um token.",
   } satisfies Record<TokenError, string>,
   created: (name: SafeHtml) => `Novo token: ${name}`,
   copyNow: "Copie agora. Ele não aparece de novo.",

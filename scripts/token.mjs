@@ -51,6 +51,22 @@ function d1(sql, inst, flags, targetConfig, statements = 1) {
   return receipt.at(-1);
 }
 
+const CLOCK = "CAST(unixepoch('subsec') * 1000 AS INTEGER)";
+
+/**
+ * revoke-all's token step, one statement per D1 call and in this order. The table is created first, so the step works
+ * on a database that predates migration 0009. The revocation time is recorded before the tokens are revoked: from then
+ * on Store.createToken refuses any Access sign-in issued before it, including a request already inside the Worker, so
+ * no token can be minted after the UPDATE by a session that started before revoke-all.
+ */
+export function revokeTokenStatements(now) {
+  return [
+    "CREATE TABLE IF NOT EXISTS revocations (id INTEGER PRIMARY KEY CHECK (id = 1), at INTEGER NOT NULL)",
+    `INSERT INTO revocations (id, at) VALUES (1, ${CLOCK}) ON CONFLICT (id) DO UPDATE SET at = MAX(at, excluded.at)`,
+    `UPDATE tokens SET revoked_at = ${now} WHERE revoked_at IS NULL`,
+  ];
+}
+
 export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, say }) {
   const steps = local
     ? [["Tokens", revokeTokens]]
@@ -132,7 +148,9 @@ function main() {
           return "Wrangler and cf target the verified Instance";
         },
         revokeTokens: () => {
-          const update = `UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL`;
+          const [table, marker, update] = revokeTokenStatements(Date.now());
+          d1(table, inst, flags, targetConfig);
+          d1(marker, inst, flags, targetConfig);
           // Wrangler's local JSON keeps only duration in meta. Its batch runs both statements on the same D1 connection.
           const count = flags.local
             ? d1(`${update}; SELECT changes() AS count`, inst, flags, targetConfig, 2).results[0]?.count

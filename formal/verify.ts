@@ -121,6 +121,32 @@ export function detectCodeDeviationsFromSource(store: string, token: string): Co
     });
   }
 
+  const notRevokedDecl = extractBody(store, "src/store.ts", "const", "NOT_REVOKED_SINCE");
+  const createTokenBody = extractBody(store, "src/store.ts", "method", "createToken");
+  if (!/NOT EXISTS \(SELECT 1 FROM revocations WHERE at >= \?\)/.test(notRevokedDecl)
+    || !/INSERT INTO tokens \([^)]*\) SELECT [?, ]+ WHERE \$\{NOT_REVOKED_SINCE\}/.test(createTokenBody)) {
+    findings.push({
+      codeFile: "src/store.ts",
+      symbol: "Store.createToken",
+      detectedVariant: "mint-skips-revocation-marker",
+      detail: "Store.createToken must insert only WHERE ${NOT_REVOKED_SINCE}: no revoke-all recorded at or after the sign-in's issue time.",
+    });
+  }
+
+  const statements = extractBody(token, "scripts/token.mjs", "function", "revokeTokenStatements");
+  const markerStmtAt = statements.indexOf("INSERT INTO revocations");
+  const updateStmtAt = statements.indexOf("UPDATE tokens SET revoked_at");
+  const sentMarkerAt = token.indexOf("d1(marker, ");
+  const sentUpdateAt = token.indexOf("${update}", sentMarkerAt);
+  if (markerStmtAt === -1 || updateStmtAt === -1 || markerStmtAt > updateStmtAt || sentMarkerAt === -1 || sentUpdateAt === -1) {
+    findings.push({
+      codeFile: "scripts/token.mjs",
+      symbol: "revokeTokenStatements",
+      detectedVariant: "revoke-all-marker-after-tokens",
+      detail: "revoke-all's Tokens step must record the revocation time before it revokes the tokens.",
+    });
+  }
+
   const revokeBlock = extractBody(token, "scripts/token.mjs", "function", "revokeAll");
   const remoteAt = revokeBlock.indexOf(": [[");
   const remoteSteps = remoteAt === -1 ? "" : revokeBlock.slice(remoteAt);
@@ -167,14 +193,19 @@ export const HISTORICAL_STORE_BUGS: readonly { bug: StoreBugVariant; expectedInv
 export const HISTORICAL_REVOKE_BUGS: readonly { bug: RevokeBugVariant; expectedInvariant: string; source: string }[] = [
   { bug: "revoke-all-sessions-last", expectedInvariant: "CONTAINMENT_NO_POST_REVOKE_CREDENTIAL", source: "commit 17a60d6 (v0.1.18 F-03)" },
   { bug: "write-commit-skips-token-check", expectedInvariant: "CONTAINMENT_NO_POST_REVOKE_WRITE", source: "2026-11-25 audit H2-1 (write in flight across revocation)" },
+  { bug: "mint-skips-revocation-marker", expectedInvariant: "CONTAINMENT_NO_POST_REVOKE_CREDENTIAL", source: "2026-11-27 audit P-15 (token creation in flight across revoke-all)" },
+  { bug: "revoke-all-marker-after-tokens", expectedInvariant: "CONTAINMENT_NO_POST_REVOKE_CREDENTIAL", source: "2026-11-27 audit P-15 (revocation time recorded after the token sweep)" },
 ];
+
+const REVOKE_VARIANTS = new Set<string>(HISTORICAL_REVOKE_BUGS.map((b) => b.bug));
+const isRevokeVariant = (v: StoreBugVariant | RevokeBugVariant): v is RevokeBugVariant => REVOKE_VARIANTS.has(v);
 
 export function runFormalVerification(root = ROOT, { replayBugs = false } = {}) {
   const deviations = detectCodeDeviations(root);
   const results: CheckResult[] = [];
   if (deviations.length > 0) {
     for (const d of deviations) {
-      if (d.detectedVariant === "revoke-all-sessions-last" || d.detectedVariant === "write-commit-skips-token-check") {
+      if (isRevokeVariant(d.detectedVariant)) {
         results.push(checkRevokeAllModel(d.detectedVariant));
       } else {
         results.push(checkStoreModel(d.detectedVariant));

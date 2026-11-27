@@ -55,6 +55,8 @@ const RESERVED = `EXISTS (SELECT 1 FROM trash WHERE body_key = ? AND due_at > ${
 // A token is checked before its request's body is read, so every write it authorizes re-checks at commit that the
 // token is still live: revocation also stops a write still in flight.
 const LIVE_TOKEN = "EXISTS (SELECT 1 FROM tokens WHERE id = ? AND revoked_at IS NULL)";
+// revoke-all records its time on D1's clock before it revokes the tokens; a sign-in issued at or before it mints nothing.
+const NOT_REVOKED_SINCE = "NOT EXISTS (SELECT 1 FROM revocations WHERE at >= ?)";
 const FIELDS = "title = COALESCE(?, title), description = CASE WHEN ? = 1 THEN ? ELSE description END, tags = COALESCE(?, tags)";
 const EXPIRY = "expires_at = CASE WHEN ? = 1 THEN ? WHEN expiry_set = 0 THEN ? ELSE expires_at END, expiry_set = MAX(expiry_set, ?)";
 const expiryArgs = (e: Expiry) => [e.set ? 1 : 0, e.at, e.at, e.set ? 1 : 0];
@@ -146,11 +148,18 @@ export class Store {
     return (await this.db.prepare("SELECT 1 AS n FROM tokens WHERE id = ? AND revoked_at IS NULL").bind(id).first()) !== null;
   }
 
-  async createToken(id: string, author: string, name: string, digest: string, now: number): Promise<void> {
-    await this.db
-      .prepare("INSERT INTO tokens (id, author, name, digest, created_at) VALUES (?, ?, ?, ?, ?)")
-      .bind(id, author, name, digest, now)
+  /**
+   * Inserts a token for a sign-in issued at `signedInAt` (ms), or returns false when revoke-all ran at or after it
+   * (migrations/0009_revocations.sql): a session revoke-all ended cannot mint a token, even from a request it started earlier.
+   * A sign-in with no issue time (0) never mints one: no revocation could be compared with it.
+   */
+  async createToken(id: string, author: string, name: string, digest: string, now: number, signedInAt: number): Promise<boolean> {
+    if (signedInAt <= 0) return false;
+    const r = await this.db
+      .prepare(`INSERT INTO tokens (id, author, name, digest, created_at) SELECT ?, ?, ?, ?, ? WHERE ${NOT_REVOKED_SINCE}`)
+      .bind(id, author, name, digest, now, signedInAt)
       .run();
+    return r.meta.changes === 1;
   }
 
   async listTokens(author: string) {

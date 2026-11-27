@@ -51,7 +51,26 @@ function d1(sql, inst, flags, targetConfig, statements = 1) {
   return receipt.at(-1);
 }
 
-export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, say }) {
+const CLOCK = "CAST(unixepoch('subsec') * 1000 AS INTEGER)";
+
+/**
+ * revoke-all's token step, one statement per D1 call and in this order. The table is created first, so the step works
+ * on a database that predates migration 0009. The revocation time is recorded before the tokens are revoked: from then
+ * on Store.createToken refuses any Access sign-in issued before it, including a request already inside the Worker, so
+ * no token can be minted after the UPDATE by a session that started before revoke-all.
+ */
+export function revokeTokenStatements(now) {
+  return [
+    "CREATE TABLE IF NOT EXISTS revocations (id INTEGER PRIMARY KEY CHECK (id = 1), at INTEGER NOT NULL)",
+    `INSERT INTO revocations (id, at) VALUES (1, ${CLOCK}) ON CONFLICT (id) DO UPDATE SET at = MAX(at, excluded.at)`,
+    `UPDATE tokens SET revoked_at = ${now} WHERE revoked_at IS NULL`,
+  ];
+}
+
+export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTicketKey }, { local, config = "instance.json", persistTo, say }) {
+  // The retry repeats this run's own target: dropping --local would send it to the deployed Instance.
+  const quote = (s) => (/^[\w./-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`);
+  const retry = `pnpm run token revoke-all --config ${quote(config)}${local ? ` --local --persist-to ${quote(persistTo)}` : ""}`;
   const steps = local
     ? [["Tokens", revokeTokens]]
     : [["Account", checkAccount], ["Access sign-ins", revokeSessions], ["Tokens", revokeTokens], ["Ticket key", rotateTicketKey]];
@@ -60,7 +79,7 @@ export function revokeAll({ checkAccount, revokeSessions, revokeTokens, rotateTi
     try {
       result = step();
     } catch (e) {
-      throw new Error(`${name}: ${e.message}\nThe steps after it did not run. Every step is safe to repeat: run pnpm run token revoke-all again.`);
+      throw new Error(`${name}: ${e.message}\nThe steps after it did not run. Every step is safe to repeat: run ${retry} again.`);
     }
     say(`${name}: ${result}.`);
   }
@@ -82,6 +101,14 @@ function revocationTarget(inst, accountId) {
     throw new Error("The generated configuration does not match the verified Instance target. Check the config and run setup before retrying.");
   }
   return { appId: app.id, config: { account_id: accountId, name: worker.name, d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid }] } };
+}
+
+function servingVersions(inst) {
+  const versions = cf("workers", "deployments", "list", "--worker", inst.name, "--page", "1", "--per-page", "1")?.deployments?.[0]?.versions;
+  if (!Array.isArray(versions) || !versions.length || versions.some((v) => typeof v?.version_id !== "string" || typeof v.percentage !== "number")) {
+    throw new Error("cf did not return the Worker's active deployment");
+  }
+  return versions;
 }
 
 function revokeSessions(appId) {
@@ -132,7 +159,9 @@ function main() {
           return "Wrangler and cf target the verified Instance";
         },
         revokeTokens: () => {
-          const update = `UPDATE tokens SET revoked_at = ${Date.now()} WHERE revoked_at IS NULL`;
+          const [table, marker, update] = revokeTokenStatements(Date.now());
+          d1(table, inst, flags, targetConfig);
+          d1(marker, inst, flags, targetConfig);
           // Wrangler's local JSON keeps only duration in meta. Its batch runs both statements on the same D1 connection.
           const count = flags.local
             ? d1(`${update}; SELECT changes() AS count`, inst, flags, targetConfig, 2).results[0]?.count
@@ -140,9 +169,18 @@ function main() {
           if (!Number.isSafeInteger(count) || count < 0) throw new Error("Wrangler did not confirm the number of revoked tokens.");
           return `${count} revoked`;
         },
-        rotateTicketKey: () => (putTicketKey(targetConfig), "replaced; every open ticket has ended"),
+        rotateTicketKey: () => {
+          const before = new Set(servingVersions(inst).map((v) => v.version_id));
+          putTicketKey(targetConfig);
+          // A version still in the active deployment, even at 0%, answers a version override and accepts old tickets.
+          const after = servingVersions(inst);
+          if (after.length !== 1 || after[0].percentage !== 100 || before.has(after[0].version_id)) {
+            throw new Error("the new key was uploaded, but the active deployment still holds a version from before it, which accepts the old tickets. Run setup with this Instance's config so one version serves 100%, give the deployment a minute to settle, then run revoke-all again");
+          }
+          return "replaced; every open ticket has ended";
+        },
         revokeSessions: () => revokeSessions(appId),
-      }, { local: flags.local, say: (line) => console.log(line) });
+      }, { local: flags.local, config: flags.config, persistTo: flags.persistTo, say: (line) => console.log(line) });
     } finally {
       if (directory) rmSync(directory, { recursive: true, force: true });
     }

@@ -1,57 +1,81 @@
 {
-  "version": "0.1.23",
-  "baselineCommit": "070c9fa",
-  "updatedAt": "2026-11-25",
-  "complexityPolicy": {
-    "tool": "cccc",
-    "rule": "Do not add unit tests exclusively for functions with cognitive complexity <= 5 unless they contain regular expressions.",
-    "measuredFunctions": 401,
-    "aboveThreshold": 97,
-    "atOrBelowThreshold": 304,
-    "status": "PASS"
-  },
+  "version": "0.1.25",
+  "baselineCommit": "d3d5880",
+  "updatedAt": "2026-11-27",
   "remediations": {
-    "STORE-01": { "status": "fixed", "migration": "migrations/0008_trash_nonce.sql", "evidence": "formal/verify.ts (791,308 states, 8/8 bug replays caught)" },
-    "STORE-02": { "status": "fixed", "evidence": "test/storage-cost.test.ts" },
-    "STORE-03": { "status": "fixed", "evidence": "test/reviewer-erase.test.ts, test/store-expiry.test.ts" },
-    "ZIP-01": { "status": "fixed", "evidence": "test/zip.test.ts, test/cli-site.test.ts" },
-    "ZIP-02": { "status": "fixed", "evidence": "test/zip.test.ts" },
-    "ZIP-03": { "status": "fixed", "evidence": "test/zip.test.ts" },
-    "AUTH-01": { "status": "fixed", "evidence": "test/sites.test.ts" },
-    "AUTH-02": { "status": "fixed", "evidence": "test/viewer.test.ts, test/api.test.ts, test/config.test.ts" },
-    "CS-01": { "status": "fixed", "evidence": "test/viewer.test.ts, test/site.test.ts" },
-    "CS-03": { "status": "fixed", "evidence": "test/viewer.test.ts, test/site.test.ts" },
-    "CS-06": { "status": "fixed", "evidence": "test/api.test.ts, test/zip.test.ts" },
-    "API-02": { "status": "fixed", "evidence": "test/api.test.ts" },
-    "CLI-01": { "status": "fixed", "evidence": "test/cli-safety.test.ts" },
-    "CLI-02": { "status": "fixed", "evidence": "test/cli-safety.test.ts, test/cli-metadata.test.ts" },
-    "CLI-03": { "status": "fixed", "evidence": "test/cli-safety.test.ts" },
-    "SETUP-01": { "status": "fixed", "evidence": "scripts/setup.mjs, test/operator.test.ts, test/setup-ownership.test.ts" },
-    "PROTO-01": { "status": "fixed", "evidence": "test/sites.test.ts" },
-    "HARD-01": { "status": "fixed", "evidence": "test/store-sites-expiry.test.ts" },
-    "TECH-01": { "status": "fixed", "evidence": "test/site.test.ts" },
-    "PERF-01": { "status": "fixed", "evidence": "docs/perf/raw/d1-roundtrips.md, test/roundtrips.test.ts" },
-    "PERF-02": { "status": "fixed", "evidence": "packages/cli/src/files.ts" },
-    "PERF-03": { "status": "fixed", "evidence": "test/cli-safety.test.ts" },
-    "ARCH-01": { "status": "fixed", "evidence": "formal/verify.ts, test/formal-verification.test.ts" },
-    "DOC-01": { "status": "fixed", "evidence": "DESIGN.md" },
-    "DOC-02": { "status": "fixed", "evidence": "site/public/index.html, site/public/en/index.html" },
-    "DOC-03": { "status": "fixed", "evidence": "docs/operator.md, docs/privacy.md, skills/htmlgate/SKILL.md, wrangler.jsonc, src/api.ts, src/pages.ts" }
+    "P-15": {
+      "status": "fixed",
+      "commits": [
+        "cd3ed86",
+        "b38ab12",
+        "5b2a48f",
+        "665282e"
+      ],
+      "evidence": "test/revoke-in-flight.test.ts, test/store-tokens.test.ts, test/language.test.ts, formal bug replay"
+    },
+    "P-16": {
+      "status": "fixed",
+      "commits": [
+        "834271a",
+        "2515131",
+        "d14c69f"
+      ],
+      "evidence": "test/reviewer-identity.test.ts, test/config.test.ts, test/operator.test.ts (setup refuses a non-ASCII capital in a configured email)"
+    },
+    "P-17": {
+      "status": "fixed",
+      "commits": [
+        "dc36650",
+        "2515131",
+        "d14c69f"
+      ],
+      "evidence": "test/setup-ownership.test.ts, test/token-revoke-all.test.ts"
+    }
   },
   "gates": {
-    "pnpmAudit": { "status": "pass", "vulnerabilitiesHighOrAbove": 0 },
-    "lint": { "status": "pass", "violations": 0 },
-    "verifyModel": { "status": "pass", "states": 791308, "transitions": 3140212, "bugReplaysCaught": 8 },
-    "typecheck": { "status": "pass" },
-    "mutateCheck": { "status": "pass", "anchors": 262 },
-    "fullCheck": { "status": "pass", "filesPassed": 71, "testsPassed": 1340, "testsSkippedPreTag": 2, "testsFailed": 0 },
-    "bench": { "status": "pass", "budgetMs": 50, "maxInstanceP95Ms": 41.6, "landingPtBrP95Ms": 15.8, "landingEnUsP95Ms": 16.2 },
-    "mutateTargetedNewAndUpdated": { "status": "pass", "caught": 19, "missed": 0, "broken": 0 },
-    "mutateFull": { "status": "running-final-candidate", "anchors": 262 },
-    "crossModelVerify": { "status": "pending" },
-    "securityDeployGate": { "status": "pending" },
-    "productionDeploy": { "status": "pending" },
-    "liveVerification": { "status": "pending" },
-    "stagingDisabled": { "status": "pending" }
+    "check": {
+      "status": "pass",
+      "commit": "665282e",
+      "note": "1401/1402; the formal BFS timed out at 97 s at load 340 and passed 23/23 alone; d14c69f passed 1401/1401"
+    },
+    "lint": {
+      "status": "pass"
+    },
+    "typecheck": {
+      "status": "pass"
+    },
+    "verifyModel": {
+      "status": "pass"
+    },
+    "mutateCheck": {
+      "status": "pass",
+      "anchors": 283
+    },
+    "mutateFull": {
+      "status": "pass",
+      "commit": "665282e",
+      "caught": 283,
+      "planted": 283,
+      "where": "local worktree, exit 0, tree clean after"
+    },
+    "securityGate": {
+      "status": "waived",
+      "commit": "665282e",
+      "note": "SEC-02 owner waiver until 2026-11-30; independent acceptance (Codex gpt-6.2-sol) PASS 7/7"
+    },
+    "deploy": {
+      "status": "pass",
+      "commit": "665282e",
+      "workerVersion": "7e55a509",
+      "rollback": "44ceafb2",
+      "migration": "0009_revocations applied",
+      "smoke": "16/16",
+      "toolchain": "node 26.12.1 (.nvmrc), cf 1.0.0-beta.28"
+    },
+    "bench": {
+      "status": "no-verdict",
+      "commit": "665282e",
+      "note": "local and --live exit 2 at host load 238 and 124; CI release-validation bench is the verdict"
+    }
   }
 }

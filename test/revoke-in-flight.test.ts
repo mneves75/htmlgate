@@ -1,8 +1,13 @@
 // A token revoked while one of its writes is still in progress must not land that write: the Worker checks the token
 // before it reads the body, so each Store write re-checks at commit that the token is still live.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+// @ts-expect-error plain JavaScript module
+import { revokeTokenStatements } from "../scripts/token.mjs";
 import { VERSION_FLOOR } from "../src/store";
-import { AUTHOR, PAGE, startInstance, stopAccess, type Instance } from "./reviewer-beta10-harness";
+import { fakeEnv } from "./fake-env";
+import { AUD, AUTHOR, PAGE, startAccess, startInstance, stopAccess, type Instance } from "./reviewer-beta10-harness";
 
 let i: Instance;
 beforeAll(async () => { i = await startInstance(); });
@@ -38,7 +43,7 @@ async function freshToken() {
   const { newToken, randomHex, sha256Hex } = await import("../src/ids");
   const token = newToken();
   const id = randomHex(6);
-  await i.store.createToken(id, AUTHOR, "in-flight", await sha256Hex(token), Date.now());
+  await i.store.createToken(id, AUTHOR, "in-flight", await sha256Hex(token), Date.now(), Date.now());
   return { token, id, revoke: async () => void (await i.store.revokeToken(AUTHOR, id, Date.now())) };
 }
 
@@ -203,7 +208,7 @@ describe("a token revoked right after it authenticates", () => {
     const { newToken, randomHex, sha256Hex } = await import("../src/ids");
     const token = newToken();
     const id = randomHex(6);
-    await full.store.createToken(id, AUTHOR, "full", await sha256Hex(token), Date.now());
+    await full.store.createToken(id, AUTHOR, "full", await sha256Hex(token), Date.now(), Date.now());
     revokeOnAuth(full, id);
     const res = await full.call(`/api/shares/${slug}`, {
       method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ html: PAGE }),
@@ -244,5 +249,111 @@ describe("the Store refuses every write from a revoked token", () => {
     expect(await i.store.tokenLive(other.id)).toBe(true);
     expect(await i.store.revokeToken(AUTHOR, other.id, now, other.id)).toBe(true);
     expect(await i.store.tokenLive(other.id)).toBe(false);
+  });
+});
+
+describe("token creation against revoke-all", () => {
+  const live = async (inst: Instance) =>
+    ((await inst.fake.db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE revoked_at IS NULL").first()) as { n: number }).n;
+  /** revoke-all's token step, statement by statement, exactly as scripts/token.mjs sends it to D1. */
+  const revokeTokens = async (inst: Instance) => {
+    for (const sql of revokeTokenStatements(Date.now()) as string[]) await inst.fake.db.prepare(sql).run();
+  };
+  /** An Access sign-in for the Author whose token was issued at `iat` (seconds), or with no iat at all. */
+  const signIn = async (iat: number | null) => {
+    const { SignJWT } = await import("jose");
+    const access = await startAccess();
+    const now = Math.floor(Date.now() / 1000);
+    const jwt = new SignJWT({ email: AUTHOR, type: "app" }).setProtectedHeader({ alg: "RS256", kid: access.kid })
+      .setIssuer(access.url).setAudience([AUD]).setNotBefore(now - 120).setExpirationTime(now + 3600).setSubject("sub-" + AUTHOR);
+    return (iat === null ? jwt : jwt.setIssuedAt(iat)).sign(access.key);
+  };
+  const mint = (inst: Instance, jwt: string, body: BodyInit = "name=late") => inst.call("/tokens", {
+    method: "POST", body, duplex: "half",
+    headers: { "cf-access-jwt-assertion": jwt, "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "same-origin" },
+  } as RequestInit);
+  const minted = (html: string) => /<code id="new-token">(hg_[A-Za-z0-9]{40})<\/code>/.exec(html)?.[1];
+
+  /** A POST /tokens signed in before revoke-all whose form arrives once `during` has run. */
+  const heldMint = async (inst: Instance, during: () => Promise<void>) => {
+    const jwt = await signIn(Math.floor(Date.now() / 1000));
+    let started!: () => void;
+    const reading = new Promise<void>((r) => (started = r));
+    let release!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    const body = new ReadableStream<Uint8Array>({
+      async pull(c) { started(); await released; c.enqueue(new TextEncoder().encode("name=late")); c.close(); },
+    }, { highWaterMark: 0 });
+    const res = mint(inst, jwt, body);
+    await reading;
+    await during();
+    release();
+    return res;
+  };
+
+  test("a request signed in before revoke-all and held open across it gets no token", async () => {
+    const inst = await startInstance();
+    const r = await heldMint(inst, () => revokeTokens(inst));
+    expect(r.status).toBe(403);
+    expect(minted(await r.text())).toBeUndefined();
+    expect(await live(inst)).toBe(0);
+  });
+
+  test.each([0, 1, 2, 3])("a held request whose form lands after %i of the token step's statements leaves no live token", async (k) => {
+    const inst = await startInstance();
+    const statements = revokeTokenStatements(Date.now()) as string[];
+    expect(statements).toHaveLength(3);
+    // The table revoke-all creates on an older database is exactly the one migration 0009 creates.
+    const migration = readFileSync(join(process.cwd(), "migrations/0009_revocations.sql"), "utf8");
+    expect(migration.replace(/^--.*$/gm, "").trim()).toBe(`${statements[0]};`);
+    const r = await heldMint(inst, async () => { for (const sql of statements.slice(0, k)) await inst.fake.db.prepare(sql).run(); });
+    for (const sql of statements.slice(k)) await inst.fake.db.prepare(sql).run();
+    expect(await live(inst)).toBe(0);
+    if (k >= 2) expect(r.status).toBe(403);
+  });
+
+  test("a sign-in from before revoke-all that reaches the Worker after it gets no token", async () => {
+    const inst = await startInstance();
+    const jwt = await signIn(Math.floor(Date.now() / 1000) - 60);
+    await revokeTokens(inst);
+    const r = await mint(inst, jwt);
+    expect(r.status).toBe(403);
+    expect(minted(await r.text())).toBeUndefined();
+    expect(await live(inst)).toBe(0);
+  });
+
+  test("a sign-in without an issue time gets no token once revoke-all has run", async () => {
+    const inst = await startInstance();
+    await revokeTokens(inst);
+    const r = await mint(inst, await signIn(null));
+    expect(r.status).toBe(403);
+    expect(await live(inst)).toBe(0);
+  });
+
+  test("a sign-in without an issue time gets no token even before any revoke-all", async () => {
+    const inst = await startInstance();
+    const before = await live(inst);
+    const r = await mint(inst, await signIn(null));
+    expect(r.status).toBe(403);
+    expect(minted(await r.text())).toBeUndefined();
+    expect(await live(inst)).toBe(before);
+  });
+
+  test("the Author signing in again after revoke-all makes a working token", async () => {
+    const inst = await startInstance();
+    await revokeTokens(inst);
+    const r = await mint(inst, await signIn(Math.floor(Date.now() / 1000) + 2));
+    expect(r.status).toBe(200);
+    const token = minted(await r.text());
+    expect(token).toBeDefined();
+    expect((await inst.call("/api/shares", { headers: { authorization: `Bearer ${token}` } })).status).toBe(200);
+  });
+
+  test("revoke-all's token step revokes every token on a database migrated before the revocation record existed", async () => {
+    const { db } = fakeEnv({ through: "0008_trash_nonce.sql" });
+    await db.prepare("INSERT INTO tokens (id, author, name, digest, created_at) VALUES ('aaaaaaaaaaaa', ?, 'old', 'd', 1)").bind(AUTHOR).run();
+    for (const sql of revokeTokenStatements(Date.now()) as string[]) await db.prepare(sql).run();
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM tokens WHERE revoked_at IS NULL").first()).toEqual({ n: 0 });
+    expect(await db.prepare("SELECT COUNT(*) AS n FROM revocations").first()).toEqual({ n: 1 });
   });
 });

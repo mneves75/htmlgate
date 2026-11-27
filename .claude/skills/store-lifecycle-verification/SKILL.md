@@ -13,15 +13,15 @@ Node 26 and TypeScript are already pinned in `.nvmrc` and `package.json`, with z
 
 ## Coverage record
 
-- **Sync commit:** `e76024d`
+- **Sync commit:** `cd3ed86`
 - **Covered files and symbols:**
-  - `src/store.ts`: `Store.putBody`, `Store.dueNow`, `Store.commit`, `Store.createShare`, `Store.addVersion`, `Store.updateFields`, `Store.setPublic`, `Store.deleteShare`, `Store.revokeToken`, `Store.emptyTrash`, `Store.expire`, `Store.countView`, `Store.eraseShare`, `Store.eraseBodies`, `RESERVED`, `WROTE`, `LIVE_TOKEN`, `live`.
-  - `scripts/token.mjs`: `revokeAll`.
+  - `src/store.ts`: `Store.putBody`, `Store.dueNow`, `Store.commit`, `Store.createShare`, `Store.addVersion`, `Store.updateFields`, `Store.setPublic`, `Store.deleteShare`, `Store.revokeToken`, `Store.emptyTrash`, `Store.expire`, `Store.countView`, `Store.eraseShare`, `Store.eraseBodies`, `Store.createToken`, `RESERVED`, `WROTE`, `LIVE_TOKEN`, `NOT_REVOKED_SINCE`, `live`.
+  - `scripts/token.mjs`: `revokeAll`, `revokeTokenStatements`.
 
 Check whether covered files changed since the sync commit before trusting a pass:
 
 ```sh
-git diff --stat 37682bf -- src/store.ts scripts/token.mjs
+git diff --stat cd3ed86 -- src/store.ts scripts/token.mjs
 ```
 
 Advance the sync commit above only after confirming that `formal/store-lifecycle.model.ts` and `formal/verify.ts` still accurately reflect every atomic boundary in `src/store.ts` and `scripts/token.mjs`.
@@ -34,7 +34,7 @@ Advance the sync commit above only after confirming that `formal/store-lifecycle
 4. **`SHARE_VERSION_CONSISTENCY`** — Every `versions` row belongs to a Share whose `latest_version` covers it, and every non-purged Share's `latest_version` exists in `versions`. *Harm:* re-checking `live()` on statement 2 of `addVersion()` leaves an orphan Version after a mid-batch expiry (replays plan 008 / mutation #187).
 5. **`UNEXPIRED_STORAGE_CAP`** — Stored Versions plus unexpired reservations never exceed `storageLimit`. *Harm:* concurrent publishes bypass the Instance storage cap.
 6. **`NO_LOST_RELEDGERED_TRASH`** — `Store.emptyTrash()` deletes only `trash` rows whose `(body_key, due_at)` still matches what it read before R2 deletion, and `Store.dueNow()` advances `due_at` by 1 ms on a same-millisecond conflict (`excluded.due_at = trash.due_at`). *Harm:* a freshly re-ledgered upload (`dueNow`) loses its `trash` row and leaks an untracked object in R2 (discovered by this model checker on `37e374b` and fixed in `Store.dueNow`).
-7. **`CONTAINMENT_NO_POST_REVOKE_CREDENTIAL`** — Once `revokeAll` completes, an attacker starting with a compromised Access session, API token, and ticket holds zero live credentials. *Harm:* revoking tokens before Access sessions lets the stolen session mint a fresh token mid-run (replays commit `17a60d6`, F-03).
+7. **`CONTAINMENT_NO_POST_REVOKE_CREDENTIAL`** — Once `revokeAll` completes, an attacker starting with a compromised Access session, API token, and ticket holds zero live credentials. *Harm:* revoking tokens before Access sessions lets the stolen session mint a fresh token mid-run (replays commit `17a60d6`, F-03). A `POST /tokens` that passed `person()` before revoke-all and commits after its token step mints a live token unless `Store.createToken` inserts only `WHERE ${NOT_REVOKED_SINCE}` and `revokeTokenStatements` records the revocation time before its `UPDATE tokens` (replays `mint-skips-revocation-marker` and `revoke-all-marker-after-tokens`, audit P-15).
 8. **`CONTAINMENT_NO_POST_REVOKE_WRITE`** — No write authenticated by a token commits after every token that could authorize it is revoked. `api.ts` checks the token before reading the body, so each token-authorized Store write (`createShare`, `addVersion`, `updateFields`, `setPublic`, `deleteShare`, and `revokeToken` when a token asks) re-checks `${LIVE_TOKEN}` in its liveness-deciding statement. *Harm:* a write still uploading when `revokeAll` or the Author revokes its token lands anyway.
 
 ## Bounds and scope honesty
@@ -51,10 +51,10 @@ pnpm run verify:model
 
 This runs both:
 1. Code-to-model conformance against `src/store.ts` and `scripts/token.mjs`, plus exhaustive BFS verification of all reachable states.
-2. `--replay-bugs`, proving all 9 historical and discovered bugs still fail with concrete counterexamples.
+2. `--replay-bugs`, proving all 11 historical and discovered bugs still fail with concrete counterexamples.
 
 ## Reading results and handling failures
 
-- On **PASS**, the command prints the reachable state count and transition count for each model and confirms all 9 bug replays were caught.
+- On **PASS**, the command prints the reachable state count and transition count for each model and confirms all 11 bug replays were caught.
 - On **FAIL**, read the numbered counterexample trace directly; each step names the exact `Store.*` or `revokeAll` action and database/R2 state transition.
 - **Real bug vs modeling error:** Open the cited symbol in `src/store.ts` or `scripts/token.mjs` and check whether the step sequence in the counterexample can happen on real D1 + R2. If yes, fix the code — never weaken an invariant to make the check pass. If a deliberate design change altered an atomic step boundary, update the model and conformance check together, verify the negative controls still fail, and advance the sync commit above.

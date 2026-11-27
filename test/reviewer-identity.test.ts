@@ -91,6 +91,13 @@ describe("identity comes only from a verified Access token", () => {
       ["email is a longer address containing an allowlisted one", await signed(claims(`x${VIEWER}`))],
       ["email has a suffix", await signed(claims(`${VIEWER}.evil`))],
       ["email is a prefix of an allowlisted address", await signed(claims("viewer@example.co"))],
+      // RFC 6532 makes every non-ASCII code point legal in an address, so each of these names a different mailbox.
+      ...(await Promise.all(
+        [["NBSP", " "], ["IDEOGRAPHIC SPACE", "　"], ["LINE SEPARATOR", " "], ["BOM", "﻿"], ["EM SPACE", " "], ["ZERO WIDTH SPACE", "​"], ["bare LF", "\n"], ["VT", "\u000b"], ["FF", "\u000c"]]
+          .flatMap(([name, c]) => [[`email with a leading ${name}`, c + VIEWER], [`email with a trailing ${name}`, VIEWER + c]])
+          .map(async ([label, email]): Promise<[string, string]> => [label!, await signed(claims(email))]),
+      )),
+      ["email with a dotted capital I, which toLowerCase folds to i plus a dot", await signed(claims("vİewer@example.com"))],
       ["audience is a different application", await signed(claims(VIEWER, { aud: ["another-app"] }))],
       ["audience list without ours", await signed(claims(VIEWER, { aud: ["a", "b"] }))],
       ["audience missing", await signed(Object.fromEntries(Object.entries(claims(VIEWER)).filter(([k]) => k !== "aud")))],
@@ -113,7 +120,8 @@ describe("identity comes only from a verified Access token", () => {
   test("controls: an array audience that includes ours and a mixed-case email are accepted", async () => {
     const ok1 = await signed(claims(VIEWER, { aud: ["other", AUD] }));
     const ok2 = await signed(claims(VIEWER.toUpperCase()));
-    for (const jwt of [ok1, ok2]) expect((await get(`/s/${slug}`, jwtHeader(jwt))).status).toBe(200);
+    const ok3 = await signed(claims(` \t${VIEWER} `));
+    for (const jwt of [ok1, ok2, ok3])expect((await get(`/s/${slug}`, jwtHeader(jwt))).status).toBe(200);
   });
 
   test("identity is resolved on every request: interleaved good and bad tokens never bleed into each other", async () => {

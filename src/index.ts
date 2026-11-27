@@ -119,8 +119,9 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
   if (ticket) return req.method === "GET" ? await serveTicketFile(req, env, cfg, ticket[1]!, ticket[2]!) : await notFound(cfg.language);
   if (path.startsWith("/f/")) return notFound(cfg.language);
 
-  const who = await person(req, cfg);
-  if (!who) return notFound(cfg.language, { home: "viewer" });
+  const signedIn = await person(req, cfg);
+  if (!signedIn) return notFound(cfg.language, { home: "viewer" });
+  const who = signedIn.email;
   const isAuthor = who === cfg.author;
   const visitor: Visitor = { email: who, isAuthor, origin: url.origin, lang: cfg.language };
   const store = new Store(env.DB, env.BODIES);
@@ -181,7 +182,9 @@ async function handlePeople(req: Request, env: Env, ctx: ExecutionContext, cfg: 
         return html(400, tokensPage(visitor, await store.listTokens(cfg.author), undefined, "bad-name"));
       }
       const token = newToken();
-      await store.createToken(randomHex(6), cfg.author, name, await sha256Hex(token), Date.now());
+      if (!(await store.createToken(randomHex(6), cfg.author, name, await sha256Hex(token), Date.now(), signedIn.issuedAt))) {
+        return html(403, tokensPage(visitor, await store.listTokens(cfg.author), undefined, "stale-sign-in"));
+      }
       return html(200, tokensPage(visitor, await store.listTokens(cfg.author), { name, token }));
     }
     const m = /^\/tokens\/([0-9a-f]{12})\/revoke$/.exec(path);

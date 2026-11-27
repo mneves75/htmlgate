@@ -52,8 +52,15 @@ export function readInstance(path) {
   if (typeof mfa !== "boolean") throw new Error("mfa must be true or false (default false).");
   const staging = raw.staging === undefined ? false : raw.staging;
   if (typeof staging !== "boolean") throw new Error("staging must be true or false (default false).");
-  const author = raw.authorEmail.trim().toLowerCase();
-  const allowlist = [...new Set([author, ...raw.allowlist.map((e) => e.trim().toLowerCase())])];
+  // ASCII letters only: the fold the Worker applies to a sign-in's email (src/access.ts).
+  // A non-ASCII capital is refused: 0.1.24 stored its rows under the Unicode lowercase, which this fold no longer reaches.
+  const fold = (e) => {
+    const folded = e.trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
+    if (folded !== folded.toLowerCase()) throw new Error(`Write ${e.trim()} in lowercase: htmlgate lowercases only A to Z in an email.`);
+    return folded;
+  };
+  const author = fold(raw.authorEmail);
+  const allowlist = [...new Set([author, ...raw.allowlist.map(fold)])];
   return { name: raw.name, author, allowlist, domain, language, expiryDays, mfa, staging, ...(raw.bootstrapStorage === undefined ? {} : { bootstrapStorage: raw.bootstrapStorage }) };
 }
 

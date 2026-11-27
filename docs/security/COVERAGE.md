@@ -1,3 +1,23 @@
+# Audit coverage, 2026-11-27
+
+Profile: standard. Baseline `d3d5880`. The run was recorded as incomplete when it ended, with 4 leads still to validate and 2 units deferred. All six were then resolved: P-16 and P-17 were confirmed and fixed, three became documentation changes, and one is recorded as a hardening note (see AUDIT_REPORT.md).
+
+**Recall.** Before hunting, violations from the mutation list were planted in history-free copies of the tree, with their killing tests removed. Recall per layer decided which layers got a second-wave hunter.
+
+**Not covered:**
+- browsers other than Chromium;
+- live Cloudflare state beyond read-only API reads;
+- whether Access re-issues an app token with a fresh `iat`;
+- the clock skew between Access and D1.
+
+**Gates for 0.1.25:**
+
+| Check | Result |
+|---|---|
+| `pnpm run check` | Full suite green |
+| Full `pnpm run mutate` | Run on the release commit before deploy; its result is in the private gate record |
+| `pnpm run verify:model` | Includes the revoke-all marker step and its bug replay |
+
 # Audit coverage, 2026-11-25
 
 Profile: standard. Baseline `e70b6ff`. This was one pass, the first recorded under this method. Earlier audits (v0.1.18 through v0.1.23) were treated as leads, not as coverage. "Covered" means a hunter traced the surface in source and, where the result depended on it, ran a local harness. It does not mean the surface is free of defects.

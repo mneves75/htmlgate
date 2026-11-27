@@ -8,7 +8,7 @@ export type StoreBugVariant =
   | "due-now-same-ms-race"
   | "due-now-two-empty-trash-race";
 
-export type RevokeBugVariant = "none" | "revoke-all-sessions-last" | "write-commit-skips-token-check";
+export type RevokeBugVariant = "none" | "revoke-all-sessions-last" | "write-commit-skips-token-check" | "mint-skips-revocation-marker" | "revoke-all-marker-after-tokens";
 
 export interface ModelBounds {
   maxClock: number;
@@ -555,12 +555,21 @@ interface RevokeState {
   /** A write authenticated by a then-live token, whose body is still uploading (api.ts checks the token before reading it). */
   writeInFlight: boolean;
   writeLandedWithoutLiveToken: boolean;
+  /**
+   * A POST /tokens that passed person() and whose form body is still uploading, with when its sign-in was issued relative
+   * to the revocation marker. A pre-marker JWT can arrive at any time; only a live session can get a post-marker one.
+   */
+  mintInFlight: "none" | "pre-marker" | "post-marker";
+  /** revoke-all's revocation time is recorded (migrations/0009_revocations.sql); Store.createToken refuses older sign-ins. */
+  markerSet: boolean;
 }
 
 export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult {
   const order = bug === "revoke-all-sessions-last"
-    ? (["account", "tokens", "ticketKey", "sessions"] as const)
-    : (["account", "sessions", "tokens", "ticketKey"] as const);
+    ? (["account", "marker", "tokens", "ticketKey", "sessions"] as const)
+    : bug === "revoke-all-marker-after-tokens"
+      ? (["account", "sessions", "tokens", "marker", "ticketKey"] as const)
+      : (["account", "sessions", "marker", "tokens", "ticketKey"] as const);
 
   const init: RevokeState = {
     step: 0,
@@ -570,9 +579,11 @@ export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult
     attackerMintedAfterTokensRevoked: false,
     writeInFlight: false,
     writeLandedWithoutLiveToken: false,
+    mintInFlight: "none",
+    markerSet: false,
   };
   const keyOf = (s: RevokeState) =>
-    `${s.step}|${s.sessionLive ? 1 : 0}|${s.tokensLive}|${s.ticketLive ? 1 : 0}|${s.attackerMintedAfterTokensRevoked ? 1 : 0}|${s.writeInFlight ? 1 : 0}|${s.writeLandedWithoutLiveToken ? 1 : 0}`;
+    `${s.step}|${s.sessionLive ? 1 : 0}|${s.tokensLive}|${s.ticketLive ? 1 : 0}|${s.attackerMintedAfterTokensRevoked ? 1 : 0}|${s.writeInFlight ? 1 : 0}|${s.writeLandedWithoutLiveToken ? 1 : 0}|${s.mintInFlight}|${s.markerSet ? 1 : 0}`;
   const visited = new Set<string>([keyOf(init)]);
   const queue: { state: RevokeState; trace: string[] }[] = [{ state: init, trace: ["init(compromised-device: session=live, tokens=1, ticket=live)"] }];
   let statesExplored = 0;
@@ -617,10 +628,12 @@ export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult
       const action = order[s.step]!;
       const n = { ...s, step: s.step + 1 };
       if (action === "sessions") n.sessionLive = false;
+      if (action === "marker") n.markerSet = true;
       if (action === "tokens") n.tokensLive = 0;
       if (action === "ticketKey") n.ticketLive = false;
       nexts.push([`revokeAll step ${s.step + 1}: ${action}`, n]);
     }
+    // A live session mints with a sign-in issued now, which postdates any marker already set.
     if (s.sessionLive && s.tokensLive < 2) {
       const n = {
         ...s,
@@ -628,6 +641,27 @@ export function checkRevokeAllModel(bug: RevokeBugVariant = "none"): CheckResult
         attackerMintedAfterTokensRevoked: s.attackerMintedAfterTokensRevoked || s.tokensLive === 0,
       };
       nexts.push([`Attacker uses live Access session -> POST /tokens (liveTokens=${n.tokensLive})`, n]);
+    }
+    if (s.mintInFlight === "none") {
+      // A JWT's issue time is fixed when Access signs it, independent of when the request reaches the Worker: a JWT issued
+      // before the marker can arrive at any time, even after its session was revoked (until it expires). Only a live
+      // session can get a sign-in issued after the marker. This assumes Access's clock does not run ahead of D1's; the
+      // Store refuses equality (at >= iat), so a sign-in in the same millisecond as the marker counts as pre-marker.
+      const starts: ("pre-marker" | "post-marker")[] = s.sessionLive && s.markerSet ? ["pre-marker", "post-marker"] : ["pre-marker"];
+      for (const signedIn of starts) {
+        nexts.push([`Attacker's Access JWT (sign-in ${signedIn}) passes person() on POST /tokens and starts uploading the form`, { ...s, mintInFlight: signedIn }]);
+      }
+    }
+    if (s.mintInFlight !== "none") {
+      // Store.createToken inserts only WHERE no revocation is recorded at or after the sign-in's issue time.
+      const lands = !(s.markerSet && s.mintInFlight === "pre-marker") || bug === "mint-skips-revocation-marker";
+      const n: RevokeState = {
+        ...s,
+        mintInFlight: "none",
+        tokensLive: lands ? Math.min(s.tokensLive + 1, 2) : s.tokensLive,
+        attackerMintedAfterTokensRevoked: s.attackerMintedAfterTokensRevoked || (lands && s.tokensLive === 0),
+      };
+      nexts.push([`Form finishes -> Store.createToken ${lands ? "lands" : "refused (revocation marker)"} (liveTokens=${n.tokensLive})`, n]);
     }
     if (!s.writeInFlight && s.tokensLive > 0) {
       nexts.push(["Attacker's live token passes authenticate() and starts uploading a write body", { ...s, writeInFlight: true }]);

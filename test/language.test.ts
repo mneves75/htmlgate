@@ -30,6 +30,8 @@ describe("a pt-BR Instance", () => {
     const r = await fetch(`${inst.base}${path}`, email ? await asPerson(email, { redirect: "manual", ...init }) : { redirect: "manual", ...init });
     return { status: r.status, headers: r.headers, body: await r.text() };
   };
+  const sql = (command: string) => promisify(execFile)(join(process.cwd(), "node_modules/.bin/wrangler"),
+    ["d1", "execute", "htmlgate-dev", "--local", "--persist-to", inst.state, "--command", command], { env: { ...process.env, CI: "1" } });
   const form = (body: string) => ({
     method: "POST", body, headers: { "content-type": "application/x-www-form-urlencoded", origin: inst.base, "sec-fetch-site": "same-origin" },
   });
@@ -108,6 +110,19 @@ describe("a pt-BR Instance", () => {
     const refused = await get("/tokens", AUTHOR, { ...form("name=x"), headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "cross-site" } });
     expect(refused.status).toBe(403);
     expect(refused.body).toContain("Recusado");
+  });
+
+  test("a token request from a sign-in older than revoke-all is refused in pt-BR, with no token shown", async () => {
+    // A revocation recorded after every sign-in this test signs, as revoke-all records it on the Instance's own D1.
+    await sql(`INSERT INTO revocations (id, at) VALUES (1, ${Date.now() + 3_600_000}) ON CONFLICT (id) DO UPDATE SET at = excluded.at`);
+    try {
+      const stale = await get("/tokens", AUTHOR, form("name=antigo"));
+      expect(stale.status).toBe(403);
+      expect(stale.body).toContain("todos os tokens foram revogados depois que você entrou");
+      expect(stale.body).not.toContain('id="new-token"');
+    } finally {
+      await sql("DELETE FROM revocations");
+    }
   });
 
   test("the pt-BR pages pass axe at phone width in light and dark, and never scroll sideways", async () => {

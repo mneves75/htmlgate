@@ -1,3 +1,34 @@
+# Security audit, 2026-11-27
+
+Baseline: `main` at `d3d5880` (v0.1.24). Remediation branch: `security/audit-remediation-3`. Released in 0.1.25.
+
+The method was the same as on 2026-11-25. Planted violations measured the hunters' recall, and oracles ran against real jose, workerd and Chromium. P-15 was confirmed by a fresh refuting verifier and by a second model family (Codex gpt-6.2-sol). P-16 and P-17 came from leads that no fresh verifier was funded for; each was confirmed by a test that failed before its fix and a mutation anchor that was caught, and Codex gpt-6.2-sol reviewed the fixes. Only local harnesses ran against a local `wrangler dev` with dummy principals. The live Cloudflare checks were read-only. See [COVERAGE.md](COVERAGE.md).
+
+| ID | Title | Status | Severity | CWE | Fix |
+|---|---|---|---|---|---|
+| P-15 | A token-creation request already authorized could commit after revoke-all's token sweep | Fixed | Medium (likelihood low, impact high) | CWE-613, CWE-367 | `cd3ed86`, `b38ab12`, `5b2a48f` |
+| P-16 | The Allowlist check folded sign-in emails with Unicode-wide `trim()`/`toLowerCase()` | Fixed | Low (author's estimate, not independently scored) | CWE-178, CWE-289 | `834271a`, `2515131` |
+| P-17 | revoke-all's ticket key rotation did not end tickets accepted by an older version left in the deployment | Fixed | Low (author's estimate, not independently scored) | CWE-613 | `dc36650`, `2515131` |
+
+- **P-15:**
+  - **What was wrong:** revoke-all ended Access sessions, then revoked tokens. A `POST /tokens` whose sign-in predated revoke-all, if it was still in flight, could insert a new token after the sweep.
+  - **Fix:** revoke-all records its time, on D1's clock, before revoking tokens. `Store.createToken` inserts only when no revocation is at or after the JWT `iat`, in the same statement. Otherwise the request gets `403` and the page asks for a fresh sign-in.
+  - **Residual:** this relies on Access issuing `iat` at sign-in; a sign-in without one never creates a token. A clock skew between Access and D1 widens or narrows the window by the size of the skew; a skew in the other direction fails closed.
+- **P-16:**
+  - **What was wrong:** Access may admit a different mailbox whose Unicode fold matches an Allowlisted address, for example one with U+212A KELVIN SIGN or a non-breaking space around it. The Worker then treated that sign-in as the Allowlisted person.
+  - **Fix:** the Worker trims only spaces and tabs from the claim. The Worker, config and setup lowercase only `A`–`Z`.
+- **P-17:**
+  - **What was wrong:** a version left in the active deployment, even at 0%, still serves requests through version overrides with the old `TICKET_KEY`.
+  - **Fix:** revoke-all now fails unless one new version serves 100%.
+  - **Residual:** an account member who rolls a version back during revoke-all can pass the check. Running revoke-all again is safe.
+
+**Documentation only:**
+- D1 restore replay (`9aa2b16`, `2515131`).
+- The `mfa: false` lifecycle (`c49238b`).
+- The credentials a Workers Logs error record may carry (`df28c8d`).
+
+**Hardening note:** `POST /erase` under a sign-in issued before revoke-all is not fenced by the revocation time. It mints no credential.
+
 # Security audit, 2026-11-25
 
 Baseline: `main` at `e70b6ff` (v0.1.23). Remediation branch: `security/audit-remediation-2`.
@@ -46,7 +77,7 @@ The first two depend on deployment facts outside the repository. On 2026-11-26 t
 
 Each of these was reviewed and judged not to cross a trust boundary today. They are listed so that a future change does not quietly turn one into a finding.
 
-- Allowlist email comparison trims and lowercases with JavaScript `toLowerCase()` without Unicode normalization (NFC/NFKC) or locale-specific case folding.
+- Allowlist email comparison trims and lowercases with JavaScript `toLowerCase()` without Unicode normalization (NFC/NFKC) or locale-specific case folding. (Superseded by P-16 on 2026-11-27: the fold is now ASCII-only.)
 - Access JWTs have no upper bound on `iat` beyond `exp`.
 - Site files are served without re-checking CRC on every read; they were verified at upload.
 - `useToken` sends its `last_used_at` update in the same batch as the lookup, so an unknown token still costs a D1 write batch (one that changes no row).

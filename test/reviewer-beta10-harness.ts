@@ -73,7 +73,7 @@ export async function startInstance(vars: Vars = {}, opts: Parameters<typeof fak
 
   const store = new Store(fake.db, fake.bucket);
   const token = newToken();
-  await store.createToken(randomHex(6), AUTHOR, "reviewer", await sha256Hex(token), Date.now());
+  await store.createToken(randomHex(6), AUTHOR, "reviewer", await sha256Hex(token), Date.now(), Date.now());
 
   /** The Publisher API with the Author's token. */
   async function api(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {

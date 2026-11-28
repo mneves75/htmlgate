@@ -1,7 +1,7 @@
 {
   "version": "0.1.25",
   "baselineCommit": "d3d5880",
-  "updatedAt": "2026-11-27",
+  "updatedAt": "2026-11-28",
   "remediations": {
     "P-15": {
       "status": "fixed",
@@ -73,9 +73,25 @@
       "toolchain": "node 26.12.1 (.nvmrc), cf 1.0.0-beta.28"
     },
     "bench": {
-      "status": "no-verdict",
-      "commit": "665282e",
-      "note": "local and --live exit 2 at host load 238 and 124; CI release-validation bench is the verdict"
+      "status": "pass",
+      "commit": "1a85fe1",
+      "note": "release-validation run 46084875162 on main (150 ms CI budget); local and --live had no verdict at host load 238 and 124"
+    },
+    "ci": {
+      "status": "pass",
+      "run": 46084875162,
+      "commit": "1a85fe1"
+    },
+    "landing": {
+      "status": "pass",
+      "commit": "1a85fe1",
+      "checks": "htmlgate.com indexable, www redirect, /app redirect"
+    },
+    "cliInstall": {
+      "status": "pass",
+      "version": "0.1.25",
+      "receipt": "verified",
+      "artifacts": "verified"
     }
   }
 }

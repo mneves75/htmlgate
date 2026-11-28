@@ -19,6 +19,7 @@ Release target: `0.1.25` (baseline `0.1.24`, `main` at `d3d5880`). Branch `secur
 - [x] Full `pnpm run mutate` on `665282e`: all 283 planted violations caught.
 - [x] `mneves-security` deploy gate on `665282e`: WAIVED (SEC-02 until 2026-11-30), independent acceptance PASS.
 - [x] Deployed `665282e` to app.htmlgate.com with `pnpm run setup` (Worker version `7e55a509`, migration 0009 applied, rollback `44ceafb2`); live smoke 16/16.
-- [ ] Bench: local and `--live` gave no verdict at host load 238 and 124; the CI release-validation bench decides.
-- [ ] Push, tag `v0.1.25`, merge to `main`, release-validation CI, landing `--live`, `cli:install`.
+- [x] Bench: local and `--live` gave no verdict at host load 238 and 124; the release-validation bench on `main` passed.
+- [x] Pushed, tagged `v0.1.25`, merged PR #38 (`1a85fe1`); release-validation run 46084875162 passed; landing `--live` verified; `cli:install` verified the receipt and artifacts and reports 0.1.25.
+- [x] Staging: no staging Instance exists; the landing preview Worker has workers.dev and previews off and no cron.
 - [ ] Follow-up: setup fails under `cf` 0.15.0 (`zero-trust organization get` and `r2 buckets domains managed get` were renamed); this deploy ran with the `.nvmrc` Node and its `cf` 1.0.0-beta.28.

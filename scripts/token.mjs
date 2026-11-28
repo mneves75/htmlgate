@@ -103,12 +103,13 @@ function revocationTarget(inst, accountId) {
   return { appId: app.id, config: { account_id: accountId, name: worker.name, d1_databases: [{ binding: "DB", database_name: db.name, database_id: db.uuid }] } };
 }
 
-function servingVersions(inst) {
-  const versions = cf("workers", "deployments", "list", "--worker", inst.name, "--page", "1", "--per-page", "1")?.deployments?.[0]?.versions;
+function activeDeployment(inst) {
+  const deployment = cf("workers", "deployments", "list", "--worker", inst.name, "--page", "1", "--per-page", "1")?.deployments?.[0];
+  const versions = deployment?.versions;
   if (!Array.isArray(versions) || !versions.length || versions.some((v) => typeof v?.version_id !== "string" || typeof v.percentage !== "number")) {
     throw new Error("cf did not return the Worker's active deployment");
   }
-  return versions;
+  return { versions, trigger: deployment.annotations?.["workers/triggered_by"] };
 }
 
 function revokeSessions(appId) {
@@ -170,11 +171,13 @@ function main() {
           return `${count} revoked`;
         },
         rotateTicketKey: () => {
-          const before = new Set(servingVersions(inst).map((v) => v.version_id));
+          const before = new Set(activeDeployment(inst).versions.map((v) => v.version_id));
           putTicketKey(targetConfig);
           // A version still in the active deployment, even at 0%, answers a version override and accepts old tickets.
-          const after = servingVersions(inst);
-          if (after.length !== 1 || after[0].percentage !== 100 || before.has(after[0].version_id)) {
+          // Only the secret upload's own deployment is known to carry the new key: a rollout racing it can put an
+          // older version, inactive before the upload, at 100%.
+          const { versions: after, trigger } = activeDeployment(inst);
+          if (trigger !== "secret" || after.length !== 1 || after[0].percentage !== 100 || before.has(after[0].version_id)) {
             throw new Error("the new key was uploaded, but the active deployment still holds a version from before it, which accepts the old tickets. Run setup with this Instance's config so one version serves 100%, give the deployment a minute to settle, then run revoke-all again");
           }
           return "replaced; every open ticket has ended";

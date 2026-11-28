@@ -84,7 +84,7 @@ const page = pageAt < 0 ? 1 : Number(args[pageAt + 1]);
   if (args[0] === 'd1' && args[1] === 'create') { createdDb = true; return json(s.createdDb); }
   if (args[1] === 'organization' && args[2] === 'get') return json({ auth_domain: 'team.cloudflareaccess.com' });
   if (args[0] === 'workers' && args[1] === 'list') return json(s.endlessWorkers || page === 1 ? (created ? [{ name: 'ownership-control', id: 'worker-control' }] : s.workers) : []);
-  if (args[0] === 'workers' && args[1] === 'deployments') return json(rotated && s.token ? (s.rotatedDeployment ?? { deployments: [{ versions: [{ version_id: 'rotated', percentage: 100 }] }] }) : s.deployment);
+  if (args[0] === 'workers' && args[1] === 'deployments') return json(rotated && s.token ? (s.rotatedDeployment ?? { deployments: [{ annotations: { 'workers/triggered_by': 'secret' }, versions: [{ version_id: 'rotated', percentage: 100 }] }] }) : s.deployment);
   if (args[2] === 'applications') {
     if (args[3] === 'revoke-tokens') return s.accessResult;
     if (args[3] === 'list') return json(s.lateApp
@@ -463,6 +463,9 @@ test.each([
   ["a ticket key that no new version serves", { rotatedDeployment: deployment }, ["zero-trust", "d1", "d1", "d1", "secret"]],
   ["an old version kept at 0% after the new key", { rotatedDeployment: { deployments: [{ versions: [{ version_id: "rotated", percentage: 100 }, { version_id: "serving", percentage: 0 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
   ["a split between the new key and an old version", { rotatedDeployment: { deployments: [{ versions: [{ version_id: "rotated", percentage: 60 }, { version_id: "serving", percentage: 40 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
+  // A rollout racing the rotation can put a version that was inactive before it, with the old key, at 100%.
+  ["a rollout of an older version right after the new key", { rotatedDeployment: { deployments: [{ annotations: { "workers/triggered_by": "deployment" }, versions: [{ version_id: "older", percentage: 100 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
+  ["an active deployment with no trigger", { rotatedDeployment: { deployments: [{ versions: [{ version_id: "rotated", percentage: 100 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
 ] as const)("revoke-all stops after %s and reports the unconfirmed step", async (_name, scenario, commands) => {
   const r = await setup({ ...scenario, token: true });
   expect(r.code).toBe(1);

@@ -30,7 +30,7 @@ Agent-first HTML hosting that you run in your own Cloudflare account. A Publishe
 - A Cloudflare account. Workers Free should be enough for pages, but it is **untested**: 0.1 has only run on Workers Paid. Publishing a large site needs Workers Paid: the Worker reads and checksums every file of the zip, which takes more than Free's 10 ms of CPU.
 - An R2 subscription on that account, for Share bodies. It is added once in the dashboard (Storage & databases, R2, then the checkout) and includes 10 GB-month of storage and millions of operations free each month; beyond that R2 bills storage and operations. The storage cap below limits what is stored, not how often it is read. htmlgate needs R2: it holds bodies D1 cannot (a row is at most 2 MB, a database 500 MB on Workers Free) and serves a site's files with ranged reads. Dropping it would not spare you payment details, because Zero Trust asks for them too.
 - A Zero Trust organization on that account, for sign-in. Cloudflare asks for payment details even on its Free plan.
-- Node 26, pnpm, and Cloudflare's [`cf`](https://github.com/cloudflare/cf) CLI. Log in to both `cf` and Wrangler, on the same account; setup checks it.
+- Node 26 and pnpm. `pnpm install` brings the pinned Wrangler and Cloudflare's [`cf`](https://github.com/cloudflare/cf) CLI, and setup runs those, never a global copy. Log in to both (`pnpm exec cf auth login`, `pnpm exec wrangler login`) on the same account; setup checks it.
 
 ## Set up an Instance
 
@@ -163,7 +163,7 @@ The Worker also counts each page a browser opens, in the Workers Analytics Engin
 Read them by hand:
 
 ```sh
-cf analytics_engine sql query --body "SELECT blob1 AS page, SUM(_sample_interval) AS views FROM htmlgate_site_page_views WHERE timestamp > NOW() - INTERVAL '30' DAY GROUP BY page ORDER BY views DESC"
+pnpm exec cf analytics_engine sql query --body "SELECT blob1 AS page, SUM(_sample_interval) AS views FROM htmlgate_site_page_views WHERE timestamp > NOW() - INTERVAL '30' DAY GROUP BY page ORDER BY views DESC"
 ```
 
 ```sh

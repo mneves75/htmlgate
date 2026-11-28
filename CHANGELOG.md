@@ -4,6 +4,10 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Fixed
+
+- **Setup runs the project's own `cf`:** `cf` 1.0.0-beta.28 is now a pinned dev dependency, and setup, token and site-deploy call `node_modules/.bin/cf` the way they already call Wrangler. A global `cf` of another version (0.15.0 lacks renamed commands such as `zero-trust organization get`) no longer breaks setup.
+
 ### Security
 
 - **Ticket key rotation races (`scripts/token.mjs`):** revoke-all now also requires the active deployment after the new `TICKET_KEY` to be one that a secret change created (Cloudflare's `workers/triggered_by: secret` annotation). An ordinary rollout or rollback of an older version that was inactive before the upload, landing during revoke-all, no longer passes as the new key. The check does not tie that deployment to this particular upload, and nothing can see a deployment made after its last read: avoid deploying while revoke-all runs. Old tickets end as the new version propagates location by location, and a later rollback to a version from before revoke-all accepts them again until they expire: run revoke-all again after one.

@@ -1,7 +1,7 @@
 // Run the public setup command. Only provider processes/transports are controlled; the decision and config writes are real.
 import { execFile } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
@@ -59,12 +59,14 @@ const s = JSON.parse(readFileSync(new URL('./scenario.json', import.meta.url)));
 let created = false, createdDb = false, d1Calls = 0, rotated = false;
 const log = v => appendFileSync(new URL('./calls.jsonl', import.meta.url), JSON.stringify(v) + '\n');
 cp.execFileSync = (bin, args) => {
-  log({ bin: bin.endsWith('/wrangler') ? 'wrangler' : bin, args });
+  const raw = bin;
+  bin = bin.endsWith('/wrangler') ? 'wrangler' : bin.endsWith('/node_modules/.bin/cf') ? 'cf' : bin;
+  log({ bin, raw, args });
   const json = value => JSON.stringify(value);
 const pageAt = args.indexOf('--page');
 const page = pageAt < 0 ? 1 : Number(args[pageAt + 1]);
   if (bin === 'git') return '';
-  if (bin.endsWith('/wrangler')) {
+  if (bin === 'wrangler') {
     if (args[0] === 'whoami') return json({ loggedIn: true, accounts: [{ id: 'account-control' }] });
     if (args[0] === 'versions') return json(s.versions[args[2]]);
     if (args[0] === 'd1' && args[1] === 'list') return json(createdDb ? [{ name: 'ownership-control-db', uuid: '${DB}' }] : s.dbs);
@@ -127,7 +129,7 @@ globalThis.fetch = async url => {
       expect(e.killed, "setup must finish without a command timeout").not.toBe(true);
       return { code: e.code, stdout: e.stdout, stderr: e.stderr };
     });
-    const calls = readFileSync(join(dir, "calls.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as { bin?: string; args?: string[]; deployed?: Record<string, unknown> });
+    const calls = readFileSync(join(dir, "calls.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as { bin?: string; raw?: string; args?: string[]; deployed?: Record<string, unknown> });
     const writes = calls.filter(c => c.args && (c.args.includes("create") || c.args.includes("update") || c.args.includes("apply") || c.args.includes("revoke-tokens")
       || c.args[0] === "deploy" || (c.args[0] === "secret" && c.args[1] === "put") || (c.args[0] === "d1" && c.args[1] === "execute")));
     let receipt, receiptMode;
@@ -139,6 +141,14 @@ globalThis.fetch = async url => {
     return { ...result, calls, writes, receipt, receiptMode };
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
+
+test("setup runs the project's pinned cf, never one found on PATH", async () => {
+  const r = await setup({ apps: [app, { ...app, id: "other-app", name: "another application", destinations: [] }] });
+  expect(r.code, r.stdout + r.stderr).toBe(0);
+  const cfCalls = r.calls.filter(c => c.bin === "cf");
+  expect(cfCalls.length).toBeGreaterThan(0);
+  for (const c of cfCalls) expect(isAbsolute(c.raw ?? ""), c.raw).toBe(true);
+});
 
 test("an existing database name never authorizes taking over an unrelated Worker", async () => {
   const r = await setup({ apps: [] });

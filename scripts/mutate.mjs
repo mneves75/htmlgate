@@ -285,6 +285,7 @@ const MUTATIONS = [
   ["a failed local revoke-all's retry targets the deployed Instance", "scripts/token.mjs", '${local ? ` --local --persist-to ${quote(persistTo)}` : ""}', "", "test/token-revoke-all.test.ts"],
   ["revoke-all trusts a new ticket key while an old version stays deployed", "scripts/token.mjs", "if (trigger !== \"secret\" || after.length !== 1 || after[0].percentage !== 100 || before.has(after[0].version_id)) {", "if (false) {", "test/setup-ownership.test.ts"],
   ["revoke-all trusts a rollout that races the new ticket key", "scripts/token.mjs", "if (trigger !== \"secret\" || after.length", "if (after.length", "test/setup-ownership.test.ts"],
+  ["setup runs a cf found on PATH", "scripts/setup.mjs", "JSON.parse(sh(CF, args))", "JSON.parse(sh(\"cf\", args))", "test/setup-ownership.test.ts"],
   ["a sign-in email folds Unicode onto an Allowlisted address", "src/access.ts", 'payload.email.replace(/^[ \\t]+|[ \\t]+$/g, "").replace(/[A-Z]/g, (c) => c.toLowerCase())', "payload.email.trim().toLowerCase()", "test/reviewer-identity.test.ts"],
   ["a sign-in without an issue time counts as new", "src/access.ts", 'typeof payload.iat === "number" ? payload.iat * 1000 : 0', 'typeof payload.iat === "number" ? payload.iat * 1000 : Number.MAX_SAFE_INTEGER', "test/revoke-in-flight.test.ts"],
   ["a revoked token can still revoke another token", "src/store.ts", "AND (? IS NULL OR ${LIVE_TOKEN})", "AND (? IS NULL OR ? IS NOT NULL)", "test/revoke-in-flight.test.ts"],

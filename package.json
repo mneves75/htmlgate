@@ -35,6 +35,7 @@
     "@cloudflare/workers-types": "5.20260928.1",
     "@types/node": "24.19.0",
     "agent-browser": "0.39.1",
+    "cf": "1.0.0-beta.28",
     "typescript": "7.0.2",
     "typescript-classic": "npm:typescript@6.0.3",
     "vitest": "4.1.12",

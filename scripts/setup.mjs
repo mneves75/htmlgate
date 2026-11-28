@@ -14,6 +14,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRANGLER = join(ROOT, "node_modules/.bin/wrangler");
+// The project pins cf like Wrangler: a global cf of another version may lack renamed commands.
+const CF = join(ROOT, "node_modules/.bin/cf");
 const PUBLIC_PATHS = ["/api/*", "/p/*", "/f/*"];
 export const CRONS = ["17 * * * *"];
 
@@ -77,7 +79,7 @@ export function sh(cmd, args, opts = {}) {
   }
 }
 
-export const cf = (...args) => JSON.parse(sh("cf", args));
+export const cf = (...args) => JSON.parse(sh(CF, args));
 
 const DEPLOYED = ["src", "site", "migrations", "packages/cli/src", "scripts", "package.json", "pnpm-lock.yaml", "tsconfig.json"];
 const gitStatus = () => {
@@ -110,7 +112,7 @@ export function wranglerWho(env = process.env) {
 
 export function checkSameAccount(wranglerWho, cfWho, env) {
   if (!wranglerWho?.loggedIn) throw new Error("Wrangler is not logged in. Run `pnpm exec wrangler login`.");
-  if (!cfWho?.tokenValid) throw new Error("cf is not logged in. Run `cf auth login`.");
+  if (!cfWho?.tokenValid) throw new Error("cf is not logged in. Run `pnpm exec cf auth login`.");
   const w = Array.isArray(wranglerWho.accounts) ? wranglerWho.accounts : [];
   const c = Array.isArray(cfWho.accounts) ? cfWho.accounts : [];
   let mine;
@@ -368,7 +370,7 @@ function writeBootstrapReceipt(file, proof) {
 }
 
 function createStorageResource(name, ...args) {
-  const out = sh("cf", [...args, "--name", name]);
+  const out = sh(CF, [...args, "--name", name]);
   let resource;
   try { resource = JSON.parse(out); } catch {}
   if (resource?.name !== name) {

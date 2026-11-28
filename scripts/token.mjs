@@ -180,7 +180,7 @@ function main() {
           if (trigger !== "secret" || after.length !== 1 || after[0].percentage !== 100 || before.has(after[0].version_id)) {
             throw new Error("the new key was uploaded, but the active deployment still holds a version from before it, which accepts the old tickets. Run setup with this Instance's config so one version serves 100%, give the deployment a minute to settle, then run revoke-all again");
           }
-          return "replaced; every open ticket has ended";
+          return "replaced; open tickets end as the new version reaches every Cloudflare location";
         },
         revokeSessions: () => revokeSessions(appId),
       }, { local: flags.local, config: flags.config, persistTo: flags.persistTo, say: (line) => console.log(line) });

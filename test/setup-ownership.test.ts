@@ -142,12 +142,16 @@ globalThis.fetch = async url => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-test("setup runs the project's pinned cf, never one found on PATH", async () => {
-  const r = await setup({ apps: [app, { ...app, id: "other-app", name: "another application", destinations: [] }] });
+test.each([
+  ["an existing Instance", { apps: [app, { ...app, id: "other-app", name: "another application", destinations: [] }] }, []],
+  ["a first setup that creates its storage", { apps: [], workers: [], dbs: [], buckets: { buckets: [] } }, [["d1", "create"], ["r2", "buckets"]]],
+] as const)("setup runs the project's pinned cf, never one found on PATH: %s", async (_name, scenario, creates) => {
+  const r = await setup(scenario);
   expect(r.code, r.stdout + r.stderr).toBe(0);
   const cfCalls = r.calls.filter(c => c.bin === "cf");
   expect(cfCalls.length).toBeGreaterThan(0);
   for (const c of cfCalls) expect(isAbsolute(c.raw ?? ""), c.raw).toBe(true);
+  for (const [a, b] of creates) expect(cfCalls.some(c => c.args?.[0] === a && c.args[1] === b), `${a} ${b}`).toBe(true);
 });
 
 test("an existing database name never authorizes taking over an unrelated Worker", async () => {
@@ -470,11 +474,12 @@ test.each([
   ["missing D1 changes count", { d1Result: [{ success: true, results: [] }] }, ["zero-trust", "d1", "d1", "d1"]],
   ["unconfirmed ticket result", { ticketResult: "" }, ["zero-trust", "d1", "d1", "d1", "secret"]],
   // A version left in the active deployment, even at 0%, still answers a version override with the old key.
-  ["a ticket key that no new version serves", { rotatedDeployment: deployment }, ["zero-trust", "d1", "d1", "d1", "secret"]],
-  ["an old version kept at 0% after the new key", { rotatedDeployment: { deployments: [{ versions: [{ version_id: "rotated", percentage: 100 }, { version_id: "serving", percentage: 0 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
-  ["a split between the new key and an old version", { rotatedDeployment: { deployments: [{ versions: [{ version_id: "rotated", percentage: 60 }, { version_id: "serving", percentage: 40 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
+  ["a ticket key that no new version serves", { rotatedDeployment: { deployments: [{ annotations: { "workers/triggered_by": "secret" }, versions: [{ version_id: "serving", percentage: 100 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
+  ["an old version kept at 0% after the new key", { rotatedDeployment: { deployments: [{ annotations: { "workers/triggered_by": "secret" }, versions: [{ version_id: "rotated", percentage: 100 }, { version_id: "serving", percentage: 0 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
+  ["a split between the new key and an old version", { rotatedDeployment: { deployments: [{ annotations: { "workers/triggered_by": "secret" }, versions: [{ version_id: "rotated", percentage: 60 }, { version_id: "serving", percentage: 40 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
   // A rollout racing the rotation can put a version that was inactive before it, with the old key, at 100%.
   ["a rollout of an older version right after the new key", { rotatedDeployment: { deployments: [{ annotations: { "workers/triggered_by": "deployment" }, versions: [{ version_id: "older", percentage: 100 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
+  ["a new version serving less than all traffic", { rotatedDeployment: { deployments: [{ annotations: { "workers/triggered_by": "secret" }, versions: [{ version_id: "rotated", percentage: 60 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
   ["an active deployment with no trigger", { rotatedDeployment: { deployments: [{ versions: [{ version_id: "rotated", percentage: 100 }] }] } }, ["zero-trust", "d1", "d1", "d1", "secret"]],
 ] as const)("revoke-all stops after %s and reports the unconfirmed step", async (_name, scenario, commands) => {
   const r = await setup({ ...scenario, token: true });

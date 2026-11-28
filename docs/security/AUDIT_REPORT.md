@@ -20,7 +20,8 @@ The method was the same as on 2026-11-25. Planted violations measured the hunter
 - **P-17:**
   - **What was wrong:** a version left in the active deployment, even at 0%, still serves requests through version overrides with the old `TICKET_KEY`.
   - **Fix:** revoke-all now fails unless one new version serves 100%.
-  - **Residual:** an account member who rolls a version back during revoke-all can pass the check. Running revoke-all again is safe.
+  - **Fix, 2026-11-28:** the active deployment after the new key must also be one a secret change created (`workers/triggered_by: secret`), so an ordinary rollout or rollback of an older, previously inactive version during revoke-all fails the check. It was the Low residual of the second-family review.
+  - **Residual (Low):** the annotation is not tied to this upload, so a competing secret change by another account member could pass; and a deployment made after the check's last read is not seen. A version from before revoke-all keeps the old key, so rolling back to one at any later time accepts tickets issued before it again, until they expire within the hour. Avoid deploying during revoke-all, and run it again after such a rollback. Cloudflare also propagates a deployment location by location, so for a short window after revoke-all reports success a location still on the old version accepts an unexpired old ticket.
 
 **Documentation only:**
 - D1 restore replay (`9aa2b16`, `2515131`).

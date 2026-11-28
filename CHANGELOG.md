@@ -6,7 +6,7 @@ All notable changes to htmlgate. The format follows [Keep a Changelog](https://k
 
 ### Security
 
-- **Ticket key rotation races (`scripts/token.mjs`):** revoke-all now also requires the active deployment after the new `TICKET_KEY` to be the secret upload's own (`workers/triggered_by: secret`). A rollout of an older version that was inactive before the upload, landing during revoke-all, no longer passes as the new key.
+- **Ticket key rotation races (`scripts/token.mjs`):** revoke-all now also requires the active deployment after the new `TICKET_KEY` to be one that a secret change created (Cloudflare's `workers/triggered_by: secret` annotation). An ordinary rollout or rollback of an older version that was inactive before the upload, landing during revoke-all, no longer passes as the new key. The check does not tie that deployment to this particular upload, and nothing can see a deployment made after its last read: avoid deploying while revoke-all runs.
 
 ## [0.1.25] - 2026-11-27
 

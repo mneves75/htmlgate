@@ -118,9 +118,9 @@ Check the active Cloudflare account in both Wrangler and `cf`. Verify the Worker
 
 ```sh
 pnpm exec wrangler delete --name <name>
-cf zero-trust access applications list
-cf zero-trust access applications delete <main-app-id> --force
-cf zero-trust access applications delete <robots-app-id> --force
+pnpm exec cf zero-trust access applications list
+pnpm exec cf zero-trust access applications delete <main-app-id> --force
+pnpm exec cf zero-trust access applications delete <robots-app-id> --force
 pnpm exec wrangler r2 bucket delete <name>-bodies   # it must be empty first
 pnpm exec wrangler d1 delete <name>-db
 ```
